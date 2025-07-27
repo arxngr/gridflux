@@ -41,28 +41,28 @@ typedef struct {
 } gf_split_ctx;
 
 typedef struct {
-  Atom wm_state;
-  Atom net_wm_state;
-  Atom net_wm_max_horz;
-  Atom net_wm_max_vert;
-  Atom net_wm_desktop;
-  Atom net_wm_type;
-  Atom net_wm_tooltip;
-  Atom net_wm_notification;
-  Atom net_wm_toolbar;
-  Atom net_wm_normal;
-  Atom net_wm_hidden;
-  Atom net_wm_popup_menu;
-  Atom net_wm_utility;
+  Atom gf_state;
+  Atom net_gf_state;
+  Atom net_gf_max_horz;
+  Atom net_gf_max_vert;
+  Atom net_gf_desktop;
+  Atom net_gf_type;
+  Atom net_gf_tooltip;
+  Atom net_gf_notification;
+  Atom net_gf_toolbar;
+  Atom net_gf_normal;
+  Atom net_gf_hidden;
+  Atom net_gf_popup_menu;
+  Atom net_gf_utility;
 
   Atom client_list;
   Atom client_list_stack;
   Atom num_of_desktop;
   Atom net_curr_desktop;
 
-  Atom motif_wm_hints;
-  Atom net_wm_modal;
-  Atom net_wm_skip_taskbar;
+  Atom motif_gf_hints;
+  Atom net_gf_modal;
+  Atom net_gf_skip_taskbar;
   Atom gtk_frame_extents;
   Atom net_frame_extents;
   Atom net_moveresize_window;

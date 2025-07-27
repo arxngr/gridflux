@@ -28,7 +28,7 @@ int main() {
   if (session_type != NULL) {
     if (strcmp(session_type, GF_X11) == 0) {
       LOG(GF_INFO, " X11 Session detected. \n");
-      wm_x_run_layout();
+      gf_x_run_layout();
     } else {
       printf("The session %s type is not supported.\n", session_type);
     }

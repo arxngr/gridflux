@@ -5,28 +5,28 @@
 
 gf_atom_type atoms;
 
-void gf_init_atom(Display *display) {
-  atoms.wm_state = XInternAtom(display, "WM_STATE", False);
-  atoms.net_wm_state = XInternAtom(display, "_NET_WM_STATE", False);
-  atoms.net_wm_max_horz =
+void gf_x_init_atom(Display *display) {
+  atoms.gf_state = XInternAtom(display, "WM_STATE", False);
+  atoms.net_gf_state = XInternAtom(display, "_NET_WM_STATE", False);
+  atoms.net_gf_max_horz =
       XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_HORZ", False);
-  atoms.net_wm_max_vert =
+  atoms.net_gf_max_vert =
       XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_VERT", False);
-  atoms.net_wm_desktop = XInternAtom(display, "_NET_WM_DESKTOP", True);
-  atoms.net_wm_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
-  atoms.net_wm_tooltip =
+  atoms.net_gf_desktop = XInternAtom(display, "_NET_WM_DESKTOP", True);
+  atoms.net_gf_type = XInternAtom(display, "_NET_WM_WINDOW_TYPE", False);
+  atoms.net_gf_tooltip =
       XInternAtom(display, "_NET_WM_WINDOW_TYPE_TOOLTIP", True);
-  atoms.net_wm_notification =
+  atoms.net_gf_notification =
       XInternAtom(display, "_NET_WM_WINDOW_TYPE_NOTIFICATION", True);
-  atoms.net_wm_toolbar =
+  atoms.net_gf_toolbar =
       XInternAtom(display, "_NET_WM_WINDOW_TYPE_TOOLBAR", True);
-  atoms.net_wm_hidden = XInternAtom(display, "_NET_WM_STATE_HIDDEN", False);
-  atoms.net_wm_popup_menu =
+  atoms.net_gf_hidden = XInternAtom(display, "_NET_WM_STATE_HIDDEN", False);
+  atoms.net_gf_popup_menu =
       XInternAtom(display, "_NET_WM_WINDOW_TYPE_POPUP_MENU", False);
-  atoms.net_wm_normal =
+  atoms.net_gf_normal =
       XInternAtom(display, "_NET_WM_WINDOW_TYPE_NORMAL", True);
 
-  atoms.net_wm_utility =
+  atoms.net_gf_utility =
       XInternAtom(display, "_NET_WM_WINDOW_TYPE_UTILITY", False);
 
   atoms.client_list = XInternAtom(display, "_NET_CLIENT_LIST", True);
@@ -34,9 +34,9 @@ void gf_init_atom(Display *display) {
       XInternAtom(display, "_NET_CLIENT_LIST_STACKING", True);
   atoms.num_of_desktop = XInternAtom(display, "_NET_NUMBER_OF_DESKTOPS", True);
   atoms.net_curr_desktop = XInternAtom(display, "_NET_CURRENT_DESKTOP", True);
-  atoms.motif_wm_hints = XInternAtom(display, "_MOTIF_WM_HINTS", False);
-  atoms.net_wm_modal = XInternAtom(display, "_NET_WM_STATE_MODAL", False);
-  atoms.net_wm_skip_taskbar =
+  atoms.motif_gf_hints = XInternAtom(display, "_MOTIF_WM_HINTS", False);
+  atoms.net_gf_modal = XInternAtom(display, "_NET_WM_STATE_MODAL", False);
+  atoms.net_gf_skip_taskbar =
       XInternAtom(display, "_NET_WM_STATE_SKIP_TASKBAR", False);
   atoms.net_frame_extents = XInternAtom(display, "_NET_FRAME_EXTENTS", False);
   atoms.gtk_frame_extents = XInternAtom(display, "_GTK_FRAME_EXTENTS", False);
@@ -91,7 +91,7 @@ void gf_set_geometry(void *window_ptr, int x, int y, int width, int height,
     Display *display = (Display *)user_data;
     Window window = *(Window *)window_ptr;
 
-    wm_x_set_geometry(display, window, StaticGravity,
+    gf_x_set_geometry(display, window, StaticGravity,
                       CHANGE_X | CHANGE_Y | CHANGE_WIDTH | CHANGE_HEIGHT |
                           APPLY_PADDING,
                       x, y, width, height);
