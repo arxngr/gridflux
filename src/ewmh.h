@@ -76,6 +76,6 @@ void gf_split_window_generic(void **windows, int window_count, int x, int y,
                              gf_split_ctx *ctx);
 
 extern gf_atom_type atoms;
-void gf_init_atom(Display *display);
+void gf_x_init_atom(Display *display);
 
 #endif // GF_EWMH
