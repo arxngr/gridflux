@@ -8,5 +8,6 @@ IndentWidth: 4
 UseTab: Never
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
+SpaceBeforeParens: Always
 AllowShortFunctionsOnASingleLine: None
 ColumnLimit: 90
