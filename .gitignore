@@ -1,4 +1,5 @@
 # IDE/editor configs
+compile_commands.json
 .vscode/
 .cache/
 *.swp
