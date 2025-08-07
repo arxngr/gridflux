@@ -1,12 +1,32 @@
-.vscode 
-.git
+# IDE/editor configs
+.vscode/
+.cache/
+*.swp
+*.swo
+
+# Compiled object files
 *.o
-build
-Makefile
-CMakeFiles
+*.obj
+
+# Binaries
+gridflux
+a.out
+
+# Build system (CMake)
+build/
+CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
-.cache 
-nohup.out
-gridflux
+*.cmake
 
+# Logs and misc
+nohup.out
+
+# Make
+Makefile
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
