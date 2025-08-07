@@ -1,9 +1,0 @@
-/home/ardinugraha/Documents/Workshop/gridfluxv4/CMakeFiles/gridflux.dir
-/home/ardinugraha/Documents/Workshop/gridfluxv4/CMakeFiles/package.dir
-/home/ardinugraha/Documents/Workshop/gridfluxv4/CMakeFiles/package_source.dir
-/home/ardinugraha/Documents/Workshop/gridfluxv4/CMakeFiles/edit_cache.dir
-/home/ardinugraha/Documents/Workshop/gridfluxv4/CMakeFiles/rebuild_cache.dir
-/home/ardinugraha/Documents/Workshop/gridfluxv4/CMakeFiles/list_install_components.dir
-/home/ardinugraha/Documents/Workshop/gridfluxv4/CMakeFiles/install.dir
-/home/ardinugraha/Documents/Workshop/gridfluxv4/CMakeFiles/install/local.dir
-/home/ardinugraha/Documents/Workshop/gridfluxv4/CMakeFiles/install/strip.dir
