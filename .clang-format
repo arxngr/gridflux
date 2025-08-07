@@ -1,0 +1,59 @@
+BasedOnStyle: GNU
+
+# Align pointer and reference operators with the type
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+# Indentation settings
+IndentWidth: 2
+TabWidth: 8
+UseTab: Always
+
+# Control line wrapping behavior
+BreakBeforeBraces: GNU
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: InlineOnly
+
+# Include handling
+IncludeBlocks: Preserve
+IncludeCategories:
+  - Regex: ".*"
+    Priority: 1
+SortIncludes: false
+
+# Namespace handling (not relevant for pure C, but safe default)
+NamespaceIndentation: None
+
+# Function declarations and definitions
+AlignAfterOpenBracket: Align
+AlignOperands: true
+AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: false
+AllowAllArgumentsOnNextLine: false
+
+# C macros
+IndentPPDirectives: AfterHash
+MacroBlockBegin: "^#(if|ifdef|ifndef)"
+MacroBlockEnd: "^#endif"
+
+# Enums, structs
+AllowShortEnumsOnASingleLine: false
+
+# Keep comments' formatting
+ReflowComments: false
+
+# Break constructor initializers before comma
+BreakConstructorInitializers: BeforeComma
+
+# Formatting for function definitions
+SpaceBeforeParens: Always
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpaceAfterCStyleCast: true
+Cpp11BracedListStyle: false
+
+# For old C-style codebases
+Standard: Cpp03
