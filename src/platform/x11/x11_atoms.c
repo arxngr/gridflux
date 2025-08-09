@@ -1,8 +1,9 @@
 
+#include <X11/Xlib.h>
 #ifdef GF_PLATFORM_X11
 
-#include "../../../include/platform/x11/x11_atoms.h"
 #include "../../../include/core/logger.h"
+#include "../../../include/platform/x11/x11_atoms.h"
 #include <X11/Xatom.h>
 
 static gf_x11_atoms_t g_atoms = { 0 };
@@ -13,6 +14,7 @@ gf_x11_atoms_init (Display *display, gf_x11_atoms_t *atoms)
     if (!display || !atoms)
         return GF_ERROR_INVALID_PARAMETER;
 
+    atoms->net_active_window = XInternAtom (display, "_NET_ACTIVE_WINDOW", False);
     atoms->wm_state = XInternAtom (display, "WM_STATE", False);
     atoms->net_wm_state = XInternAtom (display, "_NET_WM_STATE", False);
     atoms->net_wm_state_maximized_horz

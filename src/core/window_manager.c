@@ -213,8 +213,6 @@ gf_window_manager_arrange_workspace (gf_window_manager_t *manager,
         return GF_SUCCESS;
     }
 
-    GF_LOG_DEBUG ("Arranging %u windows in workspace %d", window_count, workspace_id);
-
     // Unmaximize all windows first
     for (uint32_t i = 0; i < window_count; i++)
     {
@@ -520,7 +518,7 @@ gf_window_list_get_by_workspace (const gf_window_list_t *list,
         return GF_ERROR_MEMORY_ALLOCATION;
 
     uint32_t idx = 0;
-    for (uint32_t i = 0; i < list->count && idx < *count; i++)
+    for (uint32_t i = list->count; i > idx && idx < *count; i--)
     {
         if (list->items[i].workspace_id == workspace_id)
         {

@@ -411,13 +411,26 @@ static gf_error_code_t
 gf_x11_platform_move_window_to_workspace (gf_display_t display, gf_native_window_t window,
                                           gf_workspace_id_t workspace_id)
 {
-    if (!display)
-        return GF_ERROR_INVALID_PARAMETER;
-
     gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
-    long data[] = { workspace_id, CurrentTime };
+    gf_error_code_t err;
 
-    return gf_x11_send_client_message (display, window, atoms->net_wm_desktop, data, 2);
+    // Switch workspace
+    long switch_data[] = { workspace_id, CurrentTime };
+    err = gf_x11_send_client_message (display, DefaultRootWindow (display),
+                                      atoms->net_current_desktop, switch_data, 2);
+    if (err != GF_SUCCESS)
+        return err;
+
+    long move_data[] = { workspace_id, CurrentTime };
+    err = gf_x11_send_client_message (display, window, atoms->net_wm_desktop, move_data,
+                                      2);
+    if (err != GF_SUCCESS)
+        return err;
+
+    // Focus the window opened
+    long focus_data[5] = { 1, CurrentTime, None, 0, 0 };
+    return gf_x11_send_client_message (display, window, atoms->net_active_window,
+                                       focus_data, 3);
 }
 
 static gf_error_code_t
