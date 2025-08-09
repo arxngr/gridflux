@@ -99,11 +99,11 @@ gf_workspace_manager_handle_overflow (gf_workspace_manager_t *manager,
         uint32_t window_count
             = gf_window_list_count_by_workspace (windows, workspace->id);
 
-        if (window_count > GF_MAX_WINDOWS_PER_WORKSPACE)
+        if (window_count > workspace->max_windows)
         {
             overflow_workspaces[overflow_count++] = workspace->id;
         }
-        else if (window_count < GF_MAX_WINDOWS_PER_WORKSPACE)
+        else if (window_count < workspace->max_windows)
         {
             free_workspaces[free_count++] = workspace->id;
         }
@@ -120,8 +120,11 @@ gf_workspace_manager_handle_overflow (gf_workspace_manager_t *manager,
         if (result != GF_SUCCESS)
             continue;
 
+        gf_workspace_info_t *cur_workspace
+            = gf_workspace_list_find (&manager->workspaces, overflow_workspaces[i]);
+
         // Move excess windows
-        uint32_t excess = window_count - GF_MAX_WINDOWS_PER_WORKSPACE;
+        uint32_t excess = window_count - cur_workspace->max_windows;
         uint32_t moved = 0;
 
         for (uint32_t j = 0; j < window_count && moved < excess && free_count > 0; j++)
@@ -136,10 +139,13 @@ gf_workspace_manager_handle_overflow (gf_workspace_manager_t *manager,
                 workspace_windows[j].workspace_id = target_workspace;
                 moved++;
 
+                gf_workspace_info_t *target_cur_workspace = gf_workspace_list_find (
+                    &manager->workspaces, overflow_workspaces[i]);
+
                 // Update free workspace count
                 uint32_t target_count
                     = gf_window_list_count_by_workspace (windows, target_workspace);
-                if (target_count >= GF_MAX_WINDOWS_PER_WORKSPACE - 1)
+                if (target_count >= target_cur_workspace->max_windows - 1)
                 {
                     // Remove from free list
                     for (uint32_t k = 0; k < free_count - 1; k++)
