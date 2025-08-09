@@ -5,7 +5,7 @@
 
 `gridflux` is stand for "Window Management",  a window management tool inspired by tiling window managers. Unlike tiling window managers, `gridflux` allows you to manage application windows without relying on a full tiling manager. It's designed to provide flexibility for arranging and managing windows in a non-intrusive way, without imposing a tiling window management style.
 
-This project is mainly targeted for users who prefer to manage windows in a more manual, customizable fashion while still benefiting from automation in tasks such as window resizing, arrangement, and workspace management. ⚙️
+This project is mainly targeted for users who prefer to manage windows in a more manual, customizable fashion while still benefiting from automation in tasks such as window resizing, arrangement, and workspace management.
 
 # Layout Visualizations
 
@@ -34,7 +34,7 @@ Make sure you have the following installed:
 git clone https://github.com/zyxidra/gridflux.git
 cd gridflux
 chmod +x install.sh
-./install.sh
+./scripts/install.sh
 ```
 
 ### Build the Project ⚙️
@@ -70,7 +70,6 @@ Once compiled, you can run the `gridflux` executable to manage your windows. For
 
 This project is open-source, and contributions are welcome. If you'd like to contribute, please fork the repository, create a branch, and submit a pull request with your changes. 🛠️
 
-For further development, you may also want to modify the configuration settings based on your preferred window manager (e.g., X11, Wayland).
 
 ---
 
