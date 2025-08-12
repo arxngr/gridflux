@@ -2,7 +2,7 @@
 #ifndef GF_CORE_WORKSPACE_H
 #define GF_CORE_WORKSPACE_H
 
-#include "../utils/collections.h"
+#include "../utils/list.h"
 #include "interfaces.h"
 #include <stdint.h>
 

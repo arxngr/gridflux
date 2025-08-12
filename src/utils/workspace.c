@@ -1,10 +1,10 @@
 
-#include "../../include/utils/collections.h"
-#include "../../include/core/logger.h"
+#include "../../include/utils/list.h"
 #include "../../include/utils/memory.h"
+#include "core/types.h"
+#include <stdint.h>
 #include <string.h>
 
-// Window list operations
 gf_error_code_t
 gf_window_list_init (gf_window_list_t *list, uint32_t initial_capacity)
 {
@@ -41,10 +41,9 @@ gf_workspace_list_add (gf_workspace_list_t *list, const gf_workspace_info_t *wor
     // Check if workspace already exists
     if (gf_workspace_list_find (list, workspace->id))
     {
-        return GF_SUCCESS; // Already exists
+        return GF_SUCCESS;
     }
 
-    // Ensure capacity
     if (list->count >= list->capacity)
     {
         uint32_t new_capacity = list->capacity * 2;

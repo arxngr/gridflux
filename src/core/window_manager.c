@@ -1,7 +1,14 @@
 #include "../../include/core/window_manager.h"
 #include "../../include/core/logger.h"
 #include "../../include/utils/memory.h"
-#include <stdio.h>
+#include "core/geometry.h"
+#include "core/types.h"
+#include "core/workspace.h"
+#include "utils/list.h"
+#include "utils/workspace.h"
+#include <math.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <unistd.h>
 
 gf_error_code_t
@@ -104,7 +111,8 @@ gf_window_manager_update_window_info (gf_window_manager_t *manager,
         return GF_ERROR_INVALID_PARAMETER;
 
     gf_window_id_t window_id = (gf_window_id_t)window;
-    gf_window_info_t *existing = gf_window_list_find (&manager->state.windows, window_id);
+    gf_window_info_t *existing
+        = gf_window_list_find_by_window_id (&manager->state.windows, window_id);
 
     gf_rect_t geometry;
     gf_error_code_t result
@@ -131,6 +139,118 @@ gf_window_manager_update_window_info (gf_window_manager_t *manager,
     }
 
     return result;
+}
+
+gf_error_code_t
+gf_window_manager_drag (gf_window_manager_t *manager, gf_workspace_id_t workspace_id)
+{
+    if (!manager)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_window_info_t *windows = manager->state.windows.items;
+    uint32_t window_count = manager->state.windows.count;
+
+    if (window_count == 0)
+        return GF_SUCCESS;
+
+    gf_rect_t dragged_geom;
+    gf_window_info_t *dragged_window = NULL;
+    for (uint32_t i = 0; i < window_count; i++)
+    {
+        gf_rect_t geom;
+        gf_error_code_t is_dragging = manager->platform->is_window_drag (
+            manager->display, windows[i].native_handle, &geom);
+
+        if (is_dragging == GF_SUCCESS
+            && (geom.width > 0 && geom.height > 0)) // Found the active drag window
+        {
+            dragged_geom = geom;
+            dragged_window = &windows[i];
+            dragged_window->geometry = geom;
+            break;
+        }
+    }
+
+    if (dragged_window == NULL)
+        return GF_ERROR_PLATFORM_ERROR;
+
+    gf_window_info_t *list_window;
+    uint32_t list_count;
+
+    gf_window_list_get_by_workspace (&manager->state.windows, workspace_id, &list_window,
+                                     &list_count);
+
+    if (!list_window)
+    {
+        return GF_ERROR_PLATFORM_ERROR;
+    }
+
+    int center_x = dragged_geom.x + dragged_geom.width / 2;
+    int center_y = dragged_geom.y + dragged_geom.height / 2;
+
+    gf_window_info_t *swap_target = NULL;
+    int best_overlap_area = 0;
+
+    for (uint32_t i = 0; i < list_count; i++)
+    {
+        if (list_window[i].native_handle == dragged_window->native_handle)
+            continue;
+
+        gf_rect_t cur_geom = list_window[i].geometry;
+
+        // Directional filtering
+        bool horizontally_adjacent
+            = (dragged_geom.x < cur_geom.x + cur_geom.width
+               && dragged_geom.x + dragged_geom.width > cur_geom.x);
+
+        bool vertically_adjacent = (dragged_geom.y < cur_geom.y + cur_geom.height
+                                    && dragged_geom.y + dragged_geom.height > cur_geom.y);
+
+        // Check center point OR overlap area
+        if (gf_rect_point_in (center_x, center_y, &cur_geom)
+            || (horizontally_adjacent && vertically_adjacent))
+        {
+            // Calculate overlap area
+            int overlap_w
+                = fmin (dragged_geom.x + dragged_geom.width, cur_geom.x + cur_geom.width)
+                  - fmax (dragged_geom.x, cur_geom.x);
+            int overlap_h = fmin (dragged_geom.y + dragged_geom.height,
+                                  cur_geom.y + cur_geom.height)
+                            - fmax (dragged_geom.y, cur_geom.y);
+
+            if (overlap_w > 0 && overlap_h > 0)
+            {
+                int area = overlap_w * overlap_h;
+                if (area > best_overlap_area)
+                {
+                    best_overlap_area = area;
+                    swap_target = &list_window[i];
+                }
+            }
+        }
+    }
+
+    if (swap_target)
+    {
+        gf_window_manager_swap (manager, dragged_window, swap_target);
+    }
+    else
+    {
+        GF_LOG_DEBUG ("target swap not found");
+        gf_rect_t *new_geometries = NULL;
+        gf_error_code_t result = gf_window_manager_calculate_layout (
+            manager, windows, window_count, &new_geometries);
+        if (result != GF_SUCCESS)
+        {
+            gf_free (windows);
+            return result;
+        }
+
+        gf_window_manager_unmaximize_all (manager, windows, window_count);
+        gf_window_manager_apply_layout (manager, windows, new_geometries, window_count);
+    }
+
+    return GF_SUCCESS;
 }
 
 void
@@ -191,6 +311,36 @@ gf_window_manager_print_stats (const gf_window_manager_t *manager)
     }
 }
 
+static gf_error_code_t
+gf_window_manager_calculate_layout (gf_window_manager_t *manager,
+                                    gf_window_info_t *windows, uint32_t window_count,
+                                    gf_rect_t **out_geometries)
+{
+    if (!manager || !windows || !out_geometries || window_count == 0)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_rect_t workspace_bounds;
+    gf_error_code_t result
+        = manager->platform->get_screen_bounds (manager->display, &workspace_bounds);
+
+    if (result != GF_SUCCESS)
+    {
+        return GF_ERROR_DISPLAY_CONNECTION;
+    }
+
+    gf_rect_t *new_geometries = gf_malloc (window_count * sizeof (gf_rect_t));
+    if (!new_geometries)
+    {
+        return GF_ERROR_MEMORY_ALLOCATION;
+    }
+
+    manager->geometry_calc->calculate_layout (
+        manager->geometry_calc, windows, window_count, &workspace_bounds, new_geometries);
+
+    *out_geometries = new_geometries;
+    return GF_SUCCESS;
+}
+
 gf_error_code_t
 gf_window_manager_arrange_workspace (gf_window_manager_t *manager,
                                      gf_workspace_id_t workspace_id)
@@ -198,69 +348,28 @@ gf_window_manager_arrange_workspace (gf_window_manager_t *manager,
     if (!manager)
         return GF_ERROR_INVALID_PARAMETER;
 
-    // Get windows for the workspace
-    gf_window_info_t *windows = NULL;
-    uint32_t window_count = 0;
+    gf_window_info_t *windows = manager->state.windows.items;
+    uint32_t window_count = manager->state.windows.count;
 
-    gf_error_code_t result = manager->platform->get_windows (
-        manager->display, workspace_id, &windows, &window_count);
-    if (result != GF_SUCCESS)
-        return result;
-
-    if (window_count == 0)
+    gf_error_code_t result;
+    if (window_count == 0 || !windows)
     {
-        gf_free (windows);
+        GF_LOG_WARN ("no window in workspace %d ", workspace_id);
         return GF_SUCCESS;
     }
 
-    // Unmaximize all windows first
-    for (uint32_t i = 0; i < window_count; i++)
-    {
-        manager->platform->unmaximize_window (manager->display, windows[i].native_handle);
-    }
+    gf_window_manager_unmaximize_all (manager, windows, window_count);
 
-    // Get workspace bounds
-    gf_rect_t workspace_bounds;
-    result = manager->platform->get_screen_bounds (manager->display, &workspace_bounds);
-
+    gf_rect_t *new_geometries = NULL;
+    result = gf_window_manager_calculate_layout (manager, windows, window_count,
+                                                 &new_geometries);
     if (result != GF_SUCCESS)
     {
-        return GF_ERROR_DISPLAY_CONNECTION;
+        return result;
     }
 
-    // Calculate new layout
-    gf_rect_t *new_geometries = gf_malloc (window_count * sizeof (gf_rect_t));
-    if (!new_geometries)
-    {
-        gf_free (windows);
-        return GF_ERROR_MEMORY_ALLOCATION;
-    }
-    manager->geometry_calc->calculate_layout (
-        manager->geometry_calc, windows, window_count, &workspace_bounds, new_geometries);
+    gf_window_manager_apply_layout (manager, windows, new_geometries, window_count);
 
-    // Apply new geometries
-    for (uint32_t i = 0; i < window_count; i++)
-    {
-        result = manager->platform->set_window_geometry (
-            manager->display, windows[i].native_handle, &new_geometries[i],
-            GF_GEOMETRY_CHANGE_ALL | GF_GEOMETRY_APPLY_PADDING);
-
-        if (result != GF_SUCCESS)
-        {
-            GF_LOG_WARN ("Failed to set geometry for window %llu",
-                         (unsigned long long)windows[i].id);
-        }
-    }
-
-    // Update window list and clear update flags
-    for (uint32_t i = 0; i < window_count; i++)
-    {
-        gf_window_manager_update_window_info (manager, windows[i].native_handle,
-                                              workspace_id);
-    }
-    gf_window_list_clear_update_flags (&manager->state.windows, workspace_id);
-
-    gf_free (windows);
     gf_free (new_geometries);
     return GF_SUCCESS;
 }
@@ -290,17 +399,6 @@ gf_window_manager_run (gf_window_manager_t *manager)
             GF_LOG_WARN ("Failed to update workspace manager");
         }
 
-        // Periodic cleanup of invalid windows
-        if (current_time - manager->state.last_cleanup_time >= 1)
-        {
-            gf_window_manager_cleanup_invalid_windows (manager);
-            manager->state.last_cleanup_time = current_time;
-        }
-
-        // Handle workspace overflow
-        gf_workspace_manager_handle_overflow (manager->state.workspace_manager,
-                                              manager->display, &manager->state.windows);
-
         // Get current workspace and arrange if needed
         gf_workspace_id_t current_workspace
             = manager->platform->get_current_workspace (manager->display);
@@ -312,18 +410,31 @@ gf_window_manager_run (gf_window_manager_t *manager)
                           current_workspace);
             manager->state.workspace_manager->active_workspace = current_workspace;
         }
+        gf_window_manager_watch (manager);
+
+        // Handle workspace overflow
+        gf_workspace_manager_handle_overflow (manager->state.workspace_manager,
+                                              manager->display, &manager->state.windows);
 
         result = gf_window_manager_arrange_workspace (manager, current_workspace);
         if (result != GF_SUCCESS)
         {
             GF_LOG_WARN ("Failed to arrange workspace %d", current_workspace);
         }
+        gf_window_manager_drag (manager, current_workspace);
 
         // Periodic statistics
         if (current_time - last_stats_time >= 10)
         {
             gf_window_manager_print_stats (manager);
             last_stats_time = current_time;
+        }
+
+        // Periodic cleanup of invalid windows
+        if (current_time - manager->state.last_cleanup_time >= 1)
+        {
+            gf_window_manager_cleanup_invalid_windows (manager);
+            manager->state.last_cleanup_time = current_time;
         }
 
         // Adaptive sleep based on activity
@@ -334,197 +445,125 @@ gf_window_manager_run (gf_window_manager_t *manager)
     return GF_SUCCESS;
 }
 
-void
-gf_window_list_cleanup (gf_window_list_t *list)
+static void
+gf_window_manager_unmaximize_all (gf_window_manager_t *manager, gf_window_info_t *windows,
+                                  uint32_t window_count)
 {
-    if (!list)
+    if (!manager || !manager->platform || !windows)
         return;
 
-    gf_free (list->items);
-    list->items = NULL;
-    list->count = 0;
-    list->capacity = 0;
+    for (uint32_t i = 0; i < window_count; i++)
+    {
+        manager->platform->unmaximize_window (manager->display, windows[i].native_handle);
+    }
 }
 
-static gf_error_code_t
-gf_window_list_ensure_capacity (gf_window_list_t *list, uint32_t required_capacity)
+static void
+gf_window_manager_apply_layout (gf_window_manager_t *manager, gf_window_info_t *windows,
+                                gf_rect_t *geometry, uint32_t window_count)
 {
-    if (list->capacity >= required_capacity)
-        return GF_SUCCESS;
+    if (!manager || !windows || !geometry || window_count == 0)
+        return;
 
-    uint32_t new_capacity = list->capacity;
-    while (new_capacity < required_capacity)
+    gf_error_code_t result;
+
+    for (uint32_t i = 0; i < window_count; i++)
     {
-        new_capacity *= 2;
+        result = manager->platform->set_window_geometry (
+            manager->display, windows[i].native_handle, &geometry[i],
+            GF_GEOMETRY_CHANGE_ALL | GF_GEOMETRY_APPLY_PADDING);
+
+        if (result != GF_SUCCESS)
+        {
+            GF_LOG_WARN ("Failed to set geometry for window %llu",
+                         (unsigned long long)windows[i].id);
+        }
     }
 
-    gf_window_info_t *new_items
-        = gf_realloc (list->items, new_capacity * sizeof (gf_window_info_t));
-    if (!new_items)
-        return GF_ERROR_MEMORY_ALLOCATION;
+    for (uint32_t i = 0; i < window_count; i++)
+    {
+        gf_window_manager_update_window_info (
+            manager, windows[i].native_handle,
+            manager->state.workspace_manager->active_workspace);
+    }
 
-    list->items = new_items;
-    list->capacity = new_capacity;
-    return GF_SUCCESS;
+    gf_window_list_clear_update_flags (
+        &manager->state.windows, manager->state.workspace_manager->active_workspace);
 }
 
 gf_error_code_t
-gf_window_list_add (gf_window_list_t *list, const gf_window_info_t *window)
+gf_window_manager_swap (gf_window_manager_t *manager, gf_window_info_t *src,
+                        gf_window_info_t *dst)
 {
-    if (!list || !window)
+    if (!manager || !src || !dst)
         return GF_ERROR_INVALID_PARAMETER;
 
-    // Check if window already exists
-    if (gf_window_list_find (list, window->id))
+    gf_window_list_t *list = &manager->state.windows;
+    int src_idx = -1, dst_idx = -1;
+
+    for (int i = 0; i < list->count; i++)
     {
-        return gf_window_list_update (list, window);
+        if (list->items[i].id == src->id)
+            src_idx = i;
+        if (list->items[i].id == dst->id)
+            dst_idx = i;
     }
 
-    gf_error_code_t result = gf_window_list_ensure_capacity (list, list->count + 1);
+    if (src_idx < 0 || dst_idx < 0)
+    {
+        GF_LOG_WARN ("Swap aborted: one or both windows not found in manager list");
+        return GF_ERROR_INVALID_PARAMETER;
+    }
+
+    gf_window_info_t *windows = manager->state.windows.items;
+    uint32_t window_count = manager->state.windows.count;
+
+    if (window_count == 0)
+    {
+        return GF_SUCCESS;
+    }
+
+    // Swap
+    gf_window_info_t temp = windows[src_idx];
+    windows[src_idx] = windows[dst_idx];
+    windows[dst_idx] = temp;
+
+    gf_rect_t *new_geometries = NULL;
+    gf_error_code_t result = gf_window_manager_calculate_layout (
+        manager, windows, window_count, &new_geometries);
     if (result != GF_SUCCESS)
+    {
+        gf_free (windows);
         return result;
+    }
 
-    list->items[list->count] = *window;
-    list->count++;
+    gf_window_manager_unmaximize_all (manager, windows, window_count);
+    gf_window_manager_apply_layout (manager, windows, new_geometries, window_count);
 
-    GF_LOG_DEBUG ("Added window %llu to workspace %d (total: %u)",
-                  (unsigned long long)window->id, window->workspace_id, list->count);
+    gf_free (new_geometries);
     return GF_SUCCESS;
-}
-
-gf_error_code_t
-gf_window_list_remove (gf_window_list_t *list, gf_window_id_t window_id)
-{
-    if (!list)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    for (uint32_t i = 0; i < list->count; i++)
-    {
-        if (list->items[i].id == window_id)
-        {
-            gf_workspace_id_t workspace_id = list->items[i].workspace_id;
-
-            // Move last item to this position
-            if (i < list->count - 1)
-            {
-                list->items[i] = list->items[list->count - 1];
-            }
-            list->count--;
-
-            GF_LOG_DEBUG ("Removed window %llu from workspace %d (total: %u)",
-                          (unsigned long long)window_id, workspace_id, list->count);
-            return GF_SUCCESS;
-        }
-    }
-
-    return GF_ERROR_WINDOW_NOT_FOUND;
-}
-
-gf_error_code_t
-gf_window_list_update (gf_window_list_t *list, const gf_window_info_t *window)
-{
-    if (!list || !window)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    gf_window_info_t *existing = gf_window_list_find (list, window->id);
-    if (!existing)
-        return GF_ERROR_WINDOW_NOT_FOUND;
-
-    bool changed = (existing->geometry.x != window->geometry.x
-                    || existing->geometry.y != window->geometry.y
-                    || existing->geometry.width != window->geometry.width
-                    || existing->geometry.height != window->geometry.height
-                    || existing->workspace_id != window->workspace_id);
-
-    *existing = *window;
-
-    if (changed)
-    {
-        existing->last_modified = time (NULL);
-        existing->needs_update = true;
-    }
-
-    return GF_SUCCESS;
-}
-
-gf_window_info_t *
-gf_window_list_find (const gf_window_list_t *list, gf_window_id_t window_id)
-{
-    if (!list)
-        return NULL;
-
-    for (uint32_t i = 0; i < list->count; i++)
-    {
-        if (list->items[i].id == window_id)
-        {
-            return &list->items[i];
-        }
-    }
-
-    return NULL;
-}
-
-uint32_t
-gf_window_list_count_by_workspace (const gf_window_list_t *list,
-                                   gf_workspace_id_t workspace_id)
-{
-    if (!list)
-        return 0;
-
-    uint32_t count = 0;
-    for (uint32_t i = 0; i < list->count; i++)
-    {
-        if (list->items[i].workspace_id == workspace_id)
-        {
-            count++;
-        }
-    }
-
-    return count;
 }
 
 void
-gf_window_list_clear_update_flags (gf_window_list_t *list, gf_workspace_id_t workspace_id)
+gf_window_manager_watch (gf_window_manager_t *manager)
 {
-    if (!list)
+
+    gf_window_info_t *windows = NULL;
+    uint32_t window_count = 0;
+
+    gf_workspace_id_t workspace_id = manager->state.workspace_manager->active_workspace;
+
+    gf_error_code_t result = manager->platform->get_windows (
+        manager->display, workspace_id, &windows, &window_count);
+    if (result != GF_SUCCESS || window_count == 0)
+    {
         return;
-
-    for (uint32_t i = 0; i < list->count; i++)
-    {
-        if (workspace_id < 0 || list->items[i].workspace_id == workspace_id)
-        {
-            list->items[i].needs_update = false;
-        }
-    }
-}
-
-gf_error_code_t
-gf_window_list_get_by_workspace (const gf_window_list_t *list,
-                                 gf_workspace_id_t workspace_id,
-                                 gf_window_info_t **windows, uint32_t *count)
-{
-    if (!list || !windows || !count)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    *count = gf_window_list_count_by_workspace (list, workspace_id);
-    if (*count == 0)
-    {
-        *windows = NULL;
-        return GF_SUCCESS;
     }
 
-    *windows = gf_malloc (*count * sizeof (gf_window_info_t));
-    if (!*windows)
-        return GF_ERROR_MEMORY_ALLOCATION;
-
-    uint32_t idx = 0;
-    for (uint32_t i = list->count; i > idx && idx < *count; i--)
+    for (uint32_t i = 0; i < window_count; i++)
     {
-        if (list->items[i].workspace_id == workspace_id)
-        {
-            (*windows)[idx++] = list->items[i];
-        }
+        gf_window_manager_update_window_info (
+            manager, windows[i].native_handle,
+            manager->state.workspace_manager->active_workspace);
     }
-
-    return GF_SUCCESS;
 }

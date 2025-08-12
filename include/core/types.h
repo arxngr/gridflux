@@ -46,8 +46,8 @@ typedef void *gf_display_t;
 // Constants
 #define GF_MAX_WINDOWS_PER_WORKSPACE 4
 #define GF_MAX_WORKSPACES 32
-#define GF_DEFAULT_PADDING 0
-#define GF_MIN_WINDOW_SIZE 100
+#define GF_DEFAULT_PADDING 1
+#define GF_MIN_WINDOW_SIZE 10
 
 // Error codes
 typedef enum

@@ -1,4 +1,7 @@
 #include "../../../include/platform/x11/x11_window_manager.h"
+#include "core/logger.h"
+#include "core/types.h"
+#include "utils/memory.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -45,6 +48,7 @@ gf_x11_platform_create (void)
     platform->get_screen_bounds = gf_x11_platform_get_screen_bounds;
     platform->is_window_valid = gf_x11_platform_is_window_valid;
     platform->is_window_excluded = gf_x11_platform_is_window_excluded;
+    platform->is_window_drag = gf_x11_platform_is_window_drag;
     platform->platform_data = data;
 
     return platform;
@@ -378,18 +382,15 @@ gf_x11_platform_set_window_geometry (gf_display_t display, gf_native_window_t wi
     if (!display || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
-    // Get frame extents for decoration compensation
     int left, right, top, bottom;
     gf_x11_get_frame_extents (display, window, &left, &right, &top, &bottom);
 
-    // Apply padding if requested
     gf_rect_t final_geometry = *geometry;
     if (flags & GF_GEOMETRY_APPLY_PADDING)
     {
         gf_rect_apply_padding (&final_geometry, GF_DEFAULT_PADDING);
     }
 
-    // Adjust for window decorations
     gf_coordinate_t final_x = final_geometry.x - left;
     gf_coordinate_t final_y = final_geometry.y - top;
     gf_dimension_t final_width = final_geometry.width + left + right;
@@ -646,4 +647,102 @@ gf_x11_platform_is_window_excluded (gf_display_t display, gf_native_window_t win
     }
 
     return false;
+}
+
+static gf_error_code_t
+gf_x11_platform_is_window_drag (gf_display_t display, gf_native_window_t window,
+                                gf_rect_t *geometry)
+{
+    memset (geometry, 0, sizeof (*geometry));
+
+    Window root = DefaultRootWindow (display);
+    Window root_return, parent_return;
+    Window *children = NULL;
+    unsigned int nchildren = 0;
+
+    if (!XQueryTree (display, root, &root_return, &parent_return, &children, &nchildren))
+    {
+        GF_LOG_ERROR ("Failed to get window list\n");
+        return GF_ERROR_PLATFORM_ERROR;
+    }
+
+    int *initial_x = gf_malloc (nchildren * sizeof (int));
+    int *initial_y = gf_malloc (nchildren * sizeof (int));
+    Bool *valid = gf_malloc (nchildren * sizeof (Bool));
+
+    for (unsigned int i = 0; i < nchildren; i++)
+    {
+        Window child;
+        unsigned int width, height, border_width, depth;
+
+        valid[i] = XGetGeometry (display, children[i], &child, &initial_x[i],
+                                 &initial_y[i], &width, &height, &border_width, &depth);
+
+        if (valid[i])
+        {
+            // Convert to absolute screen coords
+            int abs_x = 0, abs_y = 0;
+            Window dummy;
+            XTranslateCoordinates (display, children[i], root, 0, 0, &abs_x, &abs_y,
+                                   &dummy);
+            initial_x[i] = abs_x;
+            initial_y[i] = abs_y;
+        }
+    }
+
+    while (1)
+    {
+        Window child_return;
+        int root_x, root_y, win_x, win_y;
+        unsigned int mask;
+
+        if (XQueryPointer (display, root, &root_return, &child_return, &root_x, &root_y,
+                           &win_x, &win_y, &mask))
+        {
+            if (mask & Button1Mask)
+            {
+                for (unsigned int i = 0; i < nchildren; i++)
+                {
+                    if (!valid[i])
+                        continue;
+
+                    Window child;
+                    int x, y;
+                    unsigned int width, height, border_width, depth;
+
+                    if (XGetGeometry (display, children[i], &child, &x, &y, &width,
+                                      &height, &border_width, &depth))
+                    {
+                        // Translate coordinates to root
+                        int abs_x = 0, abs_y = 0;
+                        Window dummy;
+                        XTranslateCoordinates (display, children[i], root, 0, 0, &abs_x,
+                                               &abs_y, &dummy);
+
+                        if (abs_x != initial_x[i] || abs_y != initial_y[i])
+                        {
+                            geometry->x = abs_x;
+                            geometry->y = abs_y;
+                            geometry->width = (gf_dimension_t)width;
+                            geometry->height = (gf_dimension_t)height;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        usleep (20000); // 20ms delay
+    }
+
+    gf_free (initial_x);
+    gf_free (initial_y);
+    gf_free (valid);
+    if (children)
+        XFree (children);
+
+    return GF_SUCCESS;
 }
