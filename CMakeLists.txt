@@ -25,7 +25,8 @@ set(COMMON_SOURCES
     src/core/workspace.c
     src/core/window_manager.c
     src/utils/memory.c
-    src/utils/collections.c
+    src/utils/list.c
+        src/utils/workspace.c
     src/main.c
 )
 
@@ -40,7 +41,7 @@ if(UNIX AND NOT APPLE)
         src/platform/x11/x11_window_manager.c
     )
     
-    set(PLATFORM_LIBRARIES ${X11_LIBRARIES})
+    set(PLATFORM_LIBRARIES ${X11_LIBRARIES} m)
     set(PLATFORM_INCLUDES ${X11_INCLUDE_DIR})
     
 elseif(WIN32)
@@ -69,7 +70,6 @@ add_executable(gridflux
 
 # Link libraries
 target_link_libraries(gridflux ${PLATFORM_LIBRARIES})
-
 # Include directories
 if(PLATFORM_INCLUDES)
     target_include_directories(gridflux PRIVATE ${PLATFORM_INCLUDES})

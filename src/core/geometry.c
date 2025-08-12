@@ -75,11 +75,9 @@ gf_bsp_calculate_layout (const gf_geometry_calculator_t *calc_base,
         = (gf_bsp_geometry_calculator_t *)calc_base->calculator_data;
 
     if (!calc)
-        return;
-
-    if (calc->base.calculator_data)
     {
-        calc = (gf_bsp_geometry_calculator_t *)calc->base.calculator_data;
+        GF_LOG_ERROR ("BSP calculator context is NULL");
+        return;
     }
 
     gf_bsp_split_recursive (windows, count, workspace_bounds, results, calc->padding, 0);
@@ -207,4 +205,25 @@ gf_rect_ensure_minimum_size (gf_rect_t *rect, uint32_t min_size)
         rect->width = min_size;
     if (rect->height < min_size)
         rect->height = min_size;
+}
+
+bool
+gf_rect_point_in (int x, int y, const gf_rect_t *rect)
+{
+    return (x >= rect->x && x <= rect->x + rect->width && y >= rect->y
+            && y <= rect->y + rect->height);
+}
+
+int
+gf_rect_intersection_area (const gf_rect_t *a, const gf_rect_t *b)
+{
+    int x1 = (a->x > b->x) ? a->x : b->x;
+    int y1 = (a->y > b->y) ? a->y : b->y;
+    int x2 = (a->x + a->width < b->x + b->width) ? (a->x + a->width) : (b->x + b->width);
+    int y2
+        = (a->y + a->height < b->y + b->height) ? (a->y + a->height) : (b->y + b->height);
+
+    if (x2 <= x1 || y2 <= y1)
+        return 0;
+    return (x2 - x1) * (y2 - y1);
 }
