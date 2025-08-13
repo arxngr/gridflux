@@ -44,7 +44,7 @@ typedef void *gf_display_t;
 #endif
 
 // Constants
-#define GF_MAX_WINDOWS_PER_WORKSPACE 4
+#define GF_MAX_WINDOWS_PER_WORKSPACE 2
 #define GF_MAX_WORKSPACES 32
 #define GF_DEFAULT_PADDING 1
 #define GF_MIN_WINDOW_SIZE 10
@@ -95,7 +95,7 @@ typedef struct
     gf_workspace_id_t id;
     uint32_t window_count;
     uint32_t max_windows;
-    uint32_t available_space;
+    int32_t available_space;
     gf_rect_t bounds;
 } gf_workspace_info_t;
 

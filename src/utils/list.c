@@ -191,7 +191,7 @@ gf_window_list_get_by_workspace (const gf_window_list_t *list,
     }
 
     uint32_t idx = 0;
-    for (uint32_t i = list->count; i > idx && idx < *count; i--)
+    for (uint32_t i = list->count; i-- > 0 && idx < *count;)
     {
         if (list->items[i].workspace_id == workspace_id)
         {
