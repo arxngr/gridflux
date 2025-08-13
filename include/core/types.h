@@ -44,7 +44,7 @@ typedef void *gf_display_t;
 #endif
 
 // Constants
-#define GF_MAX_WINDOWS_PER_WORKSPACE 2
+#define GF_MAX_WINDOWS_PER_WORKSPACE 3
 #define GF_MAX_WORKSPACES 32
 #define GF_DEFAULT_PADDING 1
 #define GF_MIN_WINDOW_SIZE 10
