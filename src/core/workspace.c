@@ -5,10 +5,9 @@
 #include "../../include/utils/workspace.h"
 
 gf_error_code_t
-gf_workspace_manager_create (gf_workspace_manager_t **manager,
-                             gf_platform_interface_t *platform)
+gf_workspace_manager_create (gf_workspace_manager_t **manager)
 {
-    if (!manager || !platform)
+    if (!manager)
         return GF_ERROR_INVALID_PARAMETER;
 
     *manager = gf_calloc (1, sizeof (gf_workspace_manager_t));
@@ -23,7 +22,6 @@ gf_workspace_manager_create (gf_workspace_manager_t **manager,
         return result;
     }
 
-    (*manager)->platform = platform;
     (*manager)->active_workspace = -1;
 
     return GF_SUCCESS;
@@ -37,42 +35,6 @@ gf_workspace_manager_destroy (gf_workspace_manager_t *manager)
 
     gf_workspace_list_cleanup (&manager->workspaces);
     gf_free (manager);
-}
-
-gf_error_code_t
-gf_workspace_manager_update (gf_workspace_manager_t *manager, gf_display_t display)
-{
-    if (!manager)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    manager->active_workspace = manager->platform->get_current_workspace (display);
-    uint32_t workspace_count = manager->platform->get_workspace_count (display);
-
-    // Update workspace list
-    for (uint32_t i = 0; i < workspace_count; i++)
-    {
-        if (!gf_workspace_list_find (&manager->workspaces, i))
-        {
-            gf_workspace_info_t workspace = {
-                .id = i,
-                .window_count = 0,
-                .max_windows = GF_MAX_WINDOWS_PER_WORKSPACE,
-                .available_space = GF_MAX_WINDOWS_PER_WORKSPACE,
-                .bounds = { 0, 0, 1920, 1080 } // TODO: Get actual bounds
-            };
-
-            gf_error_code_t result
-                = manager->platform->get_screen_bounds (display, &workspace.bounds);
-            if (result != GF_SUCCESS)
-            {
-                GF_LOG_WARN ("Failed to get screen bounds for workspace %u", i);
-            }
-
-            gf_workspace_list_add (&manager->workspaces, &workspace);
-        }
-    }
-
-    return GF_SUCCESS;
 }
 
 gf_workspace_info_t *
@@ -136,6 +98,9 @@ gf_workspace_manager_handle_overflow (gf_workspace_manager_t *manager,
             result = manager->platform->move_window_to_workspace (
                 display, workspace_windows[j].native_handle, target_workspace);
 
+            GF_LOG_DEBUG (" → Moving window %u from workspace %u to %u",
+                          workspace_windows[j].id, workspace_windows[j].workspace_id,
+                          target_workspace);
             if (result == GF_SUCCESS)
             {
                 workspace_windows[j].workspace_id = target_workspace;
@@ -155,7 +120,14 @@ gf_workspace_manager_handle_overflow (gf_workspace_manager_t *manager,
                         free_workspaces[k] = free_workspaces[k + 1];
                     }
                     free_count--;
+                    GF_LOG_DEBUG ("   Workspace %u is now full, removing from free list",
+                                  target_workspace);
                 }
+            }
+            else
+            {
+                GF_LOG_WARN ("Failed to move window %u to workspace %u",
+                             workspace_windows[j].id, target_workspace);
             }
         }
 
