@@ -303,14 +303,12 @@ gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_i
     {
         Window window = window_list[i];
 
-        // Skip invalid or excluded windows
         if (!gf_x11_platform_is_window_valid (display, window)
             || gf_x11_platform_is_window_excluded (display, window))
         {
             continue;
         }
 
-        // Check workspace
         unsigned char *desktop_data = NULL;
         unsigned long desktop_nitems = 0;
         if (gf_x11_get_window_property (display, window, atoms->net_wm_desktop,
@@ -327,7 +325,6 @@ gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_i
             }
         }
 
-        // Get window geometry
         gf_rect_t geometry;
         if (gf_x11_platform_get_window_geometry (display, window, &geometry)
             != GF_SUCCESS)
@@ -335,20 +332,20 @@ gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_i
             continue;
         }
 
-        // Add to filtered list
-        filtered_windows[filtered_count] = (gf_window_info_t){
-            .id = (gf_window_id_t)window,
-            .native_handle = window,
-            .workspace_id = workspace_id,
-            .geometry = geometry,
-            .is_maximized = gf_x11_window_has_state (display, window,
+        bool is_maximized = gf_x11_window_has_state (display, window,
                                                      atoms->net_wm_state_maximized_horz)
                             || gf_x11_window_has_state (
-                                display, window, atoms->net_wm_state_maximized_vert),
-            .needs_update = true,
-            .is_valid = true,
-            .last_modified = time (NULL)
-        };
+                                display, window, atoms->net_wm_state_maximized_vert);
+
+        filtered_windows[filtered_count]
+            = (gf_window_info_t){ .id = (gf_window_id_t)window,
+                                  .native_handle = window,
+                                  .workspace_id = workspace_id,
+                                  .geometry = geometry,
+                                  .is_maximized = is_maximized,
+                                  .needs_update = true,
+                                  .is_valid = true,
+                                  .last_modified = time (NULL) };
         filtered_count++;
     }
 

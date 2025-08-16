@@ -159,6 +159,7 @@ gf_window_manager_drag (gf_window_manager_t *manager)
         {
             dragged_geom = geom;
             dragged_window = &windows[i];
+            dragged_window->needs_update = true;
             dragged_window->geometry = geom;
             break;
         }
@@ -218,6 +219,7 @@ gf_window_manager_drag (gf_window_manager_t *manager)
                 {
                     best_overlap_area = area;
                     swap_target = &list_window[i];
+                    swap_target->needs_update = true;
                 }
             }
         }
@@ -458,6 +460,9 @@ gf_window_manager_apply_layout (gf_window_manager_t *manager, gf_window_info_t *
 
     for (uint32_t i = 0; i < window_count; i++)
     {
+        if (!windows[i].needs_update)
+            continue;
+
         result = manager->platform->set_window_geometry (
             manager->display, windows[i].native_handle, &geometry[i],
             GF_GEOMETRY_CHANGE_ALL | GF_GEOMETRY_APPLY_PADDING);
@@ -467,16 +472,9 @@ gf_window_manager_apply_layout (gf_window_manager_t *manager, gf_window_info_t *
             GF_LOG_WARN ("Failed to set geometry for window %llu",
                          (unsigned long long)windows[i].id);
         }
-    }
-
-    for (uint32_t i = 0; i < window_count; i++)
-    {
         gf_window_manager_update_window_info (manager, windows[i].native_handle,
                                               windows[i].workspace_id);
-    }
 
-    for (uint32_t i = 0; i < window_count; i++)
-    {
         gf_window_list_clear_update_flags (&manager->state.windows,
                                            windows[i].workspace_id);
     }
@@ -651,6 +649,33 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *manager)
     return GF_SUCCESS;
 }
 
+gf_error_code_t
+gf_window_manager_prune_excluded (gf_window_manager_t *manager)
+{
+    if (!manager || !manager->platform || !manager->platform->is_window_excluded)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_window_list_t *window_list = &manager->state.windows;
+    if (window_list->count == 0 || !window_list->items)
+        return GF_SUCCESS;
+
+    for (uint32_t i = 0; i < window_list->count;)
+    {
+        gf_window_info_t *win_info = &window_list->items[i];
+
+        if (manager->platform->is_window_excluded (
+                manager->display, (gf_native_window_t)win_info->native_handle))
+        {
+            gf_window_list_remove (window_list, win_info->id);
+            continue;
+        }
+
+        i++;
+    }
+
+    return GF_SUCCESS;
+}
+
 void
 gf_window_manager_watch (gf_window_manager_t *manager)
 {
@@ -659,11 +684,10 @@ gf_window_manager_watch (gf_window_manager_t *manager)
 
     gf_workspace_manager_t *wmgr = manager->state.workspace_manager;
 
-    // Refresh active workspace
     wmgr->active_workspace = manager->platform->get_current_workspace (manager->display);
 
-    // Sync workspace list with platform
     gf_window_manager_sync_workspaces (manager);
+    gf_window_manager_prune_excluded (manager);
 
     for (uint32_t ws_id = 0; ws_id < wmgr->workspaces.count; ws_id++)
     {
