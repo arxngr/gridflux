@@ -251,29 +251,44 @@ gf_window_manager_drag (gf_window_manager_t *manager)
 void
 gf_window_manager_cleanup_invalid_windows (gf_window_manager_t *manager)
 {
-    if (!manager)
+    if (!manager || !manager->platform)
         return;
 
-    uint32_t cleaned = 0;
-    for (uint32_t i = 0; i < manager->state.windows.count;)
-    {
-        gf_window_info_t *window = &manager->state.windows.items[i];
+    gf_window_list_t *window_list = &manager->state.windows;
+    if (window_list->count == 0 || !window_list->items)
+        return;
 
-        if (!manager->platform->is_window_valid (manager->display, window->native_handle))
+    uint32_t removed = 0;
+
+    for (uint32_t i = 0; i < window_list->count;)
+    {
+        gf_window_info_t *win_info = &window_list->items[i];
+
+        bool excluded
+            = manager->platform->is_window_excluded
+              && manager->platform->is_window_excluded (
+                  manager->display, (gf_native_window_t)win_info->native_handle);
+
+        bool invalid = manager->platform->is_window_valid
+                       && !manager->platform->is_window_valid (manager->display,
+                                                               win_info->native_handle);
+
+        if (excluded || invalid)
         {
-            gf_window_list_remove (&manager->state.windows, window->id);
-            cleaned++;
+            gf_window_list_remove (window_list, win_info->id);
+            removed++;
+            continue;
         }
-        else
-        {
-            i++;
-        }
+
+        i++;
     }
 
-    if (cleaned > 0)
+    if (removed > 0)
     {
-        GF_LOG_DEBUG ("Cleaned %u invalid windows", cleaned);
+        GF_LOG_DEBUG ("Cleaned %u windows (excluded or invalid)", removed);
     }
+
+    return;
 }
 
 void
@@ -445,7 +460,9 @@ gf_window_manager_unmaximize_all (gf_window_manager_t *manager, gf_window_info_t
 
     for (uint32_t i = 0; i < window_count; i++)
     {
-        manager->platform->unmaximize_window (manager->display, windows[i].native_handle);
+        if (windows[i].is_maximized)
+            manager->platform->unmaximize_window (manager->display,
+                                                  windows[i].native_handle);
     }
 }
 
@@ -649,33 +666,6 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *manager)
     return GF_SUCCESS;
 }
 
-gf_error_code_t
-gf_window_manager_prune_excluded (gf_window_manager_t *manager)
-{
-    if (!manager || !manager->platform || !manager->platform->is_window_excluded)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    gf_window_list_t *window_list = &manager->state.windows;
-    if (window_list->count == 0 || !window_list->items)
-        return GF_SUCCESS;
-
-    for (uint32_t i = 0; i < window_list->count;)
-    {
-        gf_window_info_t *win_info = &window_list->items[i];
-
-        if (manager->platform->is_window_excluded (
-                manager->display, (gf_native_window_t)win_info->native_handle))
-        {
-            gf_window_list_remove (window_list, win_info->id);
-            continue;
-        }
-
-        i++;
-    }
-
-    return GF_SUCCESS;
-}
-
 void
 gf_window_manager_watch (gf_window_manager_t *manager)
 {
@@ -687,7 +677,6 @@ gf_window_manager_watch (gf_window_manager_t *manager)
     wmgr->active_workspace = manager->platform->get_current_workspace (manager->display);
 
     gf_window_manager_sync_workspaces (manager);
-    gf_window_manager_prune_excluded (manager);
 
     for (uint32_t ws_id = 0; ws_id < wmgr->workspaces.count; ws_id++)
     {
