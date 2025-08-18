@@ -477,7 +477,7 @@ gf_window_manager_apply_layout (gf_window_manager_t *manager, gf_window_info_t *
 
     for (uint32_t i = 0; i < window_count; i++)
     {
-        if (!windows[i].needs_update)
+        if (!windows[i].needs_update && !windows[i].is_valid)
             continue;
 
         result = manager->platform->set_window_geometry (
@@ -686,7 +686,9 @@ gf_window_manager_watch (gf_window_manager_t *manager)
             == GF_SUCCESS)
         {
             for (uint32_t i = 0; i < count; i++)
+            {
                 gf_window_list_add (&manager->state.windows, &windows[i]);
+            }
         }
     }
 
