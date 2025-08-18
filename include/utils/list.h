@@ -27,5 +27,7 @@ gf_error_code_t gf_window_list_get_by_workspace (const gf_window_list_t *list,
                                                  gf_workspace_id_t workspace_id,
                                                  gf_window_info_t **windows,
                                                  uint32_t *count);
+void gf_window_list_mark_all_needs_update (gf_window_list_t *list,
+                                           const gf_workspace_id_t *workspace_id);
 
 #endif

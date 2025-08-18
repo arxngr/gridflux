@@ -1,6 +1,7 @@
 #include "../include/utils/list.h"
 #include "../../include/core/logger.h"
 #include "../include/utils/memory.h"
+#include <string.h>
 
 void
 gf_window_list_cleanup (gf_window_list_t *list)
@@ -36,6 +37,24 @@ gf_window_list_ensure_capacity (gf_window_list_t *list, uint32_t required_capaci
     return GF_SUCCESS;
 }
 
+void
+gf_window_list_mark_all_needs_update (gf_window_list_t *list,
+                                      const gf_workspace_id_t *workspace_id)
+{
+    if (!list)
+        return;
+
+    for (uint32_t i = 0; i < list->count; i++)
+    {
+        gf_window_info_t *win = &list->items[i];
+
+        if (!workspace_id || win->workspace_id == *workspace_id)
+        {
+            win->needs_update = true;
+        }
+    }
+}
+
 gf_error_code_t
 gf_window_list_add (gf_window_list_t *list, const gf_window_info_t *window)
 {
@@ -54,6 +73,7 @@ gf_window_list_add (gf_window_list_t *list, const gf_window_info_t *window)
 
     list->items[list->count] = *window;
     list->count++;
+    gf_window_list_mark_all_needs_update (list, &window->workspace_id);
 
     GF_LOG_DEBUG ("Added window %llu to workspace %d (total: %u)",
                   (unsigned long long)window->id, window->workspace_id, list->count);
@@ -79,11 +99,16 @@ gf_window_list_remove (gf_window_list_t *list, gf_window_id_t window_id)
             }
             list->count--;
 
-            GF_LOG_DEBUG ("Removed window %llu from workspace %d (total: %u)",
-                          (unsigned long long)window_id, workspace_id, list->count);
+            memset (&list->items[list->count], 0, sizeof (list->items[0]));
+            gf_window_list_mark_all_needs_update (list, &workspace_id);
+            GF_LOG_DEBUG (
+                "Removed window %llu with status %d from workspace %d (total: %u)",
+                (unsigned long long)window_id, list->items[i].is_valid, workspace_id,
+                list->count);
             return GF_SUCCESS;
         }
     }
+    gf_window_list_mark_all_needs_update (list, NULL);
 
     return GF_ERROR_WINDOW_NOT_FOUND;
 }
