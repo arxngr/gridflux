@@ -48,7 +48,7 @@ gf_window_list_mark_all_needs_update (gf_window_list_t *list,
     {
         gf_window_info_t *win = &list->items[i];
 
-        if (!workspace_id || win->workspace_id == *workspace_id)
+        if ((!workspace_id || win->workspace_id == *workspace_id) && win->is_valid)
         {
             win->needs_update = true;
         }

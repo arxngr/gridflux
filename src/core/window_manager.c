@@ -687,7 +687,8 @@ gf_window_manager_watch (gf_window_manager_t *manager)
         {
             for (uint32_t i = 0; i < count; i++)
             {
-                gf_window_list_add (&manager->state.windows, &windows[i]);
+                if (windows[i].is_valid)
+                    gf_window_list_add (&manager->state.windows, &windows[i]);
             }
         }
     }
