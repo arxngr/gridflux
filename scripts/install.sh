@@ -1,30 +1,24 @@
 #!/bin/bash
-
 set -e
 
-USER_NAME=$(whoami)
-COMPUTER_NAME=$(hostname)
 INSTALL_DIR="/usr/local/bin"
-SERVICE_FILE="/etc/systemd/system/gridflux.service"
+SERVICE_NAME="gridflux.service"
+SERVICE_PATH="$HOME/.config/systemd/user/$SERVICE_NAME"
+BUILD_DIR="build"
+
+echo "Starting GridFlux installation..."
 
 install_dependencies() {
     echo "Installing dependencies..."
 
     local dependencies="libx11-dev cmake gcc make"
-
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         case "$ID" in
         ubuntu | debian)
             echo "Detected Debian-based system."
-            for dep in $dependencies; do
-                if ! dpkg -s "$dep" &>/dev/null; then
-                    echo "Installing $dep..."
-                    sudo apt install -y "$dep"
-                else
-                    echo "$dep already installed."
-                fi
-            done
+            sudo apt update -y
+            sudo apt install -y libx11-dev cmake gcc make
             ;;
         fedora | rhel | centos | almalinux | rocky)
             echo "Detected RHEL-based system."
@@ -32,116 +26,118 @@ install_dependencies() {
             ;;
         arch | manjaro)
             echo "Detected Arch-based system."
-            sudo pacman -Syu --noconfirm
-            sudo pacman -S --noconfirm libx11 cmake gcc make
+            sudo pacman -Syu --noconfirm libx11 cmake gcc make
             ;;
         *)
             echo "Unsupported distribution: $ID"
-            exit 1
             ;;
         esac
-    else
-        echo "Cannot detect OS. Install dependencies manually."
-        exit 1
     fi
 }
 
 build_and_install() {
-    echo "Building gridflux..."
-
-    # Ensure we're in the right directory
+    echo "Building GridFlux..."
     if [ ! -f "CMakeLists.txt" ]; then
-        echo "Error: CMakeLists.txt not found. Make sure you're running this script from the project root."
+        echo "Error: Run this script from the project root (where CMakeLists.txt is)."
         exit 1
     fi
 
-    # Clean any existing build artifacts
-    echo "Cleaning previous build artifacts..."
-    rm -rf build/
-    rm -f CMakeCache.txt
-    rm -rf CMakeFiles/
+    rm -rf "$BUILD_DIR" CMakeCache.txt CMakeFiles/
+    mkdir -p "$BUILD_DIR"
+    cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release .
+    cmake --build "$BUILD_DIR"
 
-    mkdir -p build
-
-    echo "Configuring build..."
-    if ! cmake -B build -DCMAKE_BUILD_TYPE=Release .; then
-        echo "Error: CMake configuration failed"
+    if [ ! -f "$BUILD_DIR/gridflux" ]; then
+        echo "Build failed: binary not found."
         exit 1
     fi
 
-    echo "Compiling..."
-    if ! cmake --build build; then
-        echo "Error: Build failed"
-        exit 1
-    fi
-
-    # Check if binary was created
-    if [ ! -f "build/gridflux" ]; then
-        echo "Error: Binary 'build/gridflux' was not created"
-        exit 1
-    fi
-
-    echo "Installing binary..."
-    sudo cp build/gridflux "$INSTALL_DIR/"
+    echo "Installing binary to $INSTALL_DIR..."
+    sudo cp "$BUILD_DIR/gridflux" "$INSTALL_DIR/"
     sudo chmod +x "$INSTALL_DIR/gridflux"
-
-    echo "Build and installation completed successfully!"
 }
 
-create_systemd_service() {
-    echo "Setting up systemd service..."
+detect_display_env() {
+    echo "Detecting display environment..."
 
-    if [ -f "$SERVICE_FILE" ]; then
-        echo "Removing existing service..."
-        sudo systemctl stop gridflux.service || true
-        sudo systemctl disable gridflux.service || true
-        sudo rm -f "$SERVICE_FILE"
+    DISPLAY_VAL=${DISPLAY:-:0}
+    XAUTHORITY_VAL=${XAUTHORITY:-"$HOME/.Xauthority"}
+    XDG_TYPE=${XDG_SESSION_TYPE:-x11}
+
+    if [[ -z "$DISPLAY" ]]; then
+        DISPLAY_VAL=$(loginctl show-user "$USER" | grep -oP 'Display=\K\S+' || echo ":0")
     fi
 
-    sudo tee "$SERVICE_FILE" >/dev/null <<EOL
+    if [[ ! -S /tmp/.X11-unix/${DISPLAY_VAL#:} ]]; then
+        echo "Warning: X socket for $DISPLAY_VAL not found, fallback to :0"
+        DISPLAY_VAL=":0"
+    fi
+
+    if [[ ! -f "$XAUTHORITY_VAL" ]]; then
+        echo "Warning: XAUTHORITY file not found, creating file..."
+        touch "$HOME/.Xauthority"
+        XAUTHORITY_VAL="$HOME/.Xauthority"
+    fi
+
+    echo "DISPLAY=$DISPLAY_VAL"
+    echo "XAUTHORITY=$XAUTHORITY_VAL"
+    echo "XDG_SESSION_TYPE=$XDG_TYPE"
+}
+
+create_user_service() {
+    echo "Creating user systemd service..."
+
+    mkdir -p "$(dirname "$SERVICE_PATH")"
+
+    cat >"$SERVICE_PATH" <<EOL
 [Unit]
 Description=GridFlux Window Manager
-After=graphical.target
+After=graphical-session.target
+PartOf=graphical-session.target
 
 [Service]
 ExecStart=$INSTALL_DIR/gridflux
-User=$USER_NAME
-Environment=DISPLAY=:1
-Environment=XDG_SESSION_TYPE=$XDG_SESSION_TYPE
-Restart=always
+Restart=on-failure
 RestartSec=3
+Environment=DISPLAY=$DISPLAY_VAL
+Environment=XAUTHORITY=$XAUTHORITY_VAL
+Environment=XDG_SESSION_TYPE=$XDG_TYPE
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target
 EOL
 
-    sudo systemctl daemon-reload
-    sudo systemctl enable gridflux.service
-    sudo systemctl start gridflux.service
+    systemctl --user daemon-reload
+    systemctl --user enable "$SERVICE_NAME"
+    systemctl --user restart "$SERVICE_NAME"
+
+    echo "GridFlux systemd user service installed and started."
 }
 
 activate_dynamic_workspaces() {
     case "$XDG_CURRENT_DESKTOP" in
     GNOME)
-        echo "Enabling dynamic workspaces on GNOME..."
-        gsettings set org.gnome.mutter dynamic-workspaces true
+        echo "Configuring dynamic workspaces for GNOME..."
+        gsettings set org.gnome.mutter dynamic-workspaces true || true
         ;;
     KDE)
-        echo "Enabling dynamic desktops on KDE..."
-        kwriteconfig5 --file kwinrc --group Desktops --key Number 0
-        kwriteconfig5 --file kwinrc --group Desktops --key Current 1
+        echo "Configuring dynamic desktops for KDE..."
+        kwriteconfig5 --file kwinrc --group Desktops --key Number 0 || true
+        kwriteconfig5 --file kwinrc --group Desktops --key Current 1 || true
         ;;
     *)
-        echo "Dynamic workspaces not supported on $XDG_CURRENT_DESKTOP"
+        echo "Dynamic workspace setting not applicable for $XDG_CURRENT_DESKTOP"
         ;;
     esac
 }
 
-echo "Starting GridFlux installation..."
-
 install_dependencies
 build_and_install
-create_systemd_service
+detect_display_env
+create_user_service
 activate_dynamic_workspaces
 
-echo "✅ GridFlux installed and running!"
+echo "Installation complete. You can manage GridFlux with:"
+echo "   systemctl --user status gridflux"
+echo "   systemctl --user restart gridflux"
+echo "GridFlux is now running in your graphical session."
