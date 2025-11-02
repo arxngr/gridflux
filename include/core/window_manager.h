@@ -1,7 +1,10 @@
 #ifndef GF_CORE_WINDOW_MANAGER_H
 #define GF_CORE_WINDOW_MANAGER_H
 
+#define GLOB_CFG "config.json"
+
 #include "../utils/list.h"
+#include "core/config.h"
 #include "interfaces.h"
 #include "workspace.h"
 
@@ -24,6 +27,7 @@ typedef struct
     gf_geometry_calculator_t *geometry_calc;
     gf_window_filter_t *window_filter;
     gf_display_t display;
+    gf_config_t *config;
 } gf_window_manager_t;
 
 gf_error_code_t gf_window_manager_create (gf_window_manager_t **manager,
@@ -60,4 +64,5 @@ static void gf_window_manager_unmaximize_all (gf_window_manager_t *manager,
 static gf_error_code_t gf_window_manager_arrange_overflow (gf_window_manager_t *manager);
 static void gf_window_manager_watch (gf_window_manager_t *manager);
 gf_error_code_t gf_window_manager_drag (gf_window_manager_t *manager);
+void gf_window_manager_load_cfg(gf_window_manager_t *manager);
 #endif // GF_CORE_WINDOW_MANAGER_H

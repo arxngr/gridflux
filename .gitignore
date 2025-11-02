@@ -31,3 +31,5 @@ Makefile
 
 # Windows
 Thumbs.db
+
+config.json
