@@ -1,4 +1,5 @@
 #include "../../../include/platform/x11/x11_window_manager.h"
+#include "core/config.h"
 #include "core/logger.h"
 #include "core/types.h"
 #include "utils/memory.h"
@@ -375,7 +376,7 @@ gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_i
 
 static gf_error_code_t
 gf_x11_platform_set_window_geometry (gf_display_t display, gf_native_window_t window,
-                                     const gf_rect_t *geometry, gf_geometry_flags_t flags)
+                                     const gf_rect_t *geometry, gf_geometry_flags_t flags, gf_config_t *cfg)
 {
     if (!display || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
@@ -386,7 +387,7 @@ gf_x11_platform_set_window_geometry (gf_display_t display, gf_native_window_t wi
     gf_rect_t final_geometry = *geometry;
     if (flags & GF_GEOMETRY_APPLY_PADDING)
     {
-        gf_rect_apply_padding (&final_geometry, GF_DEFAULT_PADDING);
+        gf_rect_apply_padding (&final_geometry, cfg->default_padding);
     }
 
     gf_coordinate_t final_x = final_geometry.x - left;
@@ -395,10 +396,10 @@ gf_x11_platform_set_window_geometry (gf_display_t display, gf_native_window_t wi
     gf_dimension_t final_height = final_geometry.height + top + bottom;
 
     // Ensure minimum size
-    if (final_width < GF_MIN_WINDOW_SIZE)
-        final_width = GF_MIN_WINDOW_SIZE;
-    if (final_height < GF_MIN_WINDOW_SIZE)
-        final_height = GF_MIN_WINDOW_SIZE;
+    if (final_width < cfg->min_window_size)
+        final_width = cfg->min_window_size;
+    if (final_height < cfg->min_window_size)
+        final_height = cfg->min_window_size;
 
     XMoveResizeWindow (display, window, final_x, final_y, final_width, final_height);
     XFlush (display);

@@ -1,6 +1,7 @@
 #include "../../include/core/window_manager.h"
 #include "../../include/core/logger.h"
 #include "../../include/utils/memory.h"
+#include "core/config.h"
 #include "core/geometry.h"
 #include "core/types.h"
 #include "core/workspace.h"
@@ -9,7 +10,6 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <unistd.h>
 
 gf_error_code_t
@@ -296,21 +296,25 @@ gf_window_manager_print_stats (const gf_window_manager_t *manager)
 {
     if (!manager)
         return;
-
-    uint32_t workspace_counts[GF_MAX_WORKSPACES] = { 0 };
+    
+    uint32_t *workspace_counts = gf_calloc(manager->config->max_workspaces, sizeof(uint32_t));
+    if (!workspace_counts) {
+        GF_LOG_ERROR("Failed to allocate workspace_counts");
+        return;
+    }
+    
     gf_workspace_id_t max_workspace = -1;
-
     for (uint32_t i = 0; i < manager->state.windows.count; i++)
     {
         gf_workspace_id_t ws = manager->state.windows.items[i].workspace_id;
-        if (ws >= 0 && ws < GF_MAX_WORKSPACES)
+        if (ws >= 0 && ws < manager->config->max_workspaces)
         {
             workspace_counts[ws]++;
             if (ws > max_workspace)
                 max_workspace = ws;
         }
     }
-
+    
     GF_LOG_DEBUG ("Window distribution (total: %u):", manager->state.windows.count);
     for (gf_workspace_id_t i = 0; i <= max_workspace; i++)
     {
@@ -319,6 +323,8 @@ gf_window_manager_print_stats (const gf_window_manager_t *manager)
             GF_LOG_DEBUG ("  Workspace %d: %u windows", i, workspace_counts[i]);
         }
     }
+    
+    gf_free(workspace_counts);  
 }
 
 static gf_error_code_t
@@ -424,6 +430,7 @@ gf_window_manager_run (gf_window_manager_t *manager)
         manager->state.loop_counter++;
         time_t current_time = time (NULL);
 
+        gf_window_manager_load_cfg(manager);
         gf_window_manager_watch (manager);
         gf_window_manager_arrange_overflow (manager);
         gf_window_manager_arrange_workspace (manager);
@@ -482,7 +489,7 @@ gf_window_manager_apply_layout (gf_window_manager_t *manager, gf_window_info_t *
 
         result = manager->platform->set_window_geometry (
             manager->display, windows[i].native_handle, &geometry[i],
-            GF_GEOMETRY_CHANGE_ALL | GF_GEOMETRY_APPLY_PADDING);
+            GF_GEOMETRY_CHANGE_ALL | GF_GEOMETRY_APPLY_PADDING,manager->config);
 
         if (result != GF_SUCCESS)
         {
@@ -551,19 +558,40 @@ gf_window_manager_sync_workspaces (gf_window_manager_t *manager)
 {
     gf_workspace_manager_t *wmgr = manager->state.workspace_manager;
     uint32_t platform_count = manager->platform->get_workspace_count (manager->display);
-
+    
     if (wmgr->workspaces.count > platform_count)
         wmgr->workspaces.count = platform_count;
-
+    
+    // Get current config value
+    uint32_t current_max_windows = manager->config->max_windows_per_workspace;
+    
     for (uint32_t i = 0; i < platform_count; i++)
     {
-        if (!gf_workspace_list_find (&wmgr->workspaces, i))
+        gf_workspace_info_t *existing = gf_workspace_list_find (&wmgr->workspaces, i);
+        
+        if (!existing)
         {
-            gf_workspace_info_t ws = { .id = i,
-                                       .window_count = 0,
-                                       .max_windows = GF_MAX_WINDOWS_PER_WORKSPACE,
-                                       .available_space = GF_MAX_WINDOWS_PER_WORKSPACE };
+            gf_workspace_info_t ws = { 
+                .id = i,
+                .window_count = 0,
+                .max_windows = current_max_windows,
+                .available_space = current_max_windows 
+            };
             gf_workspace_list_add (&wmgr->workspaces, &ws);
+            GF_LOG_DEBUG("Created workspace %u with max_windows=%u", i, current_max_windows);
+        }
+        else
+        {
+            if (existing->max_windows != current_max_windows)
+            {
+                GF_LOG_INFO("Updating workspace %u: max_windows %u -> %u", 
+                           i, existing->max_windows, current_max_windows);
+                
+                existing->max_windows = current_max_windows;
+                
+                int32_t avail = (int32_t)current_max_windows - (int32_t)existing->window_count;
+                existing->available_space = (avail < 0) ? 0 : avail;
+            }
         }
     }
 }
@@ -586,7 +614,7 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *manager)
         wmgr->workspaces.items[i].available_space = avail;
     }
 
-    uint32_t moved_ids[GF_MAX_WINDOWS_PER_WORKSPACE] = { 0 };
+    uint32_t *moved_ids = gf_calloc(manager->config->max_windows_per_workspace, sizeof(uint32_t));
     uint32_t moved_count = 0;
 
     for (uint32_t i = 0; i < wmgr->workspaces.count; i++)
@@ -698,3 +726,39 @@ gf_window_manager_watch (gf_window_manager_t *manager)
         gf_workspace_info_t *ws = &wmgr->workspaces.items[i];
     }
 }
+
+
+void gf_window_manager_load_cfg(gf_window_manager_t *manager) {
+    if (!manager->config) {
+        GF_LOG_ERROR("Config not initialized in main()");
+        return;
+    }
+    
+    struct stat st;
+    if (stat(GLOB_CFG, &st) != 0) {
+        return;
+    }
+    
+    // Check if file has been modified
+    if (st.st_mtime <= manager->config->last_modified) {
+        return;
+    }
+    
+    usleep(10000); // Small delay
+    
+    // Reload and check for changes
+    gf_config_t old_config = *manager->config;
+    gf_config_t new_config = load_or_create_config(GLOB_CFG);
+    
+    if (gf_config_has_changed(&old_config, &new_config)) {
+        GF_LOG_INFO("Configuration changed! Reloading from: %s", GLOB_CFG);
+        
+        *manager->config = new_config;
+        manager->config->last_modified = st.st_mtime;
+        
+        gf_window_manager_sync_workspaces(manager);
+    } else {
+        manager->config->last_modified = st.st_mtime;
+    }
+}
+

@@ -46,7 +46,8 @@ static gf_error_code_t gf_x11_platform_get_windows (gf_display_t display,
 static gf_error_code_t gf_x11_platform_set_window_geometry (gf_display_t display,
                                                             gf_native_window_t window,
                                                             const gf_rect_t *geometry,
-                                                            gf_geometry_flags_t flags);
+                                                            gf_geometry_flags_t flags, 
+                                                            gf_config_t *cfg);
 static gf_error_code_t
 gf_x11_platform_move_window_to_workspace (gf_display_t display, gf_native_window_t window,
                                           gf_workspace_id_t workspace_id);
