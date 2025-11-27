@@ -4,6 +4,7 @@
 #include "core/types.h"
 #include "utils/memory.h"
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -390,53 +391,87 @@ gf_x11_platform_set_window_geometry (gf_display_t display, gf_native_window_t wi
     int sh = DisplayHeight (dpy, screen);
 
     gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
+
+    // Compute maximum reserved struts (panels/docks)
+    int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
+
     Atom type;
     int format;
-    unsigned long nitems, bytes_after;
-    long *wa = NULL;
+    unsigned long count, bytes_after;
+    Window *clients = NULL;
 
-    XGetWindowProperty (dpy, root, atoms->net_work_area, 0, 4, False, XA_CARDINAL, &type,
-                        &format, &nitems, &bytes_after, (unsigned char **)&wa);
-
-    long wa_x = 0, wa_y = 0, wa_w = sw, wa_h = sh;
-    if (wa && nitems >= 4)
+    if (XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 2048, False, XA_WINDOW,
+                            &type, &format, &count, &bytes_after,
+                            (unsigned char **)&clients)
+            == Success
+        && clients)
     {
-        wa_x = wa[0];
-        wa_y = wa[1];
-        wa_w = wa[2];
-        wa_h = wa[3];
-    }
-    if (wa)
-        XFree (wa);
 
-    int panel_top = wa_y;
-    int panel_bottom = sh - (wa_y + wa_h);
+        for (unsigned long i = 0; i < count; i++)
+        {
+            long *strut = NULL;
+            unsigned long nitems = 0;
+
+            if (gf_x11_get_window_property (dpy, clients[i], atoms->net_strut_partial,
+                                            XA_CARDINAL, (unsigned char **)&strut,
+                                            &nitems)
+                    == GF_SUCCESS
+                && strut && nitems >= 12)
+            {
+                if (strut[0] > panel_left)
+                    panel_left = strut[0];
+                if (strut[1] > panel_right)
+                    panel_right = strut[1];
+                if (strut[2] > panel_top)
+                    panel_top = strut[2];
+                if (strut[3] > panel_bottom)
+                    panel_bottom = strut[3];
+                XFree (strut);
+            }
+        }
+
+        XFree (clients);
+    }
 
     gf_rect_t rect = *geometry;
     if (flags & GF_GEOMETRY_APPLY_PADDING)
         gf_rect_apply_padding (&rect, cfg->default_padding);
 
+    if (rect.width < GF_MIN_WINDOW_SIZE)
+        rect.width = GF_MIN_WINDOW_SIZE;
+    if (rect.height < GF_MIN_WINDOW_SIZE)
+        rect.height = GF_MIN_WINDOW_SIZE;
+
     int left = 0, right = 0, top = 0, bottom = 0;
     gf_x11_get_frame_extents (dpy, window, &left, &right, &top, &bottom);
 
+    // Clamp client rect using panel struts + frame extents
+    if (rect.x < panel_left + left)
+        rect.x = panel_left + left;
+
+    if (rect.y < panel_top + top)
+        rect.y = panel_top + top;
+
+    if (rect.x + rect.width + right > sw - panel_right)
+        rect.width = (sw - panel_right) - rect.x - right;
+
+    if (rect.y + rect.height + bottom > sh - panel_bottom)
+        rect.height = (sh - panel_bottom) - rect.y - bottom;
+
     int full_w = rect.width + left + right;
     int full_h = rect.height + top + bottom;
-
     int full_x = rect.x - left;
     int full_y = rect.y - top;
 
-    // Clamp to avoid panel and dock
-    if (full_y < panel_top)
-        full_y = panel_top;
-
-    if (full_y + full_h > sh - panel_bottom)
-        full_y = (sh - panel_bottom) - full_h;
-
-    if (full_x < wa_x)
-        full_x = wa_x;
-
-    if (full_x + full_w > wa_x + wa_w)
-        full_x = wa_x + wa_w - full_w;
+    // Clamp full window to screen bounds
+    if (full_x < 0)
+        full_x = 0;
+    if (full_y < 0)
+        full_y = 0;
+    if (full_x + full_w > sw)
+        full_x = sw - full_w;
+    if (full_y + full_h > sh)
+        full_y = sh - full_h;
 
     XMoveResizeWindow (dpy, window, full_x, full_y, full_w, full_h);
     XFlush (dpy);

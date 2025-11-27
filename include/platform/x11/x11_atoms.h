@@ -44,7 +44,7 @@ typedef struct
 
     Atom net_moveresize_window;
     Atom motif_wm_hints;
-    Atom net_work_area;
+    Atom net_strut_partial;
 
 } gf_x11_atoms_t;
 
