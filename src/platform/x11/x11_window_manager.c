@@ -3,13 +3,13 @@
 #include "core/logger.h"
 #include "core/types.h"
 #include "utils/memory.h"
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 // X11 platform implementation
-
 static int
 gf_x11_error_handler (Display *display, XErrorEvent *error)
 {
@@ -376,33 +376,70 @@ gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_i
 
 static gf_error_code_t
 gf_x11_platform_set_window_geometry (gf_display_t display, gf_native_window_t window,
-                                     const gf_rect_t *geometry, gf_geometry_flags_t flags, gf_config_t *cfg)
+                                     const gf_rect_t *geometry, gf_geometry_flags_t flags,
+                                     gf_config_t *cfg)
 {
     if (!display || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
-    int left, right, top, bottom;
-    gf_x11_get_frame_extents (display, window, &left, &right, &top, &bottom);
+    Display *dpy = display;
+    Window root = DefaultRootWindow (dpy);
+    int screen = DefaultScreen (dpy);
 
-    gf_rect_t final_geometry = *geometry;
-    if (flags & GF_GEOMETRY_APPLY_PADDING)
+    int sw = DisplayWidth (dpy, screen);
+    int sh = DisplayHeight (dpy, screen);
+
+    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
+    Atom type;
+    int format;
+    unsigned long nitems, bytes_after;
+    long *wa = NULL;
+
+    XGetWindowProperty (dpy, root, atoms->net_work_area, 0, 4, False, XA_CARDINAL, &type,
+                        &format, &nitems, &bytes_after, (unsigned char **)&wa);
+
+    long wa_x = 0, wa_y = 0, wa_w = sw, wa_h = sh;
+    if (wa && nitems >= 4)
     {
-        gf_rect_apply_padding (&final_geometry, cfg->default_padding);
+        wa_x = wa[0];
+        wa_y = wa[1];
+        wa_w = wa[2];
+        wa_h = wa[3];
     }
+    if (wa)
+        XFree (wa);
 
-    gf_coordinate_t final_x = final_geometry.x - left;
-    gf_coordinate_t final_y = final_geometry.y - top;
-    gf_dimension_t final_width = final_geometry.width + left + right;
-    gf_dimension_t final_height = final_geometry.height + top + bottom;
+    int panel_top = wa_y;
+    int panel_bottom = sh - (wa_y + wa_h);
 
-    // Ensure minimum size
-    if (final_width < cfg->min_window_size)
-        final_width = cfg->min_window_size;
-    if (final_height < cfg->min_window_size)
-        final_height = cfg->min_window_size;
+    gf_rect_t rect = *geometry;
+    if (flags & GF_GEOMETRY_APPLY_PADDING)
+        gf_rect_apply_padding (&rect, cfg->default_padding);
 
-    XMoveResizeWindow (display, window, final_x, final_y, final_width, final_height);
-    XFlush (display);
+    int left = 0, right = 0, top = 0, bottom = 0;
+    gf_x11_get_frame_extents (dpy, window, &left, &right, &top, &bottom);
+
+    int full_w = rect.width + left + right;
+    int full_h = rect.height + top + bottom;
+
+    int full_x = rect.x - left;
+    int full_y = rect.y - top;
+
+    // Clamp to avoid panel and dock
+    if (full_y < panel_top)
+        full_y = panel_top;
+
+    if (full_y + full_h > sh - panel_bottom)
+        full_y = (sh - panel_bottom) - full_h;
+
+    if (full_x < wa_x)
+        full_x = wa_x;
+
+    if (full_x + full_w > wa_x + wa_w)
+        full_x = wa_x + wa_w - full_w;
+
+    XMoveResizeWindow (dpy, window, full_x, full_y, full_w, full_h);
+    XFlush (dpy);
 
     return GF_SUCCESS;
 }

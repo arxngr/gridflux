@@ -63,6 +63,7 @@ gf_x11_atoms_init (Display *display, gf_x11_atoms_t *atoms)
 
     atoms->net_moveresize_window = XInternAtom (display, "_NET_MOVERESIZE_WINDOW", False);
     atoms->motif_wm_hints = XInternAtom (display, "_MOTIF_WM_HINTS", False);
+    atoms->net_work_area = XInternAtom (display, "_NET_WORKAREA", False);
 
     g_atoms = *atoms;
     GF_LOG_DEBUG ("X11 atoms initialized successfully");
