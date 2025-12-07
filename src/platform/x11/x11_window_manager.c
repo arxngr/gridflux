@@ -1,7 +1,7 @@
 #include "../../../include/platform/x11/x11_window_manager.h"
-#include "core/config.h"
 #include "core/logger.h"
 #include "core/types.h"
+#include "platform/x11/x11_backend.h"
 #include "utils/memory.h"
 #include <limits.h>
 #include <stdio.h>
@@ -40,18 +40,33 @@ gf_x11_platform_create (void)
     platform->init = gf_x11_platform_init;
     platform->cleanup = gf_x11_platform_cleanup;
     platform->get_windows = gf_x11_platform_get_windows;
-    platform->set_window_geometry = gf_x11_platform_set_window_geometry;
     platform->move_window_to_workspace = gf_x11_platform_move_window_to_workspace;
     platform->unmaximize_window = gf_x11_platform_unmaximize_window;
     platform->get_window_geometry = gf_x11_platform_get_window_geometry;
     platform->get_current_workspace = gf_x11_platform_get_current_workspace;
     platform->get_workspace_count = gf_x11_platform_get_workspace_count;
     platform->create_workspace = gf_x11_platform_create_workspace;
-    platform->get_screen_bounds = gf_x11_platform_get_screen_bounds;
     platform->is_window_valid = gf_x11_platform_is_window_valid;
     platform->is_window_excluded = gf_x11_platform_is_window_excluded;
     platform->is_window_drag = gf_x11_platform_is_window_drag;
     platform->platform_data = data;
+
+    gf_desktop_env_t env = gf_detect_desktop_env ();
+
+    switch (env)
+    {
+    case GF_DE_KDE:
+        GF_LOG_DEBUG ("KDE Desktop detected");
+        platform->get_screen_bounds = gf_x11_kde_get_screen_bounds;
+        platform->set_window_geometry = gf_x11_kde_set_window_geometry;
+        break;
+
+    default:
+        GF_LOG_DEBUG ("GNOME / Other Desktop detected");
+        platform->get_screen_bounds = gf_x11_gnome_get_screen_bounds;
+        platform->set_window_geometry = gf_x11_gnome_set_window_geometry;
+        break;
+    }
 
     return platform;
 }
@@ -379,64 +394,6 @@ gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_i
 }
 
 static gf_error_code_t
-gf_x11_platform_set_window_geometry (gf_display_t display, gf_native_window_t window,
-                                     const gf_rect_t *geometry, gf_geometry_flags_t flags,
-                                     gf_config_t *cfg)
-{
-    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
-    if (!display || !geometry)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    Display *dpy = display;
-    int screen = DefaultScreen (dpy);
-    int sw = DisplayWidth (dpy, screen);
-    int sh = DisplayHeight (dpy, screen);
-
-    gf_rect_t rect = *geometry;
-
-    if (flags & GF_GEOMETRY_APPLY_PADDING)
-        gf_rect_apply_padding (&rect, cfg->default_padding);
-
-    if (rect.width < GF_MIN_WINDOW_SIZE)
-        rect.width = GF_MIN_WINDOW_SIZE;
-    if (rect.height < GF_MIN_WINDOW_SIZE)
-        rect.height = GF_MIN_WINDOW_SIZE;
-
-    gf_rect_t struted_bound;
-    gf_x11_platform_get_screen_bounds (dpy, &struted_bound);
-
-    int left = 0, right = 0, top = 0, bottom = 0;
-    gf_x11_get_frame_extents (dpy, window, &left, &right, &top, &bottom);
-
-    if (rect.x < struted_bound.x + left)
-        rect.x = struted_bound.x + left;
-
-    if (rect.y < struted_bound.y + top)
-        rect.y = struted_bound.y + top;
-
-    if (rect.x + rect.width + right > struted_bound.x + struted_bound.width)
-        rect.width = (struted_bound.x + struted_bound.width) - rect.x - right;
-
-    if (rect.y + rect.height + bottom > struted_bound.y + struted_bound.height)
-        rect.height = (struted_bound.y + struted_bound.height) - rect.y - bottom;
-
-    long data[5];
-    data[0] = (10 << 0)    // StaticGravity = 10
-              | (2 << 8)   // Source = pager
-              | (1 << 8)   // Set x
-              | (1 << 9)   // Set y
-              | (1 << 10)  // Set width
-              | (1 << 11); // Set height
-    data[1] = rect.x;
-    data[2] = rect.y;
-    data[3] = rect.width;
-    data[4] = rect.height;
-
-    return gf_x11_send_client_message (dpy, window, atoms->net_moveresize_window, data,
-                                       5);
-}
-
-static gf_error_code_t
 gf_x11_platform_move_window_to_workspace (gf_display_t display, gf_native_window_t window,
                                           gf_workspace_id_t workspace_id)
 {
@@ -589,66 +546,6 @@ gf_x11_platform_create_workspace (gf_display_t display)
         return WIFEXITED (status) && WEXITSTATUS (status) == 0 ? GF_SUCCESS
                                                                : GF_ERROR_PLATFORM_ERROR;
     }
-}
-
-static gf_error_code_t
-gf_x11_platform_get_screen_bounds (gf_display_t display, gf_rect_t *bounds)
-{
-    if (!display || !bounds)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    int screen = DefaultScreen (display);
-    Window root = DefaultRootWindow (display);
-    Screen *scr = ScreenOfDisplay (display, screen);
-
-    int sw = scr->width;
-    int sh = scr->height;
-
-    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
-
-    int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
-    Atom type;
-    int format;
-    unsigned long count, bytes_after;
-    Window *clients = NULL;
-
-    if (XGetWindowProperty (display, root, atoms->net_client_list, 0, 2048, False,
-                            XA_WINDOW, &type, &format, &count, &bytes_after,
-                            (unsigned char **)&clients)
-            == Success
-        && clients)
-    {
-        for (unsigned long i = 0; i < count; i++)
-        {
-            long *strut = NULL;
-            unsigned long nitems = 0;
-
-            if (gf_x11_get_window_property (display, clients[i], atoms->net_strut_partial,
-                                            XA_CARDINAL, (unsigned char **)&strut,
-                                            &nitems)
-                    == GF_SUCCESS
-                && strut && nitems >= 12)
-            {
-                if (strut[0] > panel_left)
-                    panel_left = strut[0];
-                if (strut[1] > panel_right)
-                    panel_right = strut[1];
-                if (strut[2] > panel_top)
-                    panel_top = strut[2];
-                if (strut[3] > panel_bottom)
-                    panel_bottom = strut[3];
-                XFree (strut);
-            }
-        }
-        XFree (clients);
-    }
-
-    bounds->x = panel_left;
-    bounds->y = panel_top;
-    bounds->width = sw - panel_left - panel_right;
-    bounds->height = sh - panel_top - panel_bottom;
-
-    return GF_SUCCESS;
 }
 
 static bool

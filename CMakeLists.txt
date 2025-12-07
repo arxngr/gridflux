@@ -30,8 +30,11 @@ if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
     add_definitions(-DGF_PLATFORM_X11)
     
-    file(GLOB PLATFORM_SOURCES "src/platform/x11/*.c")
-    
+    file(GLOB_RECURSE PLATFORM_SOURCES
+        "${CMAKE_SOURCE_DIR}/src/platform/x11/*.c"
+        "${CMAKE_SOURCE_DIR}/src/platform/platform_env.c"   # ← ADD THIS
+    )
+
     set(PLATFORM_LIBRARIES ${X11_LIBRARIES} m ${JSONC_LIBRARIES})
     set(PLATFORM_INCLUDES ${X11_INCLUDE_DIR})
     
