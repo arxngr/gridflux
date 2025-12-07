@@ -1,6 +1,6 @@
 #include "../../include/core/geometry.h"
-#include "../../include/core/logger.h"
 #include "../../include/core/config.h"
+#include "../../include/core/logger.h"
 #include "../../include/utils/memory.h"
 #include <stdlib.h>
 
@@ -20,43 +20,46 @@ typedef struct
 } gf_grid_geometry_calculator_t;
 
 static uint32_t
-get_padding(const gf_geometry_calculator_t *calc_base)
+get_padding (const gf_geometry_calculator_t *calc_base)
 {
-    if (calc_base->config) {
+    if (calc_base->config)
+    {
         return calc_base->config->default_padding;
     }
-    
+
     // Fallback to stored value
-    if (calc_base->calculator_data) {
-        gf_bsp_geometry_calculator_t *calc = 
-            (gf_bsp_geometry_calculator_t *)calc_base->calculator_data;
+    if (calc_base->calculator_data)
+    {
+        gf_bsp_geometry_calculator_t *calc
+            = (gf_bsp_geometry_calculator_t *)calc_base->calculator_data;
         return calc->padding;
     }
-    
+
     return GF_DEFAULT_PADDING;
 }
 
 static uint32_t
-get_min_window_size(const gf_geometry_calculator_t *calc_base)
+get_min_window_size (const gf_geometry_calculator_t *calc_base)
 {
-    if (calc_base->config) {
+    if (calc_base->config)
+    {
         return calc_base->config->min_window_size;
     }
-    
-    if (calc_base->calculator_data) {
-        gf_bsp_geometry_calculator_t *calc = 
-            (gf_bsp_geometry_calculator_t *)calc_base->calculator_data;
+
+    if (calc_base->calculator_data)
+    {
+        gf_bsp_geometry_calculator_t *calc
+            = (gf_bsp_geometry_calculator_t *)calc_base->calculator_data;
         return calc->min_window_size;
     }
-    
+
     return GF_MIN_WINDOW_SIZE;
 }
 
 static void
 gf_bsp_split_recursive (const gf_window_info_t *windows, uint32_t count,
-                        const gf_rect_t *area, gf_rect_t *results, 
-                        uint32_t padding, uint32_t min_size,
-                        int depth)
+                        const gf_rect_t *area, gf_rect_t *results, uint32_t padding,
+                        uint32_t min_size, int depth)
 {
     if (count == 0)
         return;
@@ -82,8 +85,8 @@ gf_bsp_split_recursive (const gf_window_info_t *windows, uint32_t count,
         gf_rect_t right_area
             = { area->x + left_width, area->y, right_width, area->height };
 
-        gf_bsp_split_recursive (windows, left_count, &left_area, results, 
-                                padding, min_size, depth + 1);
+        gf_bsp_split_recursive (windows, left_count, &left_area, results, padding,
+                                min_size, depth + 1);
         gf_bsp_split_recursive (windows + left_count, right_count, &right_area,
                                 results + left_count, padding, min_size, depth + 1);
     }
@@ -96,8 +99,8 @@ gf_bsp_split_recursive (const gf_window_info_t *windows, uint32_t count,
         gf_rect_t bottom_area
             = { area->x, area->y + top_height, area->width, bottom_height };
 
-        gf_bsp_split_recursive (windows, left_count, &top_area, results, 
-                                padding, min_size, depth + 1);
+        gf_bsp_split_recursive (windows, left_count, &top_area, results, padding,
+                                min_size, depth + 1);
         gf_bsp_split_recursive (windows + left_count, right_count, &bottom_area,
                                 results + left_count, padding, min_size, depth + 1);
     }
@@ -118,11 +121,11 @@ gf_bsp_calculate_layout (const gf_geometry_calculator_t *calc_base,
     }
 
     // Get current values from config or fallback
-    uint32_t padding = get_padding(calc_base);
-    uint32_t min_size = get_min_window_size(calc_base);
+    uint32_t padding = get_padding (calc_base);
+    uint32_t min_size = get_min_window_size (calc_base);
 
-    gf_bsp_split_recursive (windows, count, workspace_bounds, results, 
-                           padding, min_size, 0);
+    gf_bsp_split_recursive (windows, count, workspace_bounds, results, padding, min_size,
+                            0);
 }
 
 static void
@@ -140,8 +143,8 @@ gf_grid_calculate_layout (const gf_geometry_calculator_t *calc_base,
     }
 
     // Get current values from config or fallback
-    uint32_t padding = get_padding(calc_base);
-    uint32_t min_size = get_min_window_size(calc_base);
+    uint32_t padding = get_padding (calc_base);
+    uint32_t min_size = get_min_window_size (calc_base);
 
     uint32_t rows = (count + calc->columns - 1) / calc->columns;
     gf_dimension_t cell_width = workspace_bounds->width / calc->columns;
@@ -153,8 +156,8 @@ gf_grid_calculate_layout (const gf_geometry_calculator_t *calc_base,
         uint32_t row = i / calc->columns;
 
         results[i] = gf_rect_create (workspace_bounds->x + col * cell_width,
-                                     workspace_bounds->y + row * cell_height, 
-                                     cell_width, cell_height);
+                                     workspace_bounds->y + row * cell_height, cell_width,
+                                     cell_height);
 
         gf_rect_apply_padding (&results[i], padding);
         gf_rect_ensure_minimum_size (&results[i], min_size);
@@ -166,10 +169,11 @@ gf_bsp_set_padding (gf_geometry_calculator_t *calc_base, uint32_t padding)
 {
     gf_bsp_geometry_calculator_t *calc
         = (gf_bsp_geometry_calculator_t *)calc_base->calculator_data;
-    
-    if (calc) {
+
+    if (calc)
+    {
         calc->padding = padding;
-        GF_LOG_DEBUG("BSP calculator padding updated to: %u", padding);
+        GF_LOG_DEBUG ("BSP calculator padding updated to: %u", padding);
     }
 }
 
@@ -179,10 +183,11 @@ gf_bsp_set_min_size (gf_geometry_calculator_t *calc_base, uint32_t min_size)
 {
     gf_bsp_geometry_calculator_t *calc
         = (gf_bsp_geometry_calculator_t *)calc_base->calculator_data;
-    
-    if (calc) {
+
+    if (calc)
+    {
         calc->min_window_size = min_size;
-        GF_LOG_DEBUG("BSP calculator min_window_size updated to: %u", min_size);
+        GF_LOG_DEBUG ("BSP calculator min_window_size updated to: %u", min_size);
     }
 }
 
@@ -191,10 +196,11 @@ gf_grid_set_padding (gf_geometry_calculator_t *calc_base, uint32_t padding)
 {
     gf_grid_geometry_calculator_t *calc
         = (gf_grid_geometry_calculator_t *)calc_base->calculator_data;
-    
-    if (calc) {
+
+    if (calc)
+    {
         calc->padding = padding;
-        GF_LOG_DEBUG("Grid calculator padding updated to: %u", padding);
+        GF_LOG_DEBUG ("Grid calculator padding updated to: %u", padding);
     }
 }
 
@@ -203,10 +209,11 @@ gf_grid_set_min_size (gf_geometry_calculator_t *calc_base, uint32_t min_size)
 {
     gf_grid_geometry_calculator_t *calc
         = (gf_grid_geometry_calculator_t *)calc_base->calculator_data;
-    
-    if (calc) {
+
+    if (calc)
+    {
         calc->min_window_size = min_size;
-        GF_LOG_DEBUG("Grid calculator min_window_size updated to: %u", min_size);
+        GF_LOG_DEBUG ("Grid calculator min_window_size updated to: %u", min_size);
     }
 }
 
@@ -223,13 +230,13 @@ gf_bsp_geometry_calculator_create (const gf_config_t *config)
     calc->base.set_min_size = gf_bsp_set_min_size;
     calc->base.calculator_data = calc;
     calc->base.config = config;
-    
+
     // Initialize with config values or defaults
     calc->padding = config ? config->default_padding : GF_DEFAULT_PADDING;
     calc->min_window_size = config ? config->min_window_size : GF_MIN_WINDOW_SIZE;
 
-    GF_LOG_DEBUG("BSP calculator created with padding=%u, min_size=%u", 
-                 calc->padding, calc->min_window_size);
+    GF_LOG_DEBUG ("BSP calculator created with padding=%u, min_size=%u", calc->padding,
+                  calc->min_window_size);
 
     return &calc->base;
 }
@@ -254,13 +261,13 @@ gf_grid_geometry_calculator_create (uint32_t columns, const gf_config_t *config)
     calc->base.calculator_data = calc;
     calc->base.config = config;
     calc->columns = columns > 0 ? columns : 2;
-    
+
     // Initialize with config values or defaults
     calc->padding = config ? config->default_padding : GF_DEFAULT_PADDING;
     calc->min_window_size = config ? config->min_window_size : GF_MIN_WINDOW_SIZE;
 
-    GF_LOG_DEBUG("Grid calculator created with columns=%u, padding=%u, min_size=%u", 
-                 calc->columns, calc->padding, calc->min_window_size);
+    GF_LOG_DEBUG ("Grid calculator created with columns=%u, padding=%u, min_size=%u",
+                  calc->columns, calc->padding, calc->min_window_size);
 
     return &calc->base;
 }

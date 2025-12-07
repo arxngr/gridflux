@@ -198,35 +198,38 @@ gf_x11_window_has_state (Display *display, Window window, Atom state)
 }
 
 gf_error_code_t
-gf_x11_get_frame_extents (Display *display, Window window, int *left, int *right,
-                          int *top, int *bottom)
+gf_x11_get_frame_extents (Display *dpy, Window win, int *left, int *right, int *top,
+                          int *bottom)
 {
-    if (!display || !left || !right || !top || !bottom)
-    {
+    if (!dpy || !left || !right || !top || !bottom)
         return GF_ERROR_INVALID_PARAMETER;
-    }
 
     *left = *right = *top = *bottom = 0;
 
     gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
-    Atom sources[]
-        = { atoms->gtk_frame_extents, atoms->qt_frame_extents, atoms->net_frame_extents };
 
-    for (size_t i = 0; i < sizeof (sources) / sizeof (sources[0]); i++)
+    Atom candidates[] = {
+        atoms->net_frame_extents, // Standard
+        atoms->gtk_frame_extents, // GTK CSD
+        atoms->qt_frame_extents   // KDE Qt apps
+    };
+
+    for (size_t i = 0; i < 3; i++)
     {
         unsigned char *data = NULL;
         unsigned long nitems = 0;
 
-        if (gf_x11_get_window_property (display, window, sources[i], XA_CARDINAL, &data,
+        if (gf_x11_get_window_property (dpy, win, candidates[i], XA_CARDINAL, &data,
                                         &nitems)
                 == GF_SUCCESS
-            && nitems >= 4)
+            && data && nitems >= 4)
         {
-            unsigned long *extents = (unsigned long *)data;
-            *left = extents[0];
-            *right = extents[1];
-            *top = extents[2];
-            *bottom = extents[3];
+            unsigned long *ext = (unsigned long *)data;
+            *left = ext[0];
+            *right = ext[1];
+            *top = ext[2];
+            *bottom = ext[3];
+
             XFree (data);
             return GF_SUCCESS;
         }
@@ -380,60 +383,17 @@ gf_x11_platform_set_window_geometry (gf_display_t display, gf_native_window_t wi
                                      const gf_rect_t *geometry, gf_geometry_flags_t flags,
                                      gf_config_t *cfg)
 {
+    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
     if (!display || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
     Display *dpy = display;
-    Window root = DefaultRootWindow (dpy);
     int screen = DefaultScreen (dpy);
-
     int sw = DisplayWidth (dpy, screen);
     int sh = DisplayHeight (dpy, screen);
 
-    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
-
-    // Compute maximum reserved struts (panels/docks)
-    int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
-
-    Atom type;
-    int format;
-    unsigned long count, bytes_after;
-    Window *clients = NULL;
-
-    if (XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 2048, False, XA_WINDOW,
-                            &type, &format, &count, &bytes_after,
-                            (unsigned char **)&clients)
-            == Success
-        && clients)
-    {
-
-        for (unsigned long i = 0; i < count; i++)
-        {
-            long *strut = NULL;
-            unsigned long nitems = 0;
-
-            if (gf_x11_get_window_property (dpy, clients[i], atoms->net_strut_partial,
-                                            XA_CARDINAL, (unsigned char **)&strut,
-                                            &nitems)
-                    == GF_SUCCESS
-                && strut && nitems >= 12)
-            {
-                if (strut[0] > panel_left)
-                    panel_left = strut[0];
-                if (strut[1] > panel_right)
-                    panel_right = strut[1];
-                if (strut[2] > panel_top)
-                    panel_top = strut[2];
-                if (strut[3] > panel_bottom)
-                    panel_bottom = strut[3];
-                XFree (strut);
-            }
-        }
-
-        XFree (clients);
-    }
-
     gf_rect_t rect = *geometry;
+
     if (flags & GF_GEOMETRY_APPLY_PADDING)
         gf_rect_apply_padding (&rect, cfg->default_padding);
 
@@ -442,41 +402,38 @@ gf_x11_platform_set_window_geometry (gf_display_t display, gf_native_window_t wi
     if (rect.height < GF_MIN_WINDOW_SIZE)
         rect.height = GF_MIN_WINDOW_SIZE;
 
+    gf_rect_t struted_bound;
+    gf_x11_platform_get_screen_bounds (dpy, &struted_bound);
+
     int left = 0, right = 0, top = 0, bottom = 0;
     gf_x11_get_frame_extents (dpy, window, &left, &right, &top, &bottom);
 
-    // Clamp client rect using panel struts + frame extents
-    if (rect.x < panel_left + left)
-        rect.x = panel_left + left;
+    if (rect.x < struted_bound.x + left)
+        rect.x = struted_bound.x + left;
 
-    if (rect.y < panel_top + top)
-        rect.y = panel_top + top;
+    if (rect.y < struted_bound.y + top)
+        rect.y = struted_bound.y + top;
 
-    if (rect.x + rect.width + right > sw - panel_right)
-        rect.width = (sw - panel_right) - rect.x - right;
+    if (rect.x + rect.width + right > struted_bound.x + struted_bound.width)
+        rect.width = (struted_bound.x + struted_bound.width) - rect.x - right;
 
-    if (rect.y + rect.height + bottom > sh - panel_bottom)
-        rect.height = (sh - panel_bottom) - rect.y - bottom;
+    if (rect.y + rect.height + bottom > struted_bound.y + struted_bound.height)
+        rect.height = (struted_bound.y + struted_bound.height) - rect.y - bottom;
 
-    int full_w = rect.width + left + right;
-    int full_h = rect.height + top + bottom;
-    int full_x = rect.x - left;
-    int full_y = rect.y - top;
+    long data[5];
+    data[0] = (10 << 0)    // StaticGravity = 10
+              | (2 << 8)   // Source = pager
+              | (1 << 8)   // Set x
+              | (1 << 9)   // Set y
+              | (1 << 10)  // Set width
+              | (1 << 11); // Set height
+    data[1] = rect.x;
+    data[2] = rect.y;
+    data[3] = rect.width;
+    data[4] = rect.height;
 
-    // Clamp full window to screen bounds
-    if (full_x < 0)
-        full_x = 0;
-    if (full_y < 0)
-        full_y = 0;
-    if (full_x + full_w > sw)
-        full_x = sw - full_w;
-    if (full_y + full_h > sh)
-        full_y = sh - full_h;
-
-    XMoveResizeWindow (dpy, window, full_x, full_y, full_w, full_h);
-    XFlush (dpy);
-
-    return GF_SUCCESS;
+    return gf_x11_send_client_message (dpy, window, atoms->net_moveresize_window, data,
+                                       5);
 }
 
 static gf_error_code_t
@@ -641,12 +598,55 @@ gf_x11_platform_get_screen_bounds (gf_display_t display, gf_rect_t *bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
     int screen = DefaultScreen (display);
+    Window root = DefaultRootWindow (display);
     Screen *scr = ScreenOfDisplay (display, screen);
 
-    bounds->x = 0;
-    bounds->y = 0;
-    bounds->width = scr->width;
-    bounds->height = scr->height;
+    int sw = scr->width;
+    int sh = scr->height;
+
+    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
+
+    int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
+    Atom type;
+    int format;
+    unsigned long count, bytes_after;
+    Window *clients = NULL;
+
+    if (XGetWindowProperty (display, root, atoms->net_client_list, 0, 2048, False,
+                            XA_WINDOW, &type, &format, &count, &bytes_after,
+                            (unsigned char **)&clients)
+            == Success
+        && clients)
+    {
+        for (unsigned long i = 0; i < count; i++)
+        {
+            long *strut = NULL;
+            unsigned long nitems = 0;
+
+            if (gf_x11_get_window_property (display, clients[i], atoms->net_strut_partial,
+                                            XA_CARDINAL, (unsigned char **)&strut,
+                                            &nitems)
+                    == GF_SUCCESS
+                && strut && nitems >= 12)
+            {
+                if (strut[0] > panel_left)
+                    panel_left = strut[0];
+                if (strut[1] > panel_right)
+                    panel_right = strut[1];
+                if (strut[2] > panel_top)
+                    panel_top = strut[2];
+                if (strut[3] > panel_bottom)
+                    panel_bottom = strut[3];
+                XFree (strut);
+            }
+        }
+        XFree (clients);
+    }
+
+    bounds->x = panel_left;
+    bounds->y = panel_top;
+    bounds->width = sw - panel_left - panel_right;
+    bounds->height = sh - panel_top - panel_bottom;
 
     return GF_SUCCESS;
 }
