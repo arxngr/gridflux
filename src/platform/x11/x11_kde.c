@@ -83,30 +83,24 @@ gf_x11_kde_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
     if (rect.height < GF_MIN_WINDOW_SIZE)
         rect.height = GF_MIN_WINDOW_SIZE;
 
-    gf_rect_t struted_bound;
-    gf_x11_kde_get_screen_bounds (dpy, &struted_bound);
-
     int left = 0, right = 0, top = 0, bottom = 0;
     gf_x11_get_frame_extents (dpy, win, &left, &right, &top, &bottom);
 
-    if (rect.x < struted_bound.x + left)
-        rect.x = struted_bound.x + left;
+    // Just adjust the size to be CLIENT size (KDE will add frame decorations)
+    rect.width -= (left + right);
+    rect.height -= (top + bottom);
 
-    if (rect.y < struted_bound.y + top)
-        rect.y = struted_bound.y + top;
-
-    if (rect.x + rect.width + right > struted_bound.x + struted_bound.width)
-        rect.width = (struted_bound.x + struted_bound.width) - rect.x - right;
-
-    if (rect.y + rect.height + bottom > struted_bound.y + struted_bound.height)
-        rect.height = (struted_bound.y + struted_bound.height) - rect.y - bottom;
+    // Simple bounds checking - just ensure we don't go negative or too large
+    if (rect.width < GF_MIN_WINDOW_SIZE)
+        rect.width = GF_MIN_WINDOW_SIZE;
+    if (rect.height < GF_MIN_WINDOW_SIZE)
+        rect.height = GF_MIN_WINDOW_SIZE;
 
     long data[5];
 
-    // data[0] format:
-    // bits 0-7: gravity (StaticGravity = 10)
-    // bits 8-15: flags (set x, y, width, height)
-    data[0] = (10) |      // gravity = StaticGravity
+    // Use NorthWestGravity so KDE positions the FRAME at rect.x, rect.y
+    // not the client area
+    data[0] = (1) |       // gravity = NorthWestGravity
               (1 << 8) |  // set x
               (1 << 9) |  // set y
               (1 << 10) | // set width
