@@ -1,8 +1,8 @@
 
-#include "utils/workspace.h"
-#include "../../include/utils/list.h"
-#include "../../include/utils/memory.h"
-#include "core/types.h"
+#include "workspace.h"
+#include "list.h"
+#include "memory.h"
+#include "../core/types.h"
 #include <stdint.h>
 #include <string.h>
 

@@ -1,6 +1,6 @@
 #ifndef GF_CORE_INTERFACES_H
 #define GF_CORE_INTERFACES_H
-#include "core/config.h"
+#include "config.h"
 #include "types.h"
 
 typedef struct gf_platform_interface gf_platform_interface_t;

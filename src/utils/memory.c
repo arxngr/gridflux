@@ -1,5 +1,5 @@
-#include "../../include/utils/memory.h"
-#include "../../include/core/logger.h"
+#include "memory.h"
+#include "../core/logger.h"
 #include <stdlib.h>
 #include <string.h>
 

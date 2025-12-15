@@ -1,8 +1,8 @@
-#include "../../include/core/workspace.h"
-#include "../../include/core/logger.h"
-#include "../../include/utils/list.h"
-#include "../../include/utils/memory.h"
-#include "../../include/utils/workspace.h"
+#include "workspace.h"
+#include "logger.h"
+#include "../utils/list.h"
+#include "../utils/memory.h"
+#include "../utils/workspace.h"
 
 gf_error_code_t
 gf_workspace_manager_create (gf_workspace_manager_t **manager)

@@ -1,7 +1,7 @@
-#include "core/config.h"
-#include "core/types.h"
-#include "platform/x11/x11_backend.h"
-#include "platform/x11/x11_window_manager.h"
+#include "../../core/config.h"
+#include "../../core/types.h"
+#include "x11_backend.h"
+#include "x11_window_manager.h"
 
 gf_error_code_t
 gf_x11_gnome_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)

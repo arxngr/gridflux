@@ -1,9 +1,9 @@
-#include "../include/core/geometry.h"
-#include "../include/core/logger.h"
-#include "../include/core/window_manager.h"
-#include "../include/core/config.h"  // Add this
+#include "core/geometry.h"
+#include "core/logger.h"
+#include "core/window_manager.h"
+#include "core/config.h"  // Add this
 #ifdef GF_PLATFORM_X11
-#include "../include/platform/x11/x11_window_manager.h"
+#include "platform/x11/x11_window_manager.h"
 #endif
 #include <signal.h>
 #include <stdlib.h>

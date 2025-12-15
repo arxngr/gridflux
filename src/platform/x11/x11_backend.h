@@ -1,8 +1,8 @@
 #ifndef GF_X11_BACKEND_H
 #define GF_X11_BACKEND_H
 
-#include "core/config.h"
-#include "core/types.h"
+#include "../../core/config.h"
+#include "../../core/types.h"
 #include <X11/Xlib.h>
 #include <stdbool.h>
 

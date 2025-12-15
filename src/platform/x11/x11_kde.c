@@ -1,6 +1,7 @@
-#include "core/types.h"
-#include "platform/x11/x11_atoms.h"
-#include "platform/x11/x11_window_manager.h"
+#include "../../core/types.h"
+#include "x11_atoms.h"
+#include "x11_window_manager.h"
+#include <X11/X.h>
 #include <X11/Xatom.h>
 #include <platform/x11/x11_backend.h>
 
@@ -100,11 +101,11 @@ gf_x11_kde_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
 
     // Use NorthWestGravity so KDE positions the FRAME at rect.x, rect.y
     // not the client area
-    data[0] = (1) |       // gravity = NorthWestGravity
-              (1 << 8) |  // set x
-              (1 << 9) |  // set y
-              (1 << 10) | // set width
-              (1 << 11);  // set height
+    data[0] = NorthWestGravity | // gravity = NorthWestGravity
+              (1 << 8) |         // set x
+              (1 << 9) |         // set y
+              (1 << 10) |        // set width
+              (1 << 11);         // set height
 
     data[1] = rect.x;
     data[2] = rect.y;

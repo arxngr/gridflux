@@ -3,8 +3,8 @@
 
 #ifdef GF_PLATFORM_X11
 
-#include "../../../include/core/logger.h"
-#include "../../../include/utils/memory.h"
+#include "../../core/logger.h"
+#include "../../utils/memory.h"
 #include "../../core/geometry.h"
 #include "../../core/interfaces.h"
 #include <X11/X.h>

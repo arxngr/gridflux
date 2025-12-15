@@ -1,6 +1,6 @@
-#include "../include/utils/list.h"
-#include "../../include/core/logger.h"
-#include "../include/utils/memory.h"
+#include "list.h"
+#include "../core/logger.h"
+#include "memory.h"
 #include <string.h>
 
 void

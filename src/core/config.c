@@ -1,6 +1,6 @@
 #include <json-c/json.h>
-#include "../../include/core/config.h"
-#include "core/types.h"
+#include "config.h"
+#include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
 

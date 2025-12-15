@@ -2,8 +2,8 @@
 #include <X11/Xlib.h>
 #ifdef GF_PLATFORM_X11
 
-#include "../../../include/core/logger.h"
-#include "../../../include/platform/x11/x11_atoms.h"
+#include "../../core/logger.h"
+#include "x11_atoms.h"
 #include <X11/Xatom.h>
 
 static gf_x11_atoms_t g_atoms = { 0 };

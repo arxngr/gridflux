@@ -1,7 +1,7 @@
-#include "../../include/core/geometry.h"
-#include "../../include/core/config.h"
-#include "../../include/core/logger.h"
-#include "../../include/utils/memory.h"
+#include "geometry.h"
+#include "config.h"
+#include "logger.h"
+#include "../utils/memory.h"
 #include <stdlib.h>
 
 typedef struct

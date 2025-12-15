@@ -15,7 +15,7 @@ set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSONC REQUIRED json-c)
 
-include_directories(include ${JSONC_INCLUDE_DIRS})
+include_directories(src ${JSONC_INCLUDE_DIRS})
 
 # Automatically collect common source files
 file(GLOB_RECURSE COMMON_SOURCES

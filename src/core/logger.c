@@ -1,4 +1,4 @@
-#include "../../include/core/logger.h"
+#include "logger.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <time.h>

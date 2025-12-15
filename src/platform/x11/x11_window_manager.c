@@ -1,8 +1,8 @@
-#include "../../../include/platform/x11/x11_window_manager.h"
-#include "core/logger.h"
-#include "core/types.h"
-#include "platform/x11/x11_backend.h"
-#include "utils/memory.h"
+#include "x11_window_manager.h"
+#include "../../core/logger.h"
+#include "../../core/types.h"
+#include "x11_backend.h"
+#include "../../utils/memory.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
