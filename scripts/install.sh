@@ -2,31 +2,22 @@
 set -e
 
 INSTALL_DIR="/usr/local/bin"
-SERVICE_NAME="gridflux.service"
-SERVICE_PATH="$HOME/.config/systemd/user/$SERVICE_NAME"
 BUILD_DIR="build"
 AUTOSTART_FILE="$HOME/.config/autostart/gridflux.desktop"
+
+KWIN_SCRIPT_NAME="gridflux-tiler"
+KWIN_QML_FILE="kwin_tiler.qml"
+KWIN_INSTALL_DIR="/usr/share/gridflux"
 
 echo "=== GridFlux Installation Started ==="
 
 detect_desktop() {
     DESKTOP="${XDG_CURRENT_DESKTOP:-Unknown}"
-    SESSION_TYPE="${XDG_SESSION_TYPE:-x11}"
 
     echo "Detected DE: $DESKTOP"
-    echo "Session type: $SESSION_TYPE"
 
-    if [[ "$DESKTOP" == *"KDE"* ]] || [[ "$KDE_FULL_SESSION" == "true" ]]; then
-        IS_KDE=1
-    else
-        IS_KDE=0
-    fi
-
-    if [[ "$DESKTOP" == *"GNOME"* ]]; then
-        IS_GNOME=1
-    else
-        IS_GNOME=0
-    fi
+    [[ "$DESKTOP" == *"KDE"* || "$KDE_FULL_SESSION" == "true" ]] && IS_KDE=1 || IS_KDE=0
+    [[ "$DESKTOP" == *"GNOME"* ]] && IS_GNOME=1 || IS_GNOME=0
 }
 
 install_dependencies() {
@@ -35,33 +26,20 @@ install_dependencies() {
     . /etc/os-release
 
     case "$ID" in
-        ubuntu|debian)
-            sudo apt update -y
-            sudo apt install -y libx11-dev libjson-c-dev cmake gcc make pkg-config
-            ;;
-        fedora|rhel|centos|almalinux|rocky)
-            sudo dnf install -y libX11-devel json-c-devel cmake gcc make pkgconfig
-            ;;
-        arch|manjaro)
-            sudo pacman -Syu --noconfirm libx11 json-c cmake gcc make pkgconf
-            ;;
-        opensuse*|sles)
-            sudo zypper install -y libX11-devel libjson-c-devel cmake gcc make pkg-config
-            ;;
-        alpine)
-            sudo apk add libx11-dev json-c-dev cmake gcc make pkgconfig
-            ;;
-        *)
-            echo "Unsupported distro: $ID"
-            echo "Install manually: libx11-dev libjson-c-dev cmake gcc make pkg-config"
-            ;;
+    ubuntu | debian)
+        sudo apt update -y
+        sudo apt install -y libx11-dev libjson-c-dev libdbus-1-dev cmake gcc make pkg-config
+        ;;
+    fedora | rhel | centos | almalinux | rocky)
+        sudo dnf install -y libX11-devel json-c-devel dbus-devel cmake gcc make pkgconfig
+        ;;
+    arch | manjaro)
+        sudo pacman -Syu --noconfirm libx11 json-c dbus cmake gcc make pkgconf
+        ;;
+    *)
+        echo "Unsupported distro — install libX11, json-c, dbus manually"
+        ;;
     esac
-
-    echo "Verifying json-c..."
-    if ! pkg-config --exists json-c; then
-        echo "json-c missing — cannot continue."
-        exit 1
-    fi
 }
 
 build_and_install() {
@@ -75,59 +53,48 @@ build_and_install() {
     echo "Binary installed: $INSTALL_DIR/gridflux"
 }
 
-install_kde_autostart() {
-    echo "Installing KDE autostart entry..."
+install_kwin_script() {
+    echo "Installing KWin script..."
 
+    sudo install -Dm644 \
+        "src/platform/kwin/$KWIN_QML_FILE" \
+        "$KWIN_INSTALL_DIR/$KWIN_QML_FILE"
+
+    echo "✓ KWin script installed to $KWIN_INSTALL_DIR"
+
+    echo "Registering script with KWin via D-Bus..."
+
+    qdbus org.kde.KWin /Scripting \
+        org.kde.kwin.Scripting.loadDeclarativeScript \
+        "$KWIN_INSTALL_DIR/$KWIN_QML_FILE" \
+        "$KWIN_SCRIPT_NAME" || true
+
+    qdbus org.kde.KWin /Scripting \
+        org.kde.kwin.Scripting.start || true
+
+    echo "KWin script loaded"
+}
+
+install_kde_autostart() {
     mkdir -p "$(dirname "$AUTOSTART_FILE")"
 
-    cat > "$AUTOSTART_FILE" <<EOF
+    cat >"$AUTOSTART_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=GridFlux
-Comment=KDE-safe GridFlux tiling assistant
-Exec=sh -c 'sleep 7 && $INSTALL_DIR/gridflux'
+Exec=$INSTALL_DIR/gridflux
 OnlyShowIn=KDE;
 X-KDE-autostart-after=plasmashell
 Terminal=false
-StartupNotify=false
 EOF
 
-    echo "✓ KDE autostart installed at $AUTOSTART_FILE"
-}
-
-install_gnome_service() {
-    echo "Installing GNOME systemd user service..."
-
-    mkdir -p "$(dirname "$SERVICE_PATH")"
-
-    cat >"$SERVICE_PATH" <<EOF
-[Unit]
-Description=GridFlux Window Tiling Service
-After=graphical-session.target
-
-[Service]
-ExecStart=$INSTALL_DIR/gridflux
-Restart=on-failure
-RestartSec=3
-
-[Install]
-WantedBy=graphical-session.target
-EOF
-
-    systemctl --user daemon-reload
-    systemctl --user enable --now "$SERVICE_NAME"
-
-    echo "✓ GNOME systemd service enabled."
+    echo "KDE autostart installed"
 }
 
 create_default_config() {
-    CONFIG_DIR="$HOME/.config/gridflux"
-    CONFIG_FILE="$CONFIG_DIR/config.json"
+    mkdir -p "$HOME/.config/gridflux"
 
-    mkdir -p "$CONFIG_DIR"
-
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        cat > "$CONFIG_FILE" <<EOF
+    cat >"$HOME/.config/gridflux/config.json" <<EOF
 {
   "max_windows_per_workspace": 10,
   "max_workspaces": 10,
@@ -135,10 +102,8 @@ create_default_config() {
   "min_window_size": 100
 }
 EOF
-        echo "✓ Created config: $CONFIG_FILE"
-    else
-        echo "✓ Config already exists."
-    fi
+
+    echo "Default config created"
 }
 
 detect_desktop
@@ -147,19 +112,13 @@ build_and_install
 create_default_config
 
 if [[ $IS_KDE -eq 1 ]]; then
-    echo "KDE detected — using KDE autostart (NO systemd)."
+    echo "KDE detected — installing KWin integration"
+    install_kwin_script
     install_kde_autostart
 elif [[ $IS_GNOME -eq 1 ]]; then
-    echo "GNOME detected — installing systemd service."
-    install_gnome_service
+    echo "GNOME detected — no KWin integration"
 else
-    echo "Unknown desktop environment — not installing autostart."
-    echo "Start manually with: gridflux &"
+    echo "Unknown desktop — manual start required"
 fi
 
-echo ""
 echo "=== Installation Complete ==="
-echo "Config file: ~/.config/gridflux/config.json"
-echo "KDE autostart: ~/.config/autostart/gridflux.desktop"
-echo "GNOME service: systemctl --user status gridflux"
-

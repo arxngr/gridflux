@@ -2,38 +2,43 @@
 set -e
 
 INSTALL_DIR="/usr/local/bin"
-SERVICE_NAME="gridflux.service"
-SERVICE_PATH="$HOME/.config/systemd/user/$SERVICE_NAME"
 AUTOSTART_FILE="$HOME/.config/autostart/gridflux.desktop"
 CONFIG_DIR="$HOME/.config/gridflux"
-BUILD_DIR="build"
+
+KWIN_SCRIPT_NAME="gridflux-tiler"
+KWIN_QML_FILE="kwin_tiler.qml"
+KWIN_INSTALL_DIR="/usr/share/gridflux"
 
 echo "=== Uninstalling GridFlux ==="
 
-if systemctl --user list-units --full -all | grep -q "$SERVICE_NAME"; then
-  systemctl --user stop "$SERVICE_NAME" || true
-  systemctl --user disable "$SERVICE_NAME" || true
-fi
+echo "Stopping GridFlux (if running)"
+pkill -f "$INSTALL_DIR/gridflux" || true
 
-if [ -f "$SERVICE_PATH" ]; then
-  rm -f "$SERVICE_PATH"
-  systemctl --user daemon-reload
+if command -v qdbus >/dev/null 2>&1; then
+    echo "Unloading KWin script via D-Bus"
+    qdbus org.kde.KWin /Scripting \
+        org.kde.kwin.Scripting.unloadScript \
+        "$KWIN_SCRIPT_NAME" || true
 fi
 
 if [ -f "$AUTOSTART_FILE" ]; then
-  rm -f "$AUTOSTART_FILE"
+    rm -f "$AUTOSTART_FILE"
+    echo "KDE autostart removed"
+fi
+
+if [ -f "$KWIN_INSTALL_DIR/$KWIN_QML_FILE" ]; then
+    sudo rm -f "$KWIN_INSTALL_DIR/$KWIN_QML_FILE"
+    echo "KWin script removed"
 fi
 
 if [ -f "$INSTALL_DIR/gridflux" ]; then
-  sudo rm -f "$INSTALL_DIR/gridflux"
+    sudo rm -f "$INSTALL_DIR/gridflux"
+    echo "Binary removed"
 fi
 
 if [ -d "$CONFIG_DIR" ]; then
-  rm -rf "$CONFIG_DIR"
-fi
-
-if [ -d "$BUILD_DIR" ]; then
-  rm -rf "$BUILD_DIR"
+    rm -rf "$CONFIG_DIR"
+    echo "Config removed"
 fi
 
 echo "=== GridFlux Uninstalled Successfully ==="
