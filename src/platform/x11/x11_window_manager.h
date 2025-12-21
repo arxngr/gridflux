@@ -1,12 +1,13 @@
 #ifndef GF_PLATFORM_X11_WINDOW_MANAGER_H
 #define GF_PLATFORM_X11_WINDOW_MANAGER_H
 
+#include "core/types.h"
 #ifdef GF_PLATFORM_X11
 
-#include "../../core/logger.h"
-#include "../../utils/memory.h"
 #include "../../core/geometry.h"
 #include "../../core/interfaces.h"
+#include "../../core/logger.h"
+#include "../../utils/memory.h"
 #include <X11/X.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -20,6 +21,11 @@ typedef struct
     gf_x11_atoms_t atoms;
     int screen;
     Window root_window;
+    bool use_kwin_backend;
+#ifdef GF_KWIN_SUPPORT
+    void *kwin_dbus_conn; // DBusConnection*
+    char *kwin_script_name;
+#endif
 } gf_x11_platform_data_t;
 
 // X11 platform interface
@@ -38,7 +44,8 @@ gf_error_code_t gf_x11_get_frame_extents (Display *display, Window window, int *
 
 static gf_error_code_t gf_x11_platform_init (gf_platform_interface_t *platform,
                                              gf_display_t *display);
-static void gf_x11_platform_cleanup (gf_display_t display);
+static void gf_x11_platform_cleanup (gf_display_t display,
+                                     gf_platform_interface_t *platform);
 static gf_error_code_t gf_x11_platform_get_windows (gf_display_t display,
                                                     gf_workspace_id_t workspace_id,
                                                     gf_window_info_t **windows,
@@ -46,7 +53,7 @@ static gf_error_code_t gf_x11_platform_get_windows (gf_display_t display,
 static gf_error_code_t gf_x11_platform_set_window_geometry (gf_display_t display,
                                                             gf_native_window_t window,
                                                             const gf_rect_t *geometry,
-                                                            gf_geometry_flags_t flags, 
+                                                            gf_geometry_flags_t flags,
                                                             gf_config_t *cfg);
 static gf_error_code_t
 gf_x11_platform_move_window_to_workspace (gf_display_t display, gf_native_window_t window,

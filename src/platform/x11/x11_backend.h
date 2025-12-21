@@ -16,6 +16,13 @@ typedef enum gf_desktop_env_t
     GF_DE_LXQT
 } gf_desktop_env_t;
 
+typedef enum
+{
+    GF_BACKEND_X11,
+    GF_BACKEND_KWIN_QML,
+    GF_BACKEND_AUTO
+} gf_backend_type_t;
+
 typedef struct
 {
     gf_error_code_t (*get_screen_bounds) (gf_display_t, gf_rect_t *);
@@ -30,13 +37,12 @@ typedef struct
 gf_desktop_env_t gf_detect_desktop_env (void);
 
 // KDE
-gf_error_code_t gf_x11_kde_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds);
+gf_error_code_t gf_x11_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds);
 
-gf_error_code_t gf_x11_kde_set_window_geometry (gf_display_t display,
-                                                gf_native_window_t window,
-                                                const gf_rect_t *geometry,
-                                                gf_geometry_flags_t flags,
-                                                gf_config_t *cfg);
+gf_error_code_t gf_x11_set_window_geometry (gf_display_t display,
+                                            gf_native_window_t window,
+                                            const gf_rect_t *geometry,
+                                            gf_geometry_flags_t flags, gf_config_t *cfg);
 
 // GNOME
 gf_error_code_t gf_x11_gnome_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds);
@@ -47,13 +53,13 @@ gf_error_code_t gf_x11_gnome_set_window_geometry (gf_display_t display,
                                                   gf_geometry_flags_t flags,
                                                   gf_config_t *cfg);
 
-gf_error_code_t gf_x11_backend_get_screen_bounds (gf_display_t display,
-                                                  gf_rect_t *bounds);
+gf_error_code_t gf_x11_kde_get_screen_bounds (gf_display_t display, gf_rect_t *bounds);
 
-gf_error_code_t gf_x11_backend_set_window_geometry (gf_display_t display,
-                                                    gf_native_window_t window,
-                                                    const gf_rect_t *geometry,
-                                                    gf_geometry_flags_t flags,
-                                                    gf_config_t *cfg);
+gf_error_code_t gf_x11_kde_set_window_geometry (gf_display_t display,
+                                                gf_native_window_t window,
+                                                const gf_rect_t *geometry,
+                                                gf_geometry_flags_t flags,
+                                                gf_config_t *cfg);
 
+gf_backend_type_t gf_detect_backend (void);
 #endif

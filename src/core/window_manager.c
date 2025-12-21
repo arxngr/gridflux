@@ -1,12 +1,12 @@
 #include "window_manager.h"
-#include "logger.h"
+#include "../utils/list.h"
 #include "../utils/memory.h"
+#include "../utils/workspace.h"
 #include "config.h"
 #include "geometry.h"
+#include "logger.h"
 #include "types.h"
 #include "workspace.h"
-#include "../utils/list.h"
-#include "../utils/workspace.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -88,7 +88,7 @@ gf_window_manager_cleanup (gf_window_manager_t *manager)
     if (!manager || !manager->state.initialized)
         return;
 
-    manager->platform->cleanup (manager->display);
+    manager->platform->cleanup (manager->display, manager->platform);
     manager->state.initialized = false;
 
     GF_LOG_INFO ("Window manager cleaned up");
