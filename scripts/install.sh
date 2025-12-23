@@ -27,7 +27,6 @@ install_dependencies() {
 
     case "$ID" in
     ubuntu | debian)
-        sudo apt update -y
         sudo apt install -y libx11-dev libjson-c-dev libdbus-1-dev cmake gcc make pkg-config
         ;;
     fedora | rhel | centos | almalinux | rocky)

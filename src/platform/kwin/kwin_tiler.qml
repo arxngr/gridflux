@@ -52,11 +52,20 @@ Item {
     
     function retile() {
         var clients = toArray(workspace.clientList()).filter(function(c) {
-            return !c.minimized && 
+            var rc = (c.resourceClass || "").toLowerCase()
+            var rn = (c.resourceName || "").toLowerCase()
+
+            return !c.minimized &&
                    c.desktop === workspace.currentDesktop &&
-                   !c.dock &&
+                   c.normalWindow &&          // only normal windows
+                   !c.skipTaskbar &&          // exclude windows that skip taskbar (like tooltips, menus)
+                   !c.modal &&                // exclude modal dialogs if needed
+                   !c.fullScreen &&           // optionally exclude fullscreen windows
+                   !c.dock &&                 // exclude panels/docks
                    !c.specialWindow &&
-                   c.normalWindow
+                   !([KWin.ToolTip, KWin.SplashScreen, KWin.Notification, KWin.Dock].includes(c.windowType)) &&
+                   rc !== "spectacle" &&      // exclude Spectacle
+                   rn !== "spectacle"
         })
         
         if (clients.length === 0) {
