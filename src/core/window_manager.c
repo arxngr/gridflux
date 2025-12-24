@@ -739,6 +739,13 @@ gf_window_manager_load_cfg (gf_window_manager_t *manager)
         return;
     }
 
+    const char *config_file = gf_config_get_path ();
+    if (!config_file)
+    {
+        GF_LOG_ERROR ("Failed to determine config file path");
+        return;
+    }
+
     struct stat st;
     if (stat (GLOB_CFG, &st) != 0)
     {
@@ -755,11 +762,11 @@ gf_window_manager_load_cfg (gf_window_manager_t *manager)
 
     // Reload and check for changes
     gf_config_t old_config = *manager->config;
-    gf_config_t new_config = load_or_create_config (GLOB_CFG);
+    gf_config_t new_config = load_or_create_config (config_file);
 
     if (gf_config_has_changed (&old_config, &new_config))
     {
-        GF_LOG_INFO ("Configuration changed! Reloading from: %s", GLOB_CFG);
+        GF_LOG_INFO ("Configuration changed! Reloading from: %s", config_file);
 
         *manager->config = new_config;
         manager->config->last_modified = st.st_mtime;

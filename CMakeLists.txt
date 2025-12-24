@@ -12,6 +12,9 @@ endif()
 set(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -Wextra -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
 
+# Development mode option
+option(GF_DEV_MODE "Enable development mode (read config from current dir)" OFF)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSONC REQUIRED json-c)
 
@@ -60,12 +63,14 @@ if(UNIX AND NOT APPLE)
             ${DBUS_INCLUDE_DIRS}
         )
         
-        # Install KWin QML script
-        install(FILES 
-            "${CMAKE_SOURCE_DIR}/src/platform/kwin/kwin_tiler.qml"
-            DESTINATION share/gridflux
-            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-        )
+        # Install KWin QML script (only in production mode)
+        if(NOT GF_DEV_MODE)
+            install(FILES 
+                "${CMAKE_SOURCE_DIR}/src/platform/kwin/kwin_tiler.qml"
+                DESTINATION share/gridflux
+                PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+            )
+        endif()
         
         # Package dependencies (with D-Bus)
         set(CPACK_DEBIAN_PACKAGE_DEPENDS "libx11-6, libjson-c5, libdbus-1-3")
@@ -106,6 +111,11 @@ add_executable(gridflux
     ${PLATFORM_SOURCES}
 )
 
+# Add dev mode definition if enabled
+if(GF_DEV_MODE)
+    target_compile_definitions(gridflux PRIVATE GF_DEV_MODE)
+endif()
+
 # Link libraries
 target_link_libraries(gridflux ${PLATFORM_LIBRARIES})
 
@@ -122,38 +132,42 @@ if(DBUS_FOUND AND DBUS_LIBRARY_DIRS)
     target_link_directories(gridflux PRIVATE ${DBUS_LIBRARY_DIRS})
 endif()
 
-# Install binary
-install(TARGETS gridflux DESTINATION bin)
-
-# Install config file if exists
-if(EXISTS "${CMAKE_SOURCE_DIR}/config.json")
-    install(FILES 
-        "${CMAKE_SOURCE_DIR}/config.json"
-        DESTINATION share/gridflux
-        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-    )
+# Install binary (only in production mode)
+if(NOT GF_DEV_MODE)
+    install(TARGETS gridflux DESTINATION bin)
+    
+    # Install example config file
+    if(EXISTS "${CMAKE_SOURCE_DIR}/config.json")
+        install(FILES 
+            "${CMAKE_SOURCE_DIR}/config.json"
+            DESTINATION share/gridflux/examples
+            RENAME config.json.example
+            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+        )
+    endif()
+    
+    # CPack configuration
+    set(CPACK_PACKAGE_NAME "GridFlux")
+    set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+    set(CPACK_PACKAGE_DESCRIPTION "Cross-platform tiling window manager with KDE/KWin support")
+    set(CPACK_PACKAGE_CONTACT "GridFlux Team")
+    
+    # Add post-install script for KWin
+    if(DBUS_FOUND)
+        set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA 
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/postinst"
+        )
+    endif()
+    
+    include(CPack)
 endif()
-
-# CPack configuration
-set(CPACK_PACKAGE_NAME "GridFlux")
-set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-set(CPACK_PACKAGE_DESCRIPTION "Cross-platform tiling window manager with KDE/KWin support")
-set(CPACK_PACKAGE_CONTACT "GridFlux Team")
-
-# Add post-install script for KWin
-if(DBUS_FOUND)
-    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA 
-        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/postinst"
-    )
-endif()
-
-include(CPack)
 
 # Print build summary
 message(STATUS "")
 message(STATUS "GridFlux Build Configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "  Development mode: ${GF_DEV_MODE}")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
 if(UNIX AND NOT APPLE)
     message(STATUS "  X11 support: YES")
@@ -163,5 +177,16 @@ if(UNIX AND NOT APPLE)
     else()
         message(STATUS "  KWin backend: NO (D-Bus not found)")
     endif()
+endif()
+if(GF_DEV_MODE)
+    message(STATUS "")
+    message(STATUS "  ** DEVELOPMENT MODE ENABLED **")
+    message(STATUS "  Config will be read from: ./config.json")
+    message(STATUS "  Installation targets are disabled")
+    message(STATUS "")
+else()
+    message(STATUS "")
+    message(STATUS "  Config will be read from: ~/.config/gridflux/config.json")
+    message(STATUS "")
 endif()
 message(STATUS "")
