@@ -1,4 +1,5 @@
 #include "config.h"
+#include "core/logger.h"
 #include "types.h"
 #include <json-c/json.h>
 #include <stdio.h>
@@ -19,18 +20,10 @@ const char *
 gf_config_get_path (void)
 {
     static char config_path[PATH_MAX];
-    static int initialized = 0;
-
-    // Return cached path if already computed
-    if (initialized)
-    {
-        return config_path;
-    }
 
 #ifdef GF_DEV_MODE
     strncpy (config_path, "config.json", sizeof (config_path) - 1);
     config_path[sizeof (config_path) - 1] = '\0';
-    initialized = 1;
     return config_path;
 #else
 
@@ -40,9 +33,9 @@ gf_config_get_path (void)
     {
         int ret = snprintf (config_path, sizeof (config_path), "%s/gridflux/config.json",
                             xdg_config);
+        GF_LOG_DEBUG ("Installation mode, XDG Path: ", config_path);
         if (ret > 0 && (size_t)ret < sizeof (config_path))
         {
-            initialized = 1;
             return config_path;
         }
     }
@@ -65,7 +58,6 @@ gf_config_get_path (void)
         return NULL;
     }
 
-    initialized = 1;
     return config_path;
 #endif
 }

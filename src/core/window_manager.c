@@ -297,8 +297,11 @@ gf_window_manager_print_stats (const gf_window_manager_t *manager)
     if (!manager)
         return;
 
+    const gf_workspace_manager_t *wmgr = manager->state.workspace_manager;
+
     uint32_t *workspace_counts
         = gf_calloc (manager->config->max_workspaces, sizeof (uint32_t));
+
     if (!workspace_counts)
     {
         GF_LOG_ERROR ("Failed to allocate workspace_counts");
@@ -306,9 +309,11 @@ gf_window_manager_print_stats (const gf_window_manager_t *manager)
     }
 
     gf_workspace_id_t max_workspace = -1;
+
     for (uint32_t i = 0; i < manager->state.windows.count; i++)
     {
         gf_workspace_id_t ws = manager->state.windows.items[i].workspace_id;
+
         if (ws >= 0 && ws < manager->config->max_workspaces)
         {
             workspace_counts[ws]++;
@@ -317,13 +322,30 @@ gf_window_manager_print_stats (const gf_window_manager_t *manager)
         }
     }
 
-    GF_LOG_DEBUG ("Window distribution (total: %u):", manager->state.windows.count);
+    GF_LOG_DEBUG ("Total windows: %u", manager->state.windows.count);
+
+    if (wmgr)
+        GF_LOG_DEBUG ("Active workspace: %u", wmgr->active_workspace);
+
     for (gf_workspace_id_t i = 0; i <= max_workspace; i++)
     {
-        if (workspace_counts[i] > 0)
+        uint32_t count = workspace_counts[i];
+        if (count == 0)
+            continue;
+
+        uint32_t max_windows = 0;
+        int32_t available = -1;
+
+        if (wmgr && i < wmgr->workspaces.count)
         {
-            GF_LOG_DEBUG ("  Workspace %d: %u windows", i, workspace_counts[i]);
+            const gf_workspace_info_t *ws = &wmgr->workspaces.items[i];
+
+            max_windows = ws->max_windows;
+            available = ws->available_space;
         }
+
+        GF_LOG_DEBUG ("WS %d | windows=%u max=%u available=%d", i, count, max_windows,
+                      available);
     }
 
     gf_free (workspace_counts);
@@ -747,8 +769,9 @@ gf_window_manager_load_cfg (gf_window_manager_t *manager)
     }
 
     struct stat st;
-    if (stat (GLOB_CFG, &st) != 0)
+    if (stat (config_file, &st) != 0)
     {
+        GF_LOG_ERROR ("Failed to read stat config file: %s", config_file);
         return;
     }
 

@@ -1,8 +1,8 @@
 #include "workspace.h"
-#include "logger.h"
 #include "../utils/list.h"
 #include "../utils/memory.h"
 #include "../utils/workspace.h"
+#include "logger.h"
 
 gf_error_code_t
 gf_workspace_manager_create (gf_workspace_manager_t **manager)
@@ -43,96 +43,4 @@ gf_workspace_manager_get_current (gf_workspace_manager_t *manager)
     if (!manager)
         return NULL;
     return gf_workspace_list_find (&manager->workspaces, manager->active_workspace);
-}
-
-gf_error_code_t
-gf_workspace_manager_handle_overflow (gf_workspace_manager_t *manager,
-                                      gf_display_t display, gf_window_list_t *windows)
-{
-    if (!manager || !windows)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    // Find workspaces with overflow and free space
-    gf_workspace_id_t overflow_workspaces[GF_MAX_WORKSPACES];
-    gf_workspace_id_t free_workspaces[GF_MAX_WORKSPACES];
-    uint32_t overflow_count = 0, free_count = 0;
-
-    for (uint32_t i = 0; i < manager->workspaces.count; i++)
-    {
-        gf_workspace_info_t *workspace = &manager->workspaces.items[i];
-        uint32_t window_count
-            = gf_window_list_count_by_workspace (windows, workspace->id);
-
-        if (window_count > workspace->max_windows)
-        {
-            overflow_workspaces[overflow_count++] = workspace->id;
-        }
-        else if (window_count < workspace->max_windows)
-        {
-            free_workspaces[free_count++] = workspace->id;
-        }
-    }
-
-    // Move windows from overflow to free workspaces
-    for (uint32_t i = 0; i < overflow_count && free_count > 0; i++)
-    {
-        gf_window_info_t *workspace_windows;
-        uint32_t window_count;
-
-        gf_error_code_t result = gf_window_list_get_by_workspace (
-            windows, overflow_workspaces[i], &workspace_windows, &window_count);
-        if (result != GF_SUCCESS)
-            continue;
-
-        gf_workspace_info_t *cur_workspace
-            = gf_workspace_list_find (&manager->workspaces, overflow_workspaces[i]);
-
-        // Move excess windows
-        uint32_t excess = window_count - cur_workspace->max_windows;
-        uint32_t moved = 0;
-
-        for (uint32_t j = 0; j < window_count && moved < excess && free_count > 0; j++)
-        {
-            gf_workspace_id_t target_workspace = free_workspaces[0];
-
-            result = manager->platform->move_window_to_workspace (
-                display, workspace_windows[j].native_handle, target_workspace);
-
-            GF_LOG_DEBUG (" → Moving window %u from workspace %u to %u",
-                          workspace_windows[j].id, workspace_windows[j].workspace_id,
-                          target_workspace);
-            if (result == GF_SUCCESS)
-            {
-                workspace_windows[j].workspace_id = target_workspace;
-                moved++;
-
-                gf_workspace_info_t *target_cur_workspace = gf_workspace_list_find (
-                    &manager->workspaces, overflow_workspaces[i]);
-
-                // Update free workspace count
-                uint32_t target_count
-                    = gf_window_list_count_by_workspace (windows, target_workspace);
-                if (target_count >= target_cur_workspace->max_windows - 1)
-                {
-                    // Remove from free list
-                    for (uint32_t k = 0; k < free_count - 1; k++)
-                    {
-                        free_workspaces[k] = free_workspaces[k + 1];
-                    }
-                    free_count--;
-                    GF_LOG_DEBUG ("   Workspace %u is now full, removing from free list",
-                                  target_workspace);
-                }
-            }
-            else
-            {
-                GF_LOG_WARN ("Failed to move window %u to workspace %u",
-                             workspace_windows[j].id, target_workspace);
-            }
-        }
-
-        gf_free (workspace_windows);
-    }
-
-    return GF_SUCCESS;
 }
