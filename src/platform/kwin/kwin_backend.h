@@ -13,8 +13,11 @@
 #define KWIN_TEMP_TEMPLATE "/tmp/kwin_script_XXXXXX"
 
 static const char *const KWIN_SCRIPT_SEARCH_PATHS[]
-    = { "/usr/local/share/gridflux/kwin_tiler.qml", "/usr/share/gridflux/kwin_tiler.qml",
-        "./src/platform/kwin/kwin_tiler.qml", NULL };
+    = { "/usr/local/share/kwin/scripts/gridflux/contents/ui/main.qml", 
+        "/usr/share/kwin/scripts/gridflux/contents/ui/main.qml",
+        "/usr/local/share/gridflux/contents/ui/main.qml", 
+        "/usr/share/gridflux/contents/ui/main.qml",
+        "./src/platform/kwin/main.qml", NULL };
 
 typedef struct
 {

@@ -47,10 +47,36 @@ gf_kwin_dbus_call (DBusConnection *conn, const char *method, const char *arg1,
         goto out;
     }
 
-    if (reply && dbus_message_iter_init (reply, &args)
-        && dbus_message_iter_get_arg_type (&args) == DBUS_TYPE_INT32)
+    if (reply && dbus_message_iter_init (reply, &args))
     {
-        dbus_message_iter_get_basic (&args, &result);
+        int arg_type = dbus_message_iter_get_arg_type (&args);
+        if (arg_type == DBUS_TYPE_INT32)
+        {
+            dbus_message_iter_get_basic (&args, &result);
+            GF_LOG_INFO ("[kwin] D-Bus call '%s' returned: %d", method, result);
+        }
+        else if (arg_type == DBUS_TYPE_BOOLEAN)
+        {
+            dbus_bool_t bool_result;
+            dbus_message_iter_get_basic (&args, &bool_result);
+            result = bool_result ? 1 : 0;
+            GF_LOG_INFO ("[kwin] D-Bus call '%s' returned (bool): %d", method, result);
+        }
+        else
+        {
+            GF_LOG_ERROR ("[kwin] D-Bus call '%s' failed - unexpected type: %c", method,
+                          arg_type);
+        }
+    }
+    else if (reply)
+    {
+        GF_LOG_ERROR (
+            "[kwin] D-Bus call '%s' failed - could not initialize reply iterator",
+            method);
+    }
+    else
+    {
+        GF_LOG_ERROR ("[kwin] D-Bus call '%s' failed - no reply received", method);
     }
 
 out:
@@ -96,48 +122,86 @@ gf_kwin_platform_init (gf_platform_interface_t *platform)
 
     data->kwin_script_name = strdup (KWIN_SCRIPT_NAME);
     if (!data->kwin_script_name)
+    {
+        GF_LOG_ERROR ("[kwin] init: failed to allocate script name");
         goto fail;
+    }
+    GF_LOG_INFO ("[kwin] init: script name set to '%s'", data->kwin_script_name);
 
     for (size_t i = 0; KWIN_SCRIPT_SEARCH_PATHS[i]; i++)
     {
+        GF_LOG_DEBUG ("[kwin] searching for script at: %s", KWIN_SCRIPT_SEARCH_PATHS[i]);
         if (access (KWIN_SCRIPT_SEARCH_PATHS[i], R_OK) == 0)
         {
             script_path = strdup (KWIN_SCRIPT_SEARCH_PATHS[i]);
+            GF_LOG_INFO ("[kwin] found script at: %s", script_path);
             break;
         }
     }
 
     if (!script_path)
+    {
+        GF_LOG_ERROR ("[kwin] init: script not found in any search path");
         goto fail;
+    }
 
     ret = gf_kwin_dbus_call (data->kwin_dbus_conn, "isScriptLoaded",
                              data->kwin_script_name, NULL);
 
     if (ret == 1)
     {
+        GF_LOG_INFO ("[kwin] init: script already loaded, unloading...");
         gf_kwin_dbus_call (data->kwin_dbus_conn, "unloadScript", data->kwin_script_name,
                            NULL);
         sleep (KWIN_UNLOAD_SLEEP_SEC);
+        GF_LOG_INFO ("[kwin] init: script unloaded");
+    }
+
+    GF_LOG_DEBUG ("[kwin] attempting to load script from installed location: %s",
+                  script_path);
+    ret = gf_kwin_dbus_call (data->kwin_dbus_conn, "loadDeclarativeScript", script_path,
+                             data->kwin_script_name);
+
+    if (ret >= 0)
+    {
+        GF_LOG_INFO ("[kwin] init: declarative script loaded successfully from %s",
+                     script_path);
+        gf_kwin_dbus_call (data->kwin_dbus_conn, "start", NULL, NULL);
+        free (script_path);
+        return GF_SUCCESS;
     }
 
     fd = mkstemp (tmp_template);
     if (fd < 0)
+    {
+        GF_LOG_ERROR ("[kwin] init: failed to create temp file");
         goto fail;
+    }
+
     close (fd);
     fd = -1;
 
     if (gf_copy_file (script_path, tmp_template) != 0)
+    {
+        GF_LOG_ERROR ("[kwin] init: failed to copy script from '%s' to '%s'", script_path,
+                      tmp_template);
         goto fail;
+    }
 
     ret = gf_kwin_dbus_call (data->kwin_dbus_conn, "loadDeclarativeScript", tmp_template,
                              data->kwin_script_name);
 
     if (ret < 0)
+    {
+        GF_LOG_ERROR ("[kwin] init: failed to load declarative script (error code: %d)",
+                      ret);
         goto fail;
+    }
 
     gf_kwin_dbus_call (data->kwin_dbus_conn, "start", NULL, NULL);
 
-    unlink (tmp_template);
+    // Don't delete temp file - KWin may need it for async loading
+    // unlink (tmp_template);
     free (script_path);
 
     GF_LOG_INFO ("[kwin] init: success");

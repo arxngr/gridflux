@@ -4,7 +4,7 @@ INSTALL_DIR="/usr/local/bin"
 BUILD_DIR="build"
 KWIN_SCRIPT_NAME="gridflux-tiler"
 KWIN_QML_FILE="kwin_tiler.qml"
-KWIN_INSTALL_DIR="/usr/share/gridflux"
+KWIN_INSTALL_DIR="/usr/share/kwin/scripts/gridflux"
 SERVICE_FILE="$HOME/.config/systemd/user/gridflux.service"
 
 echo "=== GridFlux Installation Started ==="
@@ -69,13 +69,19 @@ install_kwin_script() {
     echo "Installing KWin script..."
     unload_kwin_script
     sudo install -Dm644 \
-        "src/platform/kwin/$KWIN_QML_FILE" \
-        "$KWIN_INSTALL_DIR/$KWIN_QML_FILE"
+        "src/platform/kwin/metadata.json" \
+        "$KWIN_INSTALL_DIR/metadata.json"
+    sudo install -Dm644 \
+        "src/platform/kwin/main.qml" \
+        "$KWIN_INSTALL_DIR/contents/ui/main.qml"
+    sudo install -Dm644 \
+        "src/platform/kwin/code/tiler.js" \
+        "$KWIN_INSTALL_DIR/contents/ui/tiler.js"
     echo "✓ KWin script installed to $KWIN_INSTALL_DIR"
     echo "Registering script with KWin via D-Bus..."
     qdbus org.kde.KWin /Scripting \
         org.kde.kwin.Scripting.loadDeclarativeScript \
-        "$KWIN_INSTALL_DIR/$KWIN_QML_FILE" \
+        "$KWIN_INSTALL_DIR/contents/ui/main.qml" \
         "$KWIN_SCRIPT_NAME" || true
     qdbus org.kde.KWin /Scripting \
         org.kde.kwin.Scripting.start || true
@@ -155,7 +161,7 @@ elif [[ $IS_GNOME -eq 1 ]]; then
     echo "GNOME detected — no KWin integration"
     install_systemd_service
 else
-    echo "Unknown desktop — manual start required"
+    echo "Unknown desktop — installing systemd service only"
     install_systemd_service
 fi
 
@@ -163,3 +169,6 @@ echo "=== Installation Complete ==="
 echo ""
 echo "To check if it's running:"
 echo "  systemctl --user status gridflux"
+echo ""
+echo "To view logs:"
+echo "  journalctl --user -u gridflux -f"

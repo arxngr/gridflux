@@ -1,0 +1,17 @@
+{
+  "KPackageStructure": "KWin/Script",
+  "KPlugin": {
+    "Authors": [
+      {
+        "Name": "GridFlux Contributors",
+        "Email": "0x4rd1@gmail.com"
+      }
+    ],
+    "Description": "GridFlux -  Tiling Window Manager",
+    "Icon": "plasma-desktop",
+    "License": "MIT",
+    "Name": "GridFlux Tiler",
+    "ServiceTypes": ["KWin/Script"],
+    "Website": ""
+  }
+}
