@@ -12,15 +12,15 @@ function toArray(qList) {
     return arr
 }
 
-function bspSplit(clients, area, depth, padding, minSize) {
+function bspSplit(clients, area, depth, padding) {
     if (clients.length === 0) return
     
     if (clients.length === 1) {
         var client = clients[0]
         var x = area.x + padding
         var y = area.y + padding
-        var width = Math.max(area.width - (padding * 2), minSize)
-        var height = Math.max(area.height - (padding * 2), minSize)
+        var width = Math.max(area.width - (padding * 2))
+        var height = Math.max(area.height - (padding * 2))
         client.geometry = Qt.rect(x, y, width, height)
         log("Tiled: " + client.caption)
         return
@@ -34,23 +34,23 @@ function bspSplit(clients, area, depth, padding, minSize) {
         var rightWidth = area.width - leftWidth
         bspSplit(clients.slice(0, mid), 
                 {x: area.x, y: area.y, width: leftWidth, height: area.height}, 
-                depth + 1, padding, minSize)
+                depth + 1, padding)
         bspSplit(clients.slice(mid), 
                 {x: area.x + leftWidth, y: area.y, width: rightWidth, height: area.height}, 
-                depth + 1, padding, minSize)
+                depth + 1, padding)
     } else {
         var topHeight = Math.floor(area.height / 2)
         var bottomHeight = area.height - topHeight
         bspSplit(clients.slice(0, mid), 
                 {x: area.x, y: area.y, width: area.width, height: topHeight}, 
-                depth + 1, padding, minSize)
+                depth + 1, padding)
         bspSplit(clients.slice(mid), 
                 {x: area.x, y: area.y + topHeight, width: area.width, height: bottomHeight}, 
-                depth + 1, padding, minSize)
+                depth + 1, padding)
     }
 }
 
-function retile(workspace, padding, minSize, maxWindows, currentDesktop) {
+function retile(workspace, padding, currentDesktop) {
     var clients = toArray(workspace.clientList()).filter(function(c) {
             var rc = (c.resourceClass || "").toLowerCase()
             var rn = (c.resourceName || "").toLowerCase()
@@ -71,12 +71,7 @@ function retile(workspace, padding, minSize, maxWindows, currentDesktop) {
         return
     }
     
-    if (clients.length > maxWindows) {
-        log("Too many windows (" + clients.length + "), limiting to " + maxWindows)
-        clients = clients.slice(0, maxWindows)
-    }
-    
     var screenArea = workspace.clientArea(0, workspace.activeScreen, currentDesktop)
     
-    bspSplit(clients, screenArea, 0, padding, minSize)
+    bspSplit(clients, screenArea, 0, padding)
 }

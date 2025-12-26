@@ -6,15 +6,13 @@ Item {
     id: root
     
     property int defaultPadding: 5
-    property int maxWindowsPerWorkspace: 10
-    property int minWindowSize: 100
     
     Timer {
         id: retileTimer
         interval: 100
         repeat: false
         onTriggered: {
-            Tiling.retile(workspace, defaultPadding, minWindowSize, maxWindowsPerWorkspace, workspace.currentDesktop)
+            Tiling.retile(workspace, defaultPadding, workspace.currentDesktop)
         }
     }
     
