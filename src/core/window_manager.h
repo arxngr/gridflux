@@ -64,5 +64,6 @@ static void gf_window_manager_unmaximize_all (gf_window_manager_t *manager,
 static gf_error_code_t gf_window_manager_arrange_overflow (gf_window_manager_t *manager);
 static void gf_window_manager_watch (gf_window_manager_t *manager);
 gf_error_code_t gf_window_manager_drag (gf_window_manager_t *manager);
-void gf_window_manager_load_cfg(gf_window_manager_t *manager);
+void gf_window_manager_load_cfg (gf_window_manager_t *manager);
+void gf_window_manager_event (gf_window_manager_t *manager);
 #endif // GF_CORE_WINDOW_MANAGER_H

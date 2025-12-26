@@ -60,6 +60,7 @@ gf_error_code_t gf_x11_kde_set_window_geometry (gf_display_t display,
                                                 const gf_rect_t *geometry,
                                                 gf_geometry_flags_t flags,
                                                 gf_config_t *cfg);
+gf_error_code_t gf_x11_kde_create_workspace (gf_display_t display);
 
 gf_backend_type_t gf_detect_backend (void);
 #endif
