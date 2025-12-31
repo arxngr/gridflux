@@ -18,8 +18,8 @@ gf_error_code_t gf_workspace_manager_create (gf_workspace_manager_t **manager);
 void gf_workspace_manager_destroy (gf_workspace_manager_t *manager);
 
 gf_workspace_info_t *gf_workspace_manager_get_current (gf_workspace_manager_t *manager);
-gf_error_code_t gf_workspace_manager_handle_overflow (gf_workspace_manager_t *manager,
-                                                      gf_display_t display,
-                                                      gf_window_list_t *windows);
+uint32_t gf_workspace_manager_calc_required_workspaces (uint32_t total_windows,
+                                                        uint32_t current_workspaces,
+                                                        uint32_t max_per_workspace);
 
 #endif // GF_CORE_WORKSPACE_H

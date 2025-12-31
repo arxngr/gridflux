@@ -2,6 +2,7 @@
 #define GF_CORE_INTERFACES_H
 #include "config.h"
 #include "types.h"
+#include <X11/Xlib.h>
 
 typedef struct gf_platform_interface gf_platform_interface_t;
 typedef struct gf_geometry_calculator gf_geometry_calculator_t;
@@ -11,15 +12,12 @@ struct gf_platform_interface
 {
     gf_error_code_t (*init) (gf_platform_interface_t *platform, gf_display_t *display);
     void (*cleanup) (gf_display_t display, gf_platform_interface_t *platform);
-    gf_error_code_t (*get_windows) (gf_display_t display, gf_workspace_id_t workspace_id,
+    gf_error_code_t (*get_windows) (gf_display_t display, gf_workspace_id_t *workspace_id,
                                     gf_window_info_t **windows, uint32_t *count);
     gf_error_code_t (*set_window_geometry) (gf_display_t display,
                                             gf_native_window_t window,
                                             const gf_rect_t *geometry,
                                             gf_geometry_flags_t flags, gf_config_t *cfg);
-    gf_error_code_t (*move_window_to_workspace) (gf_display_t display,
-                                                 gf_native_window_t window,
-                                                 gf_workspace_id_t workspace_id);
     gf_error_code_t (*unmaximize_window) (gf_display_t display,
                                           gf_native_window_t window);
     gf_error_code_t (*get_window_geometry) (gf_display_t display,
@@ -33,6 +31,15 @@ struct gf_platform_interface
     bool (*is_window_excluded) (gf_display_t display, gf_native_window_t window);
     gf_error_code_t (*is_window_drag) (gf_display_t display, gf_native_window_t window,
                                        gf_rect_t *geometry);
+    gf_error_code_t (*remove_workspace) (gf_display_t display,
+                                         gf_workspace_id_t workspace_id);
+    gf_window_id_t (*watch_process_event) (gf_display_t display);
+    gf_error_code_t (*minimize_window) (gf_display_t display, gf_native_window_t window);
+    gf_error_code_t (*unminimize_window) (gf_display_t display, gf_window_id_t window);
+
+    void (*window_name_info) (gf_display_t display, gf_native_window_t win, char *buffer,
+                              size_t bufsize);
+
     void *platform_data;
 };
 

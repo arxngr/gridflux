@@ -47,7 +47,7 @@ static gf_error_code_t gf_x11_platform_init (gf_platform_interface_t *platform,
 static void gf_x11_platform_cleanup (gf_display_t display,
                                      gf_platform_interface_t *platform);
 static gf_error_code_t gf_x11_platform_get_windows (gf_display_t display,
-                                                    gf_workspace_id_t workspace_id,
+                                                    gf_workspace_id_t *workspace_id,
                                                     gf_window_info_t **windows,
                                                     uint32_t *count);
 static gf_error_code_t gf_x11_platform_set_window_geometry (gf_display_t display,
@@ -55,9 +55,6 @@ static gf_error_code_t gf_x11_platform_set_window_geometry (gf_display_t display
                                                             const gf_rect_t *geometry,
                                                             gf_geometry_flags_t flags,
                                                             gf_config_t *cfg);
-static gf_error_code_t
-gf_x11_platform_move_window_to_workspace (gf_display_t display, gf_native_window_t window,
-                                          gf_workspace_id_t workspace_id);
 static gf_error_code_t gf_x11_platform_unmaximize_window (gf_display_t display,
                                                           gf_native_window_t window);
 static gf_error_code_t gf_x11_platform_get_window_geometry (gf_display_t display,
@@ -76,6 +73,13 @@ const char *gf_x11_detect_desktop_environment (void);
 static gf_error_code_t gf_x11_platform_is_window_drag (gf_display_t display,
                                                        gf_native_window_t window,
                                                        gf_rect_t *geometry);
+static gf_error_code_t gf_x11_platform_remove_workspace (gf_display_t display,
+                                                         gf_workspace_id_t workspace_id);
+gf_window_id_t gf_x11_event_process (gf_display_t dpy);
+gf_error_code_t gf_x11_minimize_window (gf_display_t display, gf_window_id_t window);
+gf_error_code_t gf_x11_unminimize_window (gf_display_t display, gf_window_id_t window);
+void gf_x11_get_window_name (gf_display_t display, gf_native_window_t win, char *buffer,
+                             size_t bufsize);
 
 #endif // GF_PLATFORM_X11
 

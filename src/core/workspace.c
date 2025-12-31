@@ -44,3 +44,18 @@ gf_workspace_manager_get_current (gf_workspace_manager_t *manager)
         return NULL;
     return gf_workspace_list_find (&manager->workspaces, manager->active_workspace);
 }
+
+uint32_t
+gf_workspace_manager_calc_required_workspaces (uint32_t total_windows,
+                                               uint32_t current_workspaces,
+                                               uint32_t max_per_workspace)
+{
+    uint32_t capacity = current_workspaces * max_per_workspace;
+
+    if (total_windows <= capacity)
+        return 0;
+
+    uint32_t overflow = total_windows - capacity;
+
+    return (overflow + max_per_workspace - 1) / max_per_workspace;
+}

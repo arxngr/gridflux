@@ -1,8 +1,8 @@
 
 #include "workspace.h"
+#include "../core/types.h"
 #include "list.h"
 #include "memory.h"
-#include "../core/types.h"
 #include <stdint.h>
 #include <string.h>
 

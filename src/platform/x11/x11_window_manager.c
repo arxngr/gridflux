@@ -4,6 +4,7 @@
 #include "../../platform/kwin/kwin_backend.h"
 #include "../../utils/memory.h"
 #include "x11_backend.h"
+#include <X11/Xlib.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,8 +42,10 @@ gf_x11_platform_create (void)
     platform->init = gf_x11_platform_init;
     platform->cleanup = gf_x11_platform_cleanup;
     platform->get_windows = gf_x11_platform_get_windows;
-    platform->move_window_to_workspace = gf_x11_platform_move_window_to_workspace;
     platform->unmaximize_window = gf_x11_platform_unmaximize_window;
+    platform->window_name_info = gf_x11_get_window_name;
+    platform->minimize_window = gf_x11_minimize_window;
+    platform->unminimize_window = gf_x11_unminimize_window;
     platform->get_window_geometry = gf_x11_platform_get_window_geometry;
     platform->get_current_workspace = gf_x11_platform_get_current_workspace;
     platform->get_workspace_count = gf_x11_platform_get_workspace_count;
@@ -50,6 +53,8 @@ gf_x11_platform_create (void)
     platform->is_window_valid = gf_x11_platform_is_window_valid;
     platform->is_window_excluded = gf_x11_platform_is_window_excluded;
     platform->is_window_drag = gf_x11_platform_is_window_drag;
+    platform->remove_workspace = gf_x11_platform_remove_workspace;
+    platform->watch_process_event = gf_x11_event_process;
     platform->platform_data = data;
 
     gf_desktop_env_t env = gf_detect_desktop_env ();
@@ -211,8 +216,17 @@ gf_error_code_t
 gf_x11_send_client_message (Display *display, Window window, Atom message_type,
                             long *data, int count)
 {
-    if (!display || message_type == None)
+    if (!display)
+    {
+        GF_LOG_ERROR ("XSendEvent failed: display is NULL");
         return GF_ERROR_INVALID_PARAMETER;
+    }
+
+    if (message_type == None)
+    {
+        GF_LOG_ERROR ("XSendEvent failed: message_type is None");
+        return GF_ERROR_INVALID_PARAMETER;
+    }
 
     XClientMessageEvent event = { 0 };
     event.type = ClientMessage;
@@ -221,13 +235,16 @@ gf_x11_send_client_message (Display *display, Window window, Atom message_type,
     event.format = 32;
 
     for (int i = 0; i < count && i < 5; i++)
-    {
         event.data.l[i] = data[i];
-    }
 
-    if (!XSendEvent (display, DefaultRootWindow (display), False,
-                     SubstructureRedirectMask | SubstructureNotifyMask, (XEvent *)&event))
+    Status ok = XSendEvent (display, DefaultRootWindow (display), False,
+                            SubstructureRedirectMask | SubstructureNotifyMask,
+                            (XEvent *)&event);
+
+    if (ok == 0)
     {
+        GF_LOG_ERROR ("XSendEvent rejected by WM (atom=%lu, target=%lu)", message_type,
+                      window);
         return GF_ERROR_PLATFORM_ERROR;
     }
 
@@ -344,7 +361,7 @@ gf_x11_detect_desktop_environment (void)
 }
 
 static gf_error_code_t
-gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_id,
+gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t *workspace_id,
                              gf_window_info_t **windows, uint32_t *count)
 {
     if (!display || !windows || !count)
@@ -394,7 +411,8 @@ gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_i
             unsigned long window_workspace = *(unsigned long *)desktop_data;
             XFree (desktop_data);
 
-            if (workspace_id >= 0 && (gf_workspace_id_t)window_workspace != workspace_id)
+            if (workspace_id != NULL && *workspace_id >= 0
+                && (gf_workspace_id_t)window_workspace != *workspace_id)
             {
                 continue;
             }
@@ -414,10 +432,12 @@ gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_i
 
         bool is_valid = gf_x11_platform_is_window_excluded (display, window) == false;
 
+        gf_workspace_id_t resolved_workspace = (workspace_id != NULL) ? *workspace_id : 0;
+
         filtered_windows[filtered_count]
             = (gf_window_info_t){ .id = (gf_window_id_t)window,
                                   .native_handle = window,
-                                  .workspace_id = workspace_id,
+                                  .workspace_id = resolved_workspace,
                                   .geometry = geometry,
                                   .is_maximized = is_maximized,
                                   .needs_update = false,
@@ -447,32 +467,6 @@ gf_x11_platform_get_windows (gf_display_t display, gf_workspace_id_t workspace_i
 
     *count = filtered_count;
     return GF_SUCCESS;
-}
-
-static gf_error_code_t
-gf_x11_platform_move_window_to_workspace (gf_display_t display, gf_native_window_t window,
-                                          gf_workspace_id_t workspace_id)
-{
-    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
-    gf_error_code_t err;
-
-    // Switch workspace
-    long switch_data[] = { workspace_id, CurrentTime };
-    err = gf_x11_send_client_message (display, DefaultRootWindow (display),
-                                      atoms->net_current_desktop, switch_data, 2);
-    if (err != GF_SUCCESS)
-        return err;
-
-    long move_data[] = { workspace_id, CurrentTime };
-    err = gf_x11_send_client_message (display, window, atoms->net_wm_desktop, move_data,
-                                      2);
-    if (err != GF_SUCCESS)
-        return err;
-
-    // Focus the window opened
-    long focus_data[5] = { 1, CurrentTime, None, 0, 0 };
-    return gf_x11_send_client_message (display, window, atoms->net_active_window,
-                                       focus_data, 3);
 }
 
 static gf_error_code_t
@@ -565,43 +559,41 @@ gf_x11_platform_create_workspace (gf_display_t display)
     if (!display)
         return GF_ERROR_INVALID_PARAMETER;
 
-    const char *desktop_env = gf_x11_detect_desktop_environment ();
-    if (!desktop_env || strcmp (desktop_env, "Unknown") == 0)
+    Display *dpy = (Display *)display;
+    Window root = DefaultRootWindow (dpy);
+
+    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
+
+    Atom type;
+    int format;
+    unsigned long nitems, bytes_after;
+    unsigned char *data = NULL;
+
+    int status
+        = XGetWindowProperty (dpy, root, atoms->net_number_of_desktops, 0, 1, False,
+                              XA_CARDINAL, &type, &format, &nitems, &bytes_after, &data);
+
+    if (status != Success || !data || nitems != 1)
     {
-        GF_LOG_WARN ("Unknown desktop environment, cannot create workspace");
+        if (data)
+            XFree (data);
+        GF_LOG_ERROR ("Failed to read current workspace count");
         return GF_ERROR_PLATFORM_ERROR;
     }
 
-    pid_t pid = fork ();
-    if (pid == -1)
-    {
-        GF_LOG_ERROR ("Failed to fork for workspace creation");
-        return GF_ERROR_PLATFORM_ERROR;
-    }
+    uint32_t current = *(uint32_t *)data;
+    XFree (data);
 
-    if (pid == 0)
-    {
-        // Child process
-        if (strcmp (desktop_env, "KDE") == 0)
-        {
-            execlp ("qdbus", "qdbus", "org.kde.KWin", "/VirtualDesktopManager",
-                    "createDesktop", "1", "GridFlux", NULL);
-        }
-        else if (strcmp (desktop_env, "GNOME") == 0)
-        {
-            execlp ("gsettings", "gsettings", "set", "org.gnome.mutter",
-                    "dynamic-workspaces", "true", NULL);
-        }
-        _exit (EXIT_FAILURE);
-    }
-    else
-    {
-        // Parent process
-        int status;
-        waitpid (pid, &status, 0);
-        return WIFEXITED (status) && WEXITSTATUS (status) == 0 ? GF_SUCCESS
-                                                               : GF_ERROR_PLATFORM_ERROR;
-    }
+    uint32_t new_count = current + 1;
+
+    XChangeProperty (dpy, root, atoms->net_number_of_desktops, XA_CARDINAL, 32,
+                     PropModeReplace, (unsigned char *)&new_count, 1);
+
+    XFlush (dpy);
+
+    GF_LOG_INFO ("Requested new workspace: %u → %u", current, new_count);
+
+    return GF_SUCCESS;
 }
 
 static bool
@@ -617,15 +609,19 @@ gf_x11_platform_is_window_valid (gf_display_t display, gf_native_window_t window
 static bool
 gf_x11_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
 {
-    if (!display)
+    if (!display || window == None)
         return true;
 
     gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
+    unsigned char *data = NULL;
+    unsigned long nitems = 0;
 
-    // Check window states
-    Atom excluded_states[]
-        = { atoms->net_wm_state_hidden, atoms->net_wm_state_skip_taskbar,
-            atoms->net_wm_state_modal };
+    // 1. Check window states
+    Atom excluded_states[] = {
+        atoms->net_wm_state_skip_taskbar,
+        atoms->net_wm_state_modal,
+        atoms->net_wm_state_above, // Often used by system trays
+    };
 
     for (size_t i = 0; i < sizeof (excluded_states) / sizeof (excluded_states[0]); i++)
     {
@@ -635,24 +631,22 @@ gf_x11_platform_is_window_excluded (gf_display_t display, gf_native_window_t win
         }
     }
 
-    // Check window types
-    unsigned char *data = NULL;
-    unsigned long nitems = 0;
-
     if (gf_x11_get_window_property (display, window, atoms->net_wm_window_type, XA_ATOM,
                                     &data, &nitems)
-        == GF_SUCCESS)
+            == GF_SUCCESS
+        && nitems > 0)
     {
         Atom *types = (Atom *)data;
-
-        Atom excluded_types[] = { atoms->net_wm_window_type_toolbar,
+        Atom excluded_types[] = { atoms->net_wm_window_type_dock,
+                                  atoms->net_wm_window_type_toolbar,
                                   atoms->net_wm_window_type_menu,
                                   atoms->net_wm_window_type_splash,
                                   atoms->net_wm_window_type_dropdown_menu,
                                   atoms->net_wm_window_type_popup_menu,
                                   atoms->net_wm_window_type_tooltip,
                                   atoms->net_wm_window_type_notification,
-                                  atoms->net_wm_window_type_utility };
+                                  atoms->net_wm_window_type_utility,
+                                  atoms->net_wm_window_type_combo };
 
         for (unsigned long i = 0; i < nitems; i++)
         {
@@ -666,7 +660,6 @@ gf_x11_platform_is_window_excluded (gf_display_t display, gf_native_window_t win
                 }
             }
         }
-
         XFree (data);
     }
 
@@ -803,7 +796,7 @@ gf_x11_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
             long *strut = NULL;
             unsigned long nitems = 0;
 
-            if (gf_x11_get_window_property (dpy, clients[i], atoms->net_strut_partial,
+            if (gf_x11_get_window_property (dpy, clients[i], atoms->net_wm_strut_partial,
                                             XA_CARDINAL, (unsigned char **)&strut,
                                             &nitems)
                     == GF_SUCCESS
@@ -879,4 +872,193 @@ gf_x11_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
     data[4] = rect.height;
 
     return gf_x11_send_client_message (dpy, win, atoms->net_moveresize_window, data, 5);
+}
+
+static gf_error_code_t
+gf_x11_platform_remove_workspace (gf_display_t display, gf_workspace_id_t workspace_id)
+{
+    if (!display)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    Display *dpy = (Display *)display;
+    Window root = DefaultRootWindow (dpy);
+
+    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
+
+    Atom type;
+    int format;
+    unsigned long nitems, bytes_after;
+    unsigned char *data = NULL;
+
+    int status
+        = XGetWindowProperty (dpy, root, atoms->net_number_of_desktops, 0, 1, False,
+                              XA_CARDINAL, &type, &format, &nitems, &bytes_after, &data);
+
+    if (status != Success || !data || nitems != 1)
+    {
+        if (data)
+            XFree (data);
+
+        GF_LOG_ERROR ("Failed to read workspace count");
+        return GF_ERROR_PLATFORM_ERROR;
+    }
+
+    uint32_t current = *(uint32_t *)data;
+    XFree (data);
+
+    if (current <= 1)
+    {
+        GF_LOG_WARN ("Refusing to remove last workspace");
+        return GF_ERROR_INITIALIZATION_FAILED;
+    }
+
+    uint32_t new_count = current - 1;
+
+    XChangeProperty (dpy, root, atoms->net_number_of_desktops, XA_CARDINAL, 32,
+                     PropModeReplace, (unsigned char *)&new_count, 1);
+
+    XFlush (dpy);
+
+    GF_LOG_INFO ("Requested workspace removal: %u → %u", current, new_count);
+
+    return GF_SUCCESS;
+}
+
+static Window
+gf_x11_get_focused_window (Display *dpy)
+{
+    if (!dpy)
+        return None;
+
+    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
+    Atom actual;
+    int format;
+    unsigned long nitems, bytes_after;
+    unsigned char *data = NULL;
+    Window win = None;
+
+    if (XGetWindowProperty (dpy, DefaultRootWindow (dpy), atoms->net_active_window, 0, 1,
+                            False, XA_WINDOW, &actual, &format, &nitems, &bytes_after,
+                            &data)
+            == Success
+        && data && nitems > 0)
+    {
+        win = *(Window *)data;
+        XFree (data);
+    }
+
+    return win;
+}
+
+gf_window_id_t
+gf_x11_event_process (Display *dpy)
+{
+    if (!dpy)
+        return None;
+
+    Window focused = gf_x11_get_focused_window (dpy);
+    if (focused == None)
+        return None;
+
+    XWindowAttributes attr;
+    if (XGetWindowAttributes (dpy, focused, &attr) == 0)
+    {
+        GF_LOG_DEBUG ("Focused window %lu is invalid", focused);
+        return None;
+    }
+
+    if (attr.map_state != IsViewable)
+    {
+        GF_LOG_DEBUG ("Focused window %lu is not viewable (map_state=%d)", focused,
+                      attr.map_state);
+        return None;
+    }
+
+    return focused;
+}
+
+gf_error_code_t
+gf_x11_minimize_window (gf_display_t display, gf_native_window_t window)
+{
+    if (!display || window == None)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    // Verify window exists
+    XWindowAttributes attr;
+    if (XGetWindowAttributes (display, window, &attr) == 0)
+    {
+        GF_LOG_WARN ("Cannot minimize invalid window: %lu", window);
+        return GF_ERROR_PLATFORM_ERROR;
+    }
+
+    if (XIconifyWindow (display, window, DefaultScreen (display)) == 0)
+        return GF_ERROR_PLATFORM_ERROR;
+
+    XFlush (display);
+    return GF_SUCCESS;
+}
+
+gf_error_code_t
+gf_x11_unminimize_window (gf_display_t display, Window window)
+{
+    if (!display || window == None)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    // Verify window exists
+    XWindowAttributes attr;
+    if (XGetWindowAttributes (display, window, &attr) == 0)
+    {
+        GF_LOG_WARN ("Cannot unminimize invalid window: %lu", window);
+        return GF_ERROR_PLATFORM_ERROR;
+    }
+
+    XMapWindow (display, window);
+    XRaiseWindow (display, window);
+    XFlush (display);
+    return GF_SUCCESS;
+}
+
+void
+gf_x11_get_window_name (gf_display_t dpy, gf_native_window_t win, char *buffer,
+                        size_t bufsize)
+{
+    if (!dpy || win == None || !buffer || bufsize == 0)
+        return;
+
+    buffer[0] = '\0'; // default empty
+
+    gf_x11_atoms_t *atoms = gf_x11_atoms_get_global ();
+    if (!atoms)
+        return;
+
+    Atom actual;
+    int format;
+    unsigned long nitems, bytes_after;
+    unsigned char *data = NULL;
+
+    if (XGetWindowProperty (dpy, win, atoms->net_wm_name, 0, (~0L), False,
+                            atoms->utf8_string, &actual, &format, &nitems, &bytes_after,
+                            &data)
+            == Success
+        && data && nitems > 0)
+    {
+        strncpy (buffer, (char *)data, bufsize - 1);
+        buffer[bufsize - 1] = '\0';
+        XFree (data);
+        return;
+    }
+
+    if (data)
+        XFree (data);
+
+    char *legacy_name = NULL;
+    if (XFetchName (dpy, win, &legacy_name) > 0 && legacy_name)
+    {
+        strncpy (buffer, legacy_name, bufsize - 1);
+        buffer[bufsize - 1] = '\0';
+        XFree (legacy_name);
+        return;
+    }
+
+    buffer[0] = '\0';
 }
