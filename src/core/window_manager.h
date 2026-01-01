@@ -47,20 +47,7 @@ void gf_window_manager_print_stats (const gf_window_manager_t *manager);
 gf_error_code_t gf_window_manager_swap (gf_window_manager_t *manager,
                                         const gf_window_info_t *src_copy,
                                         const gf_window_info_t *dst_copy);
-static gf_error_code_t gf_window_manager_calculate_layout (gf_window_manager_t *manager,
-                                                           gf_window_info_t *windows,
-                                                           uint32_t window_count,
-                                                           gf_rect_t **out_geometries);
-static void gf_window_manager_apply_layout (gf_window_manager_t *manager,
-                                            gf_window_info_t *windows,
-                                            gf_rect_t *geometry, uint32_t window_count);
-
-static void gf_window_manager_unmaximize_all (gf_window_manager_t *manager,
-                                              gf_window_info_t *windows,
-                                              uint32_t window_count);
-static gf_error_code_t gf_window_manager_arrange_overflow (gf_window_manager_t *manager);
-static void gf_window_manager_watch (gf_window_manager_t *manager);
-gf_error_code_t gf_window_manager_drag (gf_window_manager_t *manager);
 void gf_window_manager_load_cfg (gf_window_manager_t *manager);
 void gf_window_manager_event (gf_window_manager_t *manager);
+
 #endif // GF_CORE_WINDOW_MANAGER_H
