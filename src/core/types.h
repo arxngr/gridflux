@@ -73,7 +73,6 @@ typedef struct
     gf_dimension_t width, height;
 } gf_rect_t;
 
-// Window information
 typedef struct
 {
     gf_window_id_t id;
@@ -93,7 +92,6 @@ typedef struct
     uint32_t window_count;
     uint32_t max_windows;
     int32_t available_space;
-    gf_rect_t bounds;
 } gf_workspace_info_t;
 
 // Geometry flags

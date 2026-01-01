@@ -2,7 +2,6 @@
 #include "../core/logger.h"
 #include "memory.h"
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 void
@@ -227,4 +226,176 @@ gf_window_list_get_by_workspace (const gf_window_list_t *list,
     }
 
     return GF_SUCCESS;
+}
+
+gf_error_code_t
+gf_window_list_init (gf_window_list_t *list, uint32_t initial_capacity)
+{
+    if (!list)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    list->items = gf_calloc (initial_capacity, sizeof (gf_window_info_t));
+    if (!list->items)
+        return GF_ERROR_MEMORY_ALLOCATION;
+
+    list->count = 0;
+    list->capacity = initial_capacity;
+    return GF_SUCCESS;
+}
+
+void
+gf_workspace_list_cleanup (gf_workspace_list_t *list)
+{
+    if (!list)
+        return;
+
+    gf_free (list->items);
+    list->items = NULL;
+    list->count = 0;
+    list->capacity = 0;
+}
+
+gf_error_code_t
+gf_workspace_list_add (gf_workspace_list_t *list, const gf_workspace_info_t *workspace)
+{
+    if (!list || !workspace)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    // Check if workspace already exists
+    if (gf_workspace_list_find (list, workspace->id))
+    {
+        return GF_SUCCESS;
+    }
+
+    if (list->count >= list->capacity)
+    {
+        uint32_t new_capacity = list->capacity * 2;
+        gf_workspace_info_t *new_items
+            = gf_realloc (list->items, new_capacity * sizeof (gf_workspace_info_t));
+        if (!new_items)
+            return GF_ERROR_MEMORY_ALLOCATION;
+
+        list->items = new_items;
+        list->capacity = new_capacity;
+    }
+
+    list->items[list->count] = *workspace;
+    list->count++;
+
+    return GF_SUCCESS;
+}
+
+gf_workspace_info_t *
+gf_workspace_list_find (const gf_workspace_list_t *list, gf_workspace_id_t workspace_id)
+{
+    if (!list)
+        return NULL;
+
+    for (uint32_t i = 0; i < list->count; i++)
+    {
+        if (list->items[i].id == workspace_id)
+        {
+            return &list->items[i];
+        }
+    }
+
+    return NULL;
+}
+
+gf_error_code_t
+gf_workspace_list_init (gf_workspace_list_t *list, uint32_t initial_capacity)
+{
+    if (!list || initial_capacity == 0)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    list->items = gf_calloc (initial_capacity, sizeof (gf_workspace_info_t));
+    if (!list->items)
+        return GF_ERROR_MEMORY_ALLOCATION;
+
+    list->count = 0;
+    list->capacity = initial_capacity;
+
+    return GF_SUCCESS;
+}
+
+gf_workspace_info_t *
+gf_workspace_list_get_current (gf_workspace_list_t *ws)
+{
+    if (!ws)
+        return NULL;
+
+    return gf_workspace_list_find (ws, ws->active_workspace);
+}
+
+uint32_t
+gf_workspace_list_calc_required_workspaces (uint32_t total_windows,
+                                            uint32_t current_workspaces,
+                                            uint32_t max_per_workspace)
+{
+    uint32_t capacity = current_workspaces * max_per_workspace;
+
+    if (total_windows <= capacity)
+        return 0;
+
+    uint32_t overflow = total_windows - capacity;
+
+    return (overflow + max_per_workspace - 1) / max_per_workspace;
+}
+
+gf_workspace_id_t
+gf_workspace_list_find_free (gf_workspace_list_t *ws, uint32_t max_win_per_ws)
+{
+    if (!ws)
+        return -1;
+
+    for (uint32_t i = 0; i < ws->count; i++)
+    {
+        gf_workspace_info_t *info = &ws->items[i];
+        if (info->available_space > 0)
+            return info->id;
+    }
+
+    gf_workspace_info_t info = { .id = ws->count,
+                                 .window_count = 0,
+                                 .max_windows = max_win_per_ws,
+                                 .available_space = max_win_per_ws };
+
+    gf_workspace_list_add (ws, &info);
+    return info.id;
+}
+
+void
+gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
+                          uint32_t max_per_ws)
+{
+    if (!ws)
+        return;
+
+    while (ws->count <= ws_id)
+    {
+        gf_workspace_info_t info = { .id = ws->count,
+                                     .window_count = 0,
+                                     .max_windows = max_per_ws,
+                                     .available_space = max_per_ws };
+
+        gf_workspace_list_add (ws, &info);
+    }
+}
+
+void
+gf_workspace_list_rebuild_stats (gf_workspace_list_t *ws, const gf_window_list_t *windows)
+{
+    if (!ws || !windows)
+        return;
+
+    for (uint32_t i = 0; i < ws->count; i++)
+    {
+        gf_workspace_info_t *info = &ws->items[i];
+
+        info->window_count = gf_window_list_count_by_workspace (windows, info->id);
+
+        int32_t avail = (int32_t)info->max_windows - (int32_t)info->window_count;
+
+        info->available_space = (avail < 0) ? 0 : avail;
+    }
 }

@@ -1,9 +1,9 @@
-#include "../../core/geometry.h"
+#include "platform.h"
 #include "../../core/logger.h"
 #include "../../core/types.h"
 #include "../../utils/memory.h"
 #include "backend.h"
-#include "platform.h"
+#include "core/layout.h"
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <limits.h>

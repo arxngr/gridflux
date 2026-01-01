@@ -10,8 +10,6 @@
 #endif
 
 typedef struct gf_platform_interface gf_platform_interface_t;
-typedef struct gf_geometry_calculator gf_geometry_calculator_t;
-typedef struct gf_window_filter gf_window_filter_t;
 
 struct gf_platform_interface
 {
@@ -46,23 +44,6 @@ struct gf_platform_interface
                               size_t bufsize);
 
     void *platform_data;
-};
-
-struct gf_geometry_calculator
-{
-    void (*calculate_layout) (const struct gf_geometry_calculator *calc,
-                              const gf_window_info_t *windows, uint32_t count,
-                              const gf_rect_t *workspace_bounds, gf_rect_t *results);
-    void (*set_padding) (struct gf_geometry_calculator *calc, uint32_t padding);
-    void (*set_min_size) (struct gf_geometry_calculator *calc, uint32_t min_size);
-    const gf_config_t *config;
-    void *calculator_data;
-};
-
-struct gf_window_filter
-{
-    bool (*should_manage) (const gf_window_info_t *window);
-    void *filter_data;
 };
 
 gf_platform_interface_t *gf_platform_create (void);
