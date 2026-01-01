@@ -1,13 +1,13 @@
 #include <X11/Xlib.h>
-#ifdef GF_PLATFORM_X11
+#ifdef __linux__
 #include "../../core/logger.h"
-#include "x11_atoms.h"
+#include "atoms.h"
 #include <X11/Xatom.h>
 
-static gf_x11_atoms_t g_atoms = { 0 };
+static gf_platform_atoms_t g_atoms = { 0 };
 
 gf_error_code_t
-gf_x11_atoms_init (Display *display, gf_x11_atoms_t *atoms)
+gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
 {
     if (!display || !atoms)
         return GF_ERROR_INVALID_PARAMETER;
@@ -75,13 +75,14 @@ gf_x11_atoms_init (Display *display, gf_x11_atoms_t *atoms)
     atoms->utf8_string = XInternAtom (display, "UTF8_STRING", False);
 
     g_atoms = *atoms;
-    GF_LOG_DEBUG ("X11 atoms initialized successfully");
+    GF_LOG_DEBUG ("Platform atoms initialized successfully");
     return GF_SUCCESS;
 }
 
-gf_x11_atoms_t *
-gf_x11_atoms_get_global (void)
+gf_platform_atoms_t *
+gf_platform_atoms_get_global (void)
 {
     return &g_atoms;
 }
-#endif // GF_PLATFORM_X11
+#endif // __linux__
+

@@ -29,17 +29,15 @@ file(GLOB_RECURSE COMMON_SOURCES
 
 # Platform-specific configuration
 if(UNIX AND NOT APPLE)
-    # Linux/X11
+    # Linux
     find_package(X11 REQUIRED)
     
     # Check for D-Bus (for KWin backend)
     pkg_check_modules(DBUS dbus-1)
     
-    add_definitions(-DGF_PLATFORM_X11)
-    
-    # Collect X11 platform sources
+    # Collect Linux platform sources
     file(GLOB_RECURSE PLATFORM_SOURCES
-        "${CMAKE_SOURCE_DIR}/src/platform/x11/*.c"
+        "${CMAKE_SOURCE_DIR}/src/platform/linux/*.c"
         "${CMAKE_SOURCE_DIR}/src/platform/platform_env.c"
     )
     
@@ -47,7 +45,7 @@ if(UNIX AND NOT APPLE)
     if(DBUS_FOUND)
         message(STATUS "D-Bus found - KWin backend will be available")
         file(GLOB_RECURSE KWIN_SOURCES
-            "${CMAKE_SOURCE_DIR}/src/platform/kwin/*.c"
+            "${CMAKE_SOURCE_DIR}/src/platform/linux/kwin/*.c"
         )
         list(APPEND PLATFORM_SOURCES ${KWIN_SOURCES})
         add_definitions(-DGF_KWIN_SUPPORT)
@@ -66,7 +64,7 @@ if(UNIX AND NOT APPLE)
         # Install KWin QML script (only in production mode)
         if(NOT GF_DEV_MODE)
             install(FILES 
-                "${CMAKE_SOURCE_DIR}/src/platform/kwin/kwin_tiler.qml"
+                "${CMAKE_SOURCE_DIR}/src/platform/linux/kwin/main.qml"
                 DESTINATION share/gridflux
                 PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
             )
@@ -89,15 +87,13 @@ if(UNIX AND NOT APPLE)
     
 elseif(WIN32)
     # Windows
-    add_definitions(-DGF_PLATFORM_WIN32)
-    file(GLOB PLATFORM_SOURCES "src/platform/win32/*.c")
+    file(GLOB PLATFORM_SOURCES "src/platform/windows/*.c")
     set(PLATFORM_LIBRARIES user32 gdi32 kernel32 ${JSONC_LIBRARIES})
     
     set(CPACK_GENERATOR "NSIS;ZIP")
     
 elseif(APPLE)
     # macOS
-    add_definitions(-DGF_PLATFORM_MACOS)
     file(GLOB PLATFORM_SOURCES "src/platform/macos/*.c")
     find_library(COCOA_FRAMEWORK Cocoa)
     set(PLATFORM_LIBRARIES ${COCOA_FRAMEWORK} ${JSONC_LIBRARIES})
@@ -170,7 +166,7 @@ message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Development mode: ${GF_DEV_MODE}")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
 if(UNIX AND NOT APPLE)
-    message(STATUS "  X11 support: YES")
+    message(STATUS "  Linux support: YES")
     if(DBUS_FOUND)
         message(STATUS "  KWin backend: YES")
         message(STATUS "  D-Bus version: ${DBUS_VERSION}")

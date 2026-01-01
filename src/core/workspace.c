@@ -3,6 +3,7 @@
 #include "../utils/memory.h"
 #include "../utils/workspace.h"
 #include "logger.h"
+#include <stdint.h>
 
 gf_error_code_t
 gf_workspace_manager_create (gf_workspace_manager_t **manager)
@@ -58,4 +59,60 @@ gf_workspace_manager_calc_required_workspaces (uint32_t total_windows,
     uint32_t overflow = total_windows - capacity;
 
     return (overflow + max_per_workspace - 1) / max_per_workspace;
+}
+
+gf_workspace_id_t
+gf_workspace_manager_find_free (gf_workspace_manager_t *manager, uint32_t max_win_per_ws)
+{
+    for (uint32_t i = 0; i < manager->workspaces.count; i++)
+    {
+        gf_workspace_info_t *ws = &manager->workspaces.items[i];
+        if (ws->available_space > 0)
+            return ws->id;
+    }
+
+    gf_workspace_info_t ws = { .id = manager->workspaces.count,
+                               .window_count = 0,
+                               .max_windows = max_win_per_ws,
+                               .available_space = max_win_per_ws };
+
+    gf_workspace_list_add (&manager->workspaces, &ws);
+    return ws.id;
+}
+
+void
+gf_workspace_manager_ensure (gf_workspace_manager_t *wmgr, gf_workspace_id_t ws_id,
+                             uint32_t max_per_ws)
+{
+    if (!wmgr)
+        return;
+
+    while (wmgr->workspaces.count <= ws_id)
+    {
+        gf_workspace_info_t ws = { .id = wmgr->workspaces.count,
+                                   .window_count = 0,
+                                   .max_windows = max_per_ws,
+                                   .available_space = max_per_ws };
+
+        gf_workspace_list_add (&wmgr->workspaces, &ws);
+    }
+}
+
+void
+gf_workspace_manager_rebuild_stats (gf_workspace_manager_t *wmgr,
+                                    const gf_window_list_t *windows)
+{
+    if (!wmgr || !windows)
+        return;
+
+    for (uint32_t i = 0; i < wmgr->workspaces.count; i++)
+    {
+        gf_workspace_info_t *ws = &wmgr->workspaces.items[i];
+
+        ws->window_count = gf_window_list_count_by_workspace (windows, ws->id);
+
+        int32_t avail = (int32_t)ws->max_windows - (int32_t)ws->window_count;
+
+        ws->available_space = (avail < 0) ? 0 : avail;
+    }
 }

@@ -1,8 +1,8 @@
-#include "kwin_backend.h"
-#include "../../core/logger.h"
-#include "../../utils/file.h"
-#include "core/types.h"
-#include "platform/x11/x11_window_manager.h"
+#include "../backend.h"
+#include "../platform.h"
+#include "../../../core/logger.h"
+#include "../../../utils/file.h"
+#include "../../../core/types.h"
 
 #include <dbus/dbus.h>
 #include <errno.h>
@@ -90,7 +90,7 @@ out:
 gf_error_code_t
 gf_kwin_platform_init (gf_platform_interface_t *platform)
 {
-    gf_x11_platform_data_t *data;
+    gf_linux_platform_data_t *data;
     DBusError error;
     char *script_path = NULL;
     int ret = -1;
@@ -105,7 +105,7 @@ gf_kwin_platform_init (gf_platform_interface_t *platform)
         return GF_ERROR_PLATFORM_ERROR;
     }
 
-    data = (gf_x11_platform_data_t *)platform->platform_data;
+    data = (gf_linux_platform_data_t *)platform->platform_data;
     data->kwin_dbus_conn = NULL;
     data->kwin_script_name = NULL;
 
@@ -233,12 +233,12 @@ fail:
 void
 gf_kwin_platform_cleanup (gf_platform_interface_t *platform)
 {
-    gf_x11_platform_data_t *data;
+    gf_linux_platform_data_t *data;
 
     if (!platform || !platform->platform_data)
         return;
 
-    data = (gf_x11_platform_data_t *)platform->platform_data;
+    data = (gf_linux_platform_data_t *)platform->platform_data;
 
     if (data->kwin_dbus_conn && data->kwin_script_name)
     {

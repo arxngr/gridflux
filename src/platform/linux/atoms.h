@@ -1,10 +1,10 @@
-#ifndef GF_PLATFORM_X11_ATOMS_H
-#define GF_PLATFORM_X11_ATOMS_H
-#ifdef GF_PLATFORM_X11
+#ifndef GF_PLATFORM_LINUX_ATOMS_H
+#define GF_PLATFORM_LINUX_ATOMS_H
+#ifdef __linux__
 #include "../../core/types.h"
 #include <X11/Xlib.h>
 
-// X11 specific atoms
+// Platform atoms
 typedef struct
 {
     Atom net_active_window;
@@ -46,11 +46,12 @@ typedef struct
     Atom net_wm_pid;
     Atom net_wm_name;
     Atom utf8_string;
-} gf_x11_atoms_t;
+} gf_platform_atoms_t;
 
-// X11 atoms management
-gf_error_code_t gf_x11_atoms_init (Display *display, gf_x11_atoms_t *atoms);
-gf_x11_atoms_t *gf_x11_atoms_get_global (void);
+// Atoms management
+gf_error_code_t gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms);
+gf_platform_atoms_t *gf_platform_atoms_get_global (void);
 
-#endif // GF_PLATFORM_X11
-#endif // GF_PLATFORM_X11_ATOMS_H
+#endif // __linux__
+#endif // GF_PLATFORM_LINUX_ATOMS_H
+

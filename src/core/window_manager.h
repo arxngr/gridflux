@@ -5,7 +5,7 @@
 
 #include "../utils/list.h"
 #include "core/config.h"
-#include "interfaces.h"
+#include "../platform/platform.h"
 #include "workspace.h"
 
 // Main window manager state

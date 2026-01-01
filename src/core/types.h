@@ -16,9 +16,6 @@ typedef uint32_t gf_dimension_t;
 #include <X11/Xlib.h>
 typedef Window gf_native_window_t;
 typedef Display *gf_display_t;
-#ifndef GF_PLATFORM_X11
-#define GF_PLATFORM_X11
-#endif
 #ifndef GF_SESSION_TYPE
 #define GF_SESSION_TYPE "x11"
 #endif

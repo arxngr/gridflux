@@ -1,6 +1,6 @@
 #ifndef GF_CORE_GEOMETRY_H
 #define GF_CORE_GEOMETRY_H
-#include "interfaces.h"
+#include "../platform/platform.h"
 
 gf_geometry_calculator_t *gf_bsp_geometry_calculator_create (const gf_config_t *config);
 void gf_bsp_geometry_calculator_destroy (gf_geometry_calculator_t *calc);
