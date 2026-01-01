@@ -1,4 +1,5 @@
-#pragma once
+#ifndef GF_INTERNAL_H
+#define GF_INTERNAL_H
 
 #include "window_manager.h"
 
@@ -45,3 +46,5 @@ wm_is_excluded (gf_window_manager_t *m, gf_native_window_t w)
     gf_platform_interface_t *p = wm_platform (m);
     return p->is_window_excluded && p->is_window_excluded (*wm_display (m), w);
 }
+
+#endif
