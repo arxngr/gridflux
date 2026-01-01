@@ -21,7 +21,7 @@ pkg_check_modules(JSONC REQUIRED json-c)
 include_directories(src ${JSONC_INCLUDE_DIRS})
 
 # Automatically collect common source files
-file(GLOB_RECURSE COMMON_SOURCES
+file(GLOB_RECURSE COMMON_SOURCES CONFIGURE_DEPENDS
     "src/core/*.c"
     "src/utils/*.c"
     "src/main.c"
@@ -36,7 +36,7 @@ if(UNIX AND NOT APPLE)
     pkg_check_modules(DBUS dbus-1)
     
     # Collect Linux platform sources
-    file(GLOB_RECURSE PLATFORM_SOURCES
+    file(GLOB_RECURSE PLATFORM_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_SOURCE_DIR}/src/platform/linux/*.c"
         "${CMAKE_SOURCE_DIR}/src/platform/platform_env.c"
     )
@@ -44,7 +44,7 @@ if(UNIX AND NOT APPLE)
     # Add KWin backend if D-Bus is available
     if(DBUS_FOUND)
         message(STATUS "D-Bus found - KWin backend will be available")
-        file(GLOB_RECURSE KWIN_SOURCES
+        file(GLOB_RECURSE KWIN_SOURCES CONFIGURE_DEPENDS
             "${CMAKE_SOURCE_DIR}/src/platform/linux/kwin/*.c"
         )
         list(APPEND PLATFORM_SOURCES ${KWIN_SOURCES})

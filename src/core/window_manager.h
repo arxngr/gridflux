@@ -3,23 +3,20 @@
 
 #define GLOB_CFG "config.json"
 
+#include "../platform/platform.h"
 #include "../utils/list.h"
 #include "core/config.h"
-#include "../platform/platform.h"
-#include "workspace.h"
 
-// Main window manager state
 typedef struct
 {
     gf_window_list_t windows;
-    gf_workspace_manager_t *workspace_manager;
+    gf_workspace_list_t workspaces;
     time_t last_scan_time;
     time_t last_cleanup_time;
     uint32_t loop_counter;
     bool initialized;
 } gf_window_manager_state_t;
 
-// Window manager structure
 typedef struct
 {
     gf_window_manager_state_t state;
