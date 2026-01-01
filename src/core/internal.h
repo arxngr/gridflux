@@ -1,6 +1,7 @@
 #ifndef GF_INTERNAL_H
 #define GF_INTERNAL_H
 
+#include "core/layout.h"
 #include "window_manager.h"
 
 static inline gf_platform_interface_t *
@@ -27,10 +28,10 @@ wm_workspaces (gf_window_manager_t *m)
     return &m->state.workspaces;
 }
 
-static inline gf_geometry_calculator_t *
+static inline gf_layout_engine_t *
 wm_geometry (gf_window_manager_t *m)
 {
-    return m->geometry_calc;
+    return m->layout;
 }
 
 static inline bool

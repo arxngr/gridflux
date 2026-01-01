@@ -1,6 +1,7 @@
 #ifndef GF_CORE_WINDOW_MANAGER_H
 #define GF_CORE_WINDOW_MANAGER_H
 
+#include "core/layout.h"
 #define GLOB_CFG "config.json"
 
 #include "../platform/platform.h"
@@ -21,15 +22,14 @@ typedef struct
 {
     gf_window_manager_state_t state;
     gf_platform_interface_t *platform;
-    gf_geometry_calculator_t *geometry_calc;
-    gf_window_filter_t *window_filter;
+    gf_layout_engine_t *layout;
     gf_display_t display;
     gf_config_t *config;
 } gf_window_manager_t;
 
 gf_error_code_t gf_window_manager_create (gf_window_manager_t **manager,
                                           gf_platform_interface_t *platform,
-                                          gf_geometry_calculator_t *geometry_calc);
+                                          gf_layout_engine_t *layout);
 void gf_window_manager_destroy (gf_window_manager_t *manager);
 
 gf_error_code_t gf_window_manager_init (gf_window_manager_t *manager);

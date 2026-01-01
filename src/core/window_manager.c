@@ -2,6 +2,7 @@
 #include "../utils/list.h"
 #include "../utils/memory.h"
 #include "config.h"
+#include "core/layout.h"
 #include "internal.h"
 #include "logger.h"
 #include "types.h"
@@ -25,10 +26,9 @@ static void gf_window_manager_watch (gf_window_manager_t *m);
 
 gf_error_code_t
 gf_window_manager_create (gf_window_manager_t **manager,
-                          gf_platform_interface_t *platform,
-                          gf_geometry_calculator_t *geometry_calc)
+                          gf_platform_interface_t *platform, gf_layout_engine_t *layout)
 {
-    if (!manager || !platform || !geometry_calc)
+    if (!manager || !platform || !layout)
         return GF_ERROR_INVALID_PARAMETER;
 
     *manager = gf_calloc (1, sizeof (**manager));
@@ -36,7 +36,7 @@ gf_window_manager_create (gf_window_manager_t **manager,
         return GF_ERROR_MEMORY_ALLOCATION;
 
     (*manager)->platform = platform;
-    (*manager)->geometry_calc = geometry_calc;
+    (*manager)->layout = layout;
 
     if (gf_window_list_init (wm_windows (*manager), 16) != GF_SUCCESS)
         goto fail;
@@ -310,8 +310,8 @@ gf_window_manager_calculate_layout (gf_window_manager_t *m, gf_window_info_t *wi
         return GF_ERROR_MEMORY_ALLOCATION;
     }
 
-    wm_geometry (m)->calculate_layout (wm_geometry (m), windows, window_count,
-                                       &workspace_bounds, new_geometries);
+    wm_geometry (m)->apply_layout (wm_geometry (m), windows, window_count,
+                                   &workspace_bounds, new_geometries);
 
     *out_geometries = new_geometries;
     return GF_SUCCESS;

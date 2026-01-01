@@ -1,5 +1,5 @@
 #include "core/config.h"
-#include "core/geometry.h"
+#include "core/layout.h"
 #include "core/logger.h"
 #include "core/window_manager.h"
 #include "platform/platform.h"
@@ -34,7 +34,7 @@ main ()
     signal (SIGTERM, signal_handler);
 
     gf_platform_interface_t *platform = NULL;
-    gf_geometry_calculator_t *geometry_calc = NULL;
+    gf_layout_engine_t *layout = NULL;
     gf_config_t *config = NULL;
 
     GF_LOG_INFO ("Starting GridFlux Window Manager v2.0");
@@ -74,15 +74,14 @@ main ()
         return 1;
     }
 
-    geometry_calc = gf_bsp_geometry_calculator_create (config);
-    if (!geometry_calc)
+    layout = gf_layout_engine_create (config);
+    if (!layout)
     {
         GF_LOG_ERROR ("Failed to create geometry calculator");
         goto cleanup;
     }
 
-    gf_error_code_t result
-        = gf_window_manager_create (&g_manager, platform, geometry_calc);
+    gf_error_code_t result = gf_window_manager_create (&g_manager, platform, layout);
     if (result != GF_SUCCESS)
     {
         GF_LOG_ERROR ("Failed to create window manager: %d", result);
@@ -113,9 +112,9 @@ cleanup:
         gf_free (config);
     }
 
-    if (geometry_calc)
+    if (layout)
     {
-        gf_bsp_geometry_calculator_destroy (geometry_calc);
+        gf_layout_engine_destroy (layout);
     }
 
 #ifdef __linux__
