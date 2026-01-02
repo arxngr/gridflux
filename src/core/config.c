@@ -2,6 +2,7 @@
 #include "core/logger.h"
 #include "types.h"
 #include <json-c/json.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +15,8 @@ static const gf_config_t DEFAULT_CONFIG
     = { .max_windows_per_workspace = GF_MAX_WINDOWS_PER_WORKSPACE,
         .max_workspaces = GF_MAX_WORKSPACES,
         .default_padding = GF_DEFAULT_PADDING,
-        .min_window_size = GF_MIN_WINDOW_SIZE };
+        .min_window_size = GF_MIN_WINDOW_SIZE,
+        .locked_workspace_count = 0 };
 
 const char *
 gf_config_get_path (void)
@@ -104,6 +106,13 @@ save_config (const char *filename, const gf_config_t *cfg)
     json_object_object_add (json, "min_window_size",
                             json_object_new_int (cfg->min_window_size));
 
+    struct json_object *arr = json_object_new_array ();
+    for (uint32_t i = 0; i < cfg->locked_workspace_count; i++)
+    {
+        json_object_array_add (arr, json_object_new_int (cfg->locked_workspaces[i]));
+    }
+    json_object_object_add (json, "locked_workspaces", arr);
+
     const char *out = json_object_to_json_string_ext (json, JSON_C_TO_STRING_PRETTY);
     write_file (filename, out);
 
@@ -119,15 +128,33 @@ gf_config_has_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
     return (old_cfg->max_windows_per_workspace != new_cfg->max_windows_per_workspace
             || old_cfg->max_workspaces != new_cfg->max_workspaces
             || old_cfg->default_padding != new_cfg->default_padding
-            || old_cfg->min_window_size != new_cfg->min_window_size);
+            || old_cfg->min_window_size != new_cfg->min_window_size
+            || old_cfg->locked_workspace_count != new_cfg->locked_workspace_count);
+}
+
+static void
+set_if_missing_int (struct json_object *json, const char *key, uint32_t *target,
+                    int default_val, bool *changed)
+{
+    struct json_object *obj = NULL;
+    if (!json_object_object_get_ex (json, key, &obj))
+    {
+        *target = default_val;
+        *changed = true;
+    }
+    else
+    {
+        *target = json_object_get_int (obj);
+    }
 }
 
 gf_config_t
 load_or_create_config (const char *filename)
 {
     gf_config_t cfg = DEFAULT_CONFIG;
-    char *data = read_file (filename);
+    bool changed = false;
 
+    char *data = read_file (filename);
     if (!data)
     {
         save_config (filename, &cfg);
@@ -143,20 +170,69 @@ load_or_create_config (const char *filename)
         return cfg;
     }
 
-    struct json_object *obj;
+    set_if_missing_int (json, "max_windows_per_workspace", &cfg.max_windows_per_workspace,
+                        DEFAULT_CONFIG.max_windows_per_workspace, &changed);
 
-    if (json_object_object_get_ex (json, "max_windows_per_workspace", &obj))
-        cfg.max_windows_per_workspace = json_object_get_int (obj);
+    set_if_missing_int (json, "max_workspaces", &cfg.max_workspaces,
+                        DEFAULT_CONFIG.max_workspaces, &changed);
 
-    if (json_object_object_get_ex (json, "max_workspaces", &obj))
-        cfg.max_workspaces = json_object_get_int (obj);
+    set_if_missing_int (json, "default_padding", &cfg.default_padding,
+                        DEFAULT_CONFIG.default_padding, &changed);
 
-    if (json_object_object_get_ex (json, "default_padding", &obj))
-        cfg.default_padding = json_object_get_int (obj);
+    set_if_missing_int (json, "min_window_size", &cfg.min_window_size,
+                        DEFAULT_CONFIG.min_window_size, &changed);
 
-    if (json_object_object_get_ex (json, "min_window_size", &obj))
-        cfg.min_window_size = json_object_get_int (obj);
+    struct json_object *arr_obj = NULL;
+    if (json_object_object_get_ex (json, "locked_workspaces", &arr_obj)
+        && json_object_is_type (arr_obj, json_type_array))
+    {
+        size_t len = json_object_array_length (arr_obj);
+        cfg.locked_workspace_count = 0;
+
+        if (len > cfg.max_workspaces)
+            changed = true; // truncated
+
+        for (size_t i = 0; i < len && cfg.locked_workspace_count < cfg.max_workspaces;
+             i++)
+        {
+            int ws = json_object_get_int (json_object_array_get_idx (arr_obj, i));
+
+            if (ws < 0 || ws >= cfg.max_workspaces)
+            {
+                changed = true;
+                continue;
+            }
+
+            cfg.locked_workspaces[cfg.locked_workspace_count++] = ws;
+        }
+    }
+    else
+    {
+        cfg.locked_workspace_count = 0;
+        changed = true;
+    }
 
     json_object_put (json);
+
+    if (changed)
+    {
+        GF_LOG_INFO ("Config upgraded with missing fields");
+        save_config (filename, &cfg);
+    }
+
     return cfg;
+}
+
+bool
+gf_config_is_workspace_locked (const gf_config_t *cfg, gf_workspace_id_t ws)
+{
+    if (!cfg || ws < 0 || ws >= (gf_workspace_id_t)cfg->max_workspaces)
+        return false;
+
+    for (uint32_t i = 0; i < cfg->locked_workspace_count; i++)
+    {
+        if (cfg->locked_workspaces[i] == (uint32_t)ws)
+            return true;
+    }
+    return false;
 }

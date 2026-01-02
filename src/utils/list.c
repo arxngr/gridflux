@@ -1,6 +1,8 @@
 #include "list.h"
 #include "../core/logger.h"
+#include "core/config.h"
 #include "memory.h"
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -351,16 +353,19 @@ gf_workspace_list_find_free (gf_workspace_list_t *ws, uint32_t max_win_per_ws)
     for (uint32_t i = 0; i < ws->count; i++)
     {
         gf_workspace_info_t *info = &ws->items[i];
-        if (info->available_space > 0)
+        if (info->available_space > 0 && !info->is_locked)
             return info->id;
     }
 
     gf_workspace_info_t info = { .id = ws->count,
                                  .window_count = 0,
                                  .max_windows = max_win_per_ws,
-                                 .available_space = max_win_per_ws };
+                                 .available_space = max_win_per_ws,
+                                 .is_locked = false };
 
     gf_workspace_list_add (ws, &info);
+    GF_LOG_INFO ("Created a new workspace id %u from find free", info.id);
+
     return info.id;
 }
 
@@ -373,29 +378,15 @@ gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
 
     while (ws->count <= ws_id)
     {
-        gf_workspace_info_t info = { .id = ws->count,
-                                     .window_count = 0,
-                                     .max_windows = max_per_ws,
-                                     .available_space = max_per_ws };
+        gf_workspace_info_t info = {
+            .id = ws->count,
+            .window_count = 0,
+            .max_windows = max_per_ws,
+            .available_space = max_per_ws,
+            .is_locked = false,
+        };
 
+        GF_LOG_INFO ("Created a new workspace id %u from ensure", info.id);
         gf_workspace_list_add (ws, &info);
-    }
-}
-
-void
-gf_workspace_list_rebuild_stats (gf_workspace_list_t *ws, const gf_window_list_t *windows)
-{
-    if (!ws || !windows)
-        return;
-
-    for (uint32_t i = 0; i < ws->count; i++)
-    {
-        gf_workspace_info_t *info = &ws->items[i];
-
-        info->window_count = gf_window_list_count_by_workspace (windows, info->id);
-
-        int32_t avail = (int32_t)info->max_windows - (int32_t)info->window_count;
-
-        info->available_space = (avail < 0) ? 0 : avail;
     }
 }

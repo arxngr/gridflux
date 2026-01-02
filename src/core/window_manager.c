@@ -11,18 +11,122 @@
 #include <stdio.h>
 #include <unistd.h>
 
-static gf_error_code_t gf_window_manager_calculate_layout (gf_window_manager_t *m,
-                                                           gf_window_info_t *windows,
-                                                           uint32_t window_count,
-                                                           gf_rect_t **out_geometries);
-static void gf_window_manager_unmaximize_all (gf_window_manager_t *m,
-                                              gf_window_info_t *windows,
-                                              uint32_t window_count);
-static void gf_window_manager_apply_layout (gf_window_manager_t *m,
-                                            gf_window_info_t *windows,
-                                            gf_rect_t *geometry, uint32_t window_count);
-static gf_error_code_t gf_window_manager_arrange_overflow (gf_window_manager_t *m);
-static void gf_window_manager_watch (gf_window_manager_t *m);
+static gf_workspace_info_t *
+_get_workspace (gf_workspace_list_t *workspaces, gf_workspace_id_t id)
+{
+    if (!workspaces || id < 0 || id >= workspaces->count)
+        return NULL;
+    return &workspaces->items[id];
+}
+
+static bool
+_workspace_is_valid (gf_workspace_list_t *workspaces, gf_workspace_id_t id)
+{
+    return _get_workspace (workspaces, id) != NULL;
+}
+
+static bool
+_workspace_has_capacity (gf_workspace_info_t *ws, uint32_t max_per_ws)
+{
+    return !ws->is_locked && ws->window_count < max_per_ws;
+}
+
+static void
+_rebuild_workspace_stats (gf_workspace_list_t *workspaces, gf_window_list_t *windows,
+                          uint32_t max_per_ws)
+{
+    for (uint32_t i = 0; i < workspaces->count; i++)
+    {
+        workspaces->items[i].window_count = 0;
+        workspaces->items[i].available_space = max_per_ws;
+    }
+
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        if (windows->items[i].is_valid)
+        {
+            gf_workspace_id_t ws_id = windows->items[i].workspace_id;
+            if (_workspace_is_valid (workspaces, ws_id))
+            {
+                workspaces->items[ws_id].window_count++;
+                workspaces->items[ws_id].available_space--;
+            }
+        }
+    }
+}
+
+static bool
+_window_has_valid_workspace (gf_window_info_t *win, gf_workspace_list_t *workspaces)
+{
+    return win->workspace_id >= 0 && _workspace_is_valid (workspaces, win->workspace_id);
+}
+
+static void
+_get_window_name (const gf_window_manager_t *m, gf_native_window_t handle, char *buffer,
+                  size_t size)
+{
+    if (m->platform && m->platform->window_name_info)
+    {
+        m->platform->window_name_info (m->display, handle, buffer, size);
+    }
+    else
+    {
+        snprintf (buffer, size, "N/A");
+    }
+}
+
+static void
+_minimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list,
+                             uint32_t count)
+{
+    gf_platform_interface_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+        if (!wm_is_excluded (m, ws_list[i].native_handle))
+        {
+            platform->minimize_window (display, ws_list[i].native_handle);
+        }
+    }
+}
+
+static void
+_unminimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list,
+                               uint32_t count)
+{
+    gf_platform_interface_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+        gf_window_info_t *win = &ws_list[i];
+
+        if (wm_is_excluded (m, win->native_handle))
+        {
+            GF_LOG_DEBUG ("Skip unminimize (excluded): win=%lu ws=%u", win->native_handle,
+                          win->workspace_id);
+            continue;
+        }
+
+        platform->unminimize_window (display, win->native_handle);
+    }
+}
+
+static void
+_print_workspace_header (gf_workspace_id_t id, bool is_locked, uint32_t count,
+                         uint32_t max_windows, int32_t available)
+{
+    const char *lock_str = is_locked ? "LOCKED" : "unlocked";
+    GF_LOG_INFO ("Workspace %u (%s): %u/%u windows, %d available", id, lock_str, count,
+                 max_windows, available);
+}
+
+static void
+_print_window_info (uint32_t window_id, const char *name)
+{
+    GF_LOG_INFO ("  - [%u] %s", window_id, name);
+}
 
 gf_error_code_t
 gf_window_manager_create (gf_window_manager_t **manager,
@@ -81,6 +185,7 @@ gf_window_manager_init (gf_window_manager_t *m)
     m->state.initialized = true;
 
     GF_LOG_INFO ("Window manager initialized successfully");
+    gf_window_manager_print_stats (m);
     return GF_SUCCESS;
 }
 
@@ -165,21 +270,19 @@ gf_window_manager_cleanup_invalid_windows (gf_window_manager_t *m)
     }
 
     if (removed_windows > 0)
-    {
         GF_LOG_DEBUG ("Cleaned %u invalid/excluded windows", removed_windows);
-    }
 
+    // Update workspace window counts
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
-        gf_workspace_info_t *ws = &workspaces->items[i];
-
-        ws->window_count = gf_window_list_count_by_workspace (windows, ws->id);
+        workspaces->items[i].window_count
+            = gf_window_list_count_by_workspace (windows, workspaces->items[i].id);
     }
 
+    // Remove empty workspaces
     for (uint32_t i = 0; i < workspaces->count;)
     {
         gf_workspace_info_t *ws = &workspaces->items[i];
-
         bool is_active = (ws->id == workspaces->active_workspace);
         bool is_empty = (ws->window_count == 0);
         bool can_remove = (workspaces->count > 1);
@@ -194,7 +297,6 @@ gf_window_manager_cleanup_invalid_windows (gf_window_manager_t *m)
                 ws->available_space = 0;
                 ws->max_windows = 0;
                 ws->window_count = 0;
-
                 continue;
             }
             else
@@ -204,6 +306,26 @@ gf_window_manager_cleanup_invalid_windows (gf_window_manager_t *m)
         }
 
         i++;
+    }
+}
+
+static void
+gf_window_manager_sync_workspaces (gf_window_manager_t *m)
+{
+    gf_workspace_list_t *workspaces = wm_workspaces (m);
+    gf_platform_interface_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+    uint32_t platform_count = platform->get_workspace_count (display);
+    uint32_t max_per_ws = m->config->max_windows_per_workspace;
+
+    for (uint32_t i = 0; i < platform_count; i++)
+    {
+        gf_workspace_list_ensure (workspaces, i, max_per_ws);
+        gf_workspace_info_t *ws = &workspaces->items[i];
+
+        ws->is_locked = gf_config_is_workspace_locked (m->config, ws->id);
+        ws->available_space = ws->is_locked ? 0 : (max_per_ws - ws->window_count);
+        ws->max_windows = max_per_ws;
     }
 }
 
@@ -217,7 +339,6 @@ gf_window_manager_print_stats (const gf_window_manager_t *m)
     const gf_workspace_list_t *workspaces = &m->state.workspaces;
 
     uint32_t *workspace_counts = gf_calloc (m->config->max_workspaces, sizeof (uint32_t));
-
     if (!workspace_counts)
     {
         GF_LOG_ERROR ("Failed to allocate workspace_counts");
@@ -229,7 +350,6 @@ gf_window_manager_print_stats (const gf_window_manager_t *m)
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_workspace_id_t ws = windows->items[i].workspace_id;
-
         if (ws >= 0 && ws < m->config->max_workspaces)
         {
             workspace_counts[ws]++;
@@ -238,28 +358,28 @@ gf_window_manager_print_stats (const gf_window_manager_t *m)
         }
     }
 
-    GF_LOG_DEBUG ("Total windows: %u", windows->count);
-    GF_LOG_DEBUG ("Total workspaces: %u", workspaces->count);
+    GF_LOG_INFO ("=== Stats ===");
+    GF_LOG_INFO ("Total Windows: %u, Total Workspaces: %u", windows->count,
+                 workspaces->count);
+
     char win_name[256];
 
     for (gf_workspace_id_t i = 0; i <= max_workspace; i++)
     {
         uint32_t count = workspace_counts[i];
-        if (count == 0)
-            continue;
-
         uint32_t max_windows = 0;
         int32_t available = -1;
+        bool is_locked = false;
 
-        if (workspaces && i < workspaces->count)
+        gf_workspace_info_t *ws = _get_workspace ((gf_workspace_list_t *)workspaces, i);
+        if (ws)
         {
-            const gf_workspace_info_t *ws = &workspaces->items[i];
             max_windows = ws->max_windows;
             available = ws->available_space;
+            is_locked = ws->is_locked;
         }
 
-        GF_LOG_DEBUG ("WS %d | windows=%u max=%u available=%d", i, count, max_windows,
-                      available);
+        _print_workspace_header (i, is_locked, count, max_windows, available);
 
         for (uint32_t w = 0; w < windows->count; w++)
         {
@@ -268,18 +388,8 @@ gf_window_manager_print_stats (const gf_window_manager_t *m)
             if (win->workspace_id != i)
                 continue;
 
-            if (m->platform && m->platform->window_name_info)
-            {
-                m->platform->window_name_info (m->display, win->native_handle, win_name,
-                                               sizeof (win_name));
-            }
-            else
-            {
-                snprintf (win_name, sizeof (win_name), "N/A");
-            }
-
-            GF_LOG_DEBUG ("  Window %u -> WS %d | Name: %s", win->id, win->workspace_id,
-                          win_name);
+            _get_window_name (m, win->native_handle, win_name, sizeof (win_name));
+            _print_window_info (win->id, win_name);
         }
     }
 
@@ -300,15 +410,11 @@ gf_window_manager_calculate_layout (gf_window_manager_t *m, gf_window_info_t *wi
     gf_error_code_t result = platform->get_screen_bounds (display, &workspace_bounds);
 
     if (result != GF_SUCCESS)
-    {
         return GF_ERROR_DISPLAY_CONNECTION;
-    }
 
     gf_rect_t *new_geometries = gf_malloc (window_count * sizeof (gf_rect_t));
     if (!new_geometries)
-    {
         return GF_ERROR_MEMORY_ALLOCATION;
-    }
 
     wm_geometry (m)->apply_layout (wm_geometry (m), windows, window_count,
                                    &workspace_bounds, new_geometries);
@@ -322,15 +428,9 @@ gf_window_manager_assign_workspaces (gf_window_manager_t *m)
 {
     gf_workspace_list_t *workspaces = wm_workspaces (m);
     gf_window_list_t *windows = wm_windows (m);
-
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
 
-    /* Reset workspace list */
-    workspaces->count = 0;
-
-    uint32_t ws_id = 0;
-    uint32_t slot = 0;
-
+    // First pass: preserve existing workspace assignments
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_window_info_t *win = &windows->items[i];
@@ -338,32 +438,59 @@ gf_window_manager_assign_workspaces (gf_window_manager_t *m)
         if (!win->is_valid)
             continue;
 
+        if (_window_has_valid_workspace (win, workspaces))
+        {
+            gf_workspace_list_ensure (workspaces, win->workspace_id, max_per_ws);
+            continue;
+        }
+    }
+
+    // Second pass: assign windows without valid workspace
+    uint32_t ws_id = 0;
+    uint32_t slot = 0;
+
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        gf_window_info_t *win = &windows->items[i];
+
+        if (!win->is_valid || _window_has_valid_workspace (win, workspaces))
+            continue;
+
+        // Find next available unlocked workspace with space
+        while (ws_id < workspaces->count
+               && (workspaces->items[ws_id].is_locked || slot >= max_per_ws))
+        {
+            if (slot >= max_per_ws)
+            {
+                ws_id++;
+                slot = 0;
+            }
+            else
+            {
+                ws_id++;
+            }
+        }
+
+        // Create workspace if needed
+        gf_workspace_list_ensure (workspaces, ws_id, max_per_ws);
+
+        win->workspace_id = ws_id;
+        slot++;
+
         if (slot >= max_per_ws)
         {
             ws_id++;
             slot = 0;
         }
-
-        while (workspaces->count <= ws_id)
-        {
-            gf_workspace_info_t ws = { .id = workspaces->count,
-                                       .window_count = 0,
-                                       .max_windows = max_per_ws,
-                                       .available_space = max_per_ws };
-            gf_workspace_list_add (workspaces, &ws);
-        }
-
-        win->workspace_id = ws_id;
-
-        gf_workspace_info_t *ws = &workspaces->items[ws_id];
-        ws->window_count++;
-        ws->available_space--;
-
-        slot++;
     }
+
+    // Rebuild workspace stats
+    _rebuild_workspace_stats (workspaces, windows, max_per_ws);
 
     if (workspaces->active_workspace >= workspaces->count)
         workspaces->active_workspace = 0;
+
+    gf_window_manager_sync_workspaces (m);
 }
 
 gf_error_code_t
@@ -424,12 +551,9 @@ gf_error_code_t
 gf_window_manager_run (gf_window_manager_t *m)
 {
     if (!m || !m->state.initialized)
-    {
         return GF_ERROR_INVALID_PARAMETER;
-    }
 
     gf_window_list_t *windows = wm_windows (m);
-
     GF_LOG_INFO ("Window manager main loop started");
 
     time_t last_stats_time = time (NULL);
@@ -441,26 +565,17 @@ gf_window_manager_run (gf_window_manager_t *m)
 
         gf_window_manager_load_cfg (m);
         gf_window_manager_watch (m);
-        gf_window_manager_arrange_overflow (m);
         gf_window_manager_arrange_workspace (m);
+        gf_window_manager_arrange_overflow (m);
         gf_window_manager_event (m);
 
-        // Periodic statistics
-        if (current_time - last_stats_time >= 1)
-        {
-            gf_window_manager_print_stats (m);
-            last_stats_time = current_time;
-        }
-
-        // Periodic cleanup of invalid windows
         if (current_time - m->state.last_cleanup_time >= 1)
         {
             gf_window_manager_cleanup_invalid_windows (m);
             m->state.last_cleanup_time = current_time;
         }
 
-        // Adaptive sleep based on activity
-        uint32_t sleep_time = windows->count > 10 ? 100000 : 80000;
+        uint32_t sleep_time = windows->count > 10 ? 100000 : 50000;
         usleep (sleep_time);
     }
 
@@ -492,18 +607,15 @@ gf_window_manager_apply_layout (gf_window_manager_t *m, gf_window_info_t *window
         return;
 
     gf_window_list_t *window_list = wm_windows (m);
-
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
-
-    gf_error_code_t result;
 
     for (uint32_t i = 0; i < window_count; i++)
     {
         if (!windows[i].needs_update && !windows[i].is_valid)
             continue;
 
-        result = platform->set_window_geometry (
+        gf_error_code_t result = platform->set_window_geometry (
             display, windows[i].native_handle, &geometry[i],
             GF_GEOMETRY_CHANGE_ALL | GF_GEOMETRY_APPLY_PADDING, m->config);
 
@@ -512,9 +624,9 @@ gf_window_manager_apply_layout (gf_window_manager_t *m, gf_window_info_t *window
             GF_LOG_WARN ("Failed to set geometry for window %llu",
                          (unsigned long long)windows[i].id);
         }
+
         gf_window_manager_update_window_info (m, windows[i].native_handle,
                                               windows[i].workspace_id);
-
         gf_window_list_clear_update_flags (window_list, windows[i].workspace_id);
     }
 }
@@ -529,7 +641,6 @@ gf_window_manager_swap (gf_window_manager_t *m, const gf_window_info_t *src_copy
     gf_window_list_t *list = wm_windows (m);
     int src_idx = -1, dst_idx = -1;
 
-    // Match based on unique ID (not pointer)
     for (int i = 0; i < list->count; i++)
     {
         if (list->items[i].id == src_copy->id)
@@ -546,12 +657,10 @@ gf_window_manager_swap (gf_window_manager_t *m, const gf_window_info_t *src_copy
         return GF_ERROR_INVALID_PARAMETER;
     }
 
-    // Swap in the actual list
     gf_window_info_t temp = list->items[src_idx];
     list->items[src_idx] = list->items[dst_idx];
     list->items[dst_idx] = temp;
 
-    // Recalculate layout
     gf_rect_t *new_geometries = NULL;
     gf_error_code_t result = gf_window_manager_calculate_layout (
         m, list->items, list->count, &new_geometries);
@@ -565,25 +674,6 @@ gf_window_manager_swap (gf_window_manager_t *m, const gf_window_info_t *src_copy
     return GF_SUCCESS;
 }
 
-static void
-gf_window_manager_sync_workspaces (gf_window_manager_t *m)
-{
-    gf_workspace_list_t *workspaces = wm_workspaces (m);
-    gf_platform_interface_t *platform = wm_platform (m);
-    gf_display_t display = *wm_display (m);
-    uint32_t platform_count = platform->get_workspace_count (display);
-
-    uint32_t max_per_ws = m->config->max_windows_per_workspace;
-
-    for (uint32_t i = 0; i < platform_count; i++)
-    {
-        gf_workspace_list_ensure (workspaces, i, max_per_ws);
-
-        gf_workspace_info_t *ws = &workspaces->items[i];
-        ws->max_windows = max_per_ws;
-    }
-}
-
 static gf_error_code_t
 gf_window_manager_arrange_overflow (gf_window_manager_t *m)
 {
@@ -594,8 +684,6 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
     gf_window_list_t *windows = wm_windows (m);
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
 
-    gf_workspace_id_t active_ws = workspaces->active_workspace;
-
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_workspace_info_t *src_ws = &workspaces->items[i];
@@ -605,7 +693,7 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
 
         uint32_t overflow = src_ws->window_count - max_per_ws;
 
-        for (uint32_t m = 0; m < overflow; m++)
+        for (uint32_t j = 0; j < overflow; j++)
         {
             gf_workspace_id_t dst_id = workspaces->count;
             gf_workspace_list_ensure (workspaces, dst_id, max_per_ws);
@@ -627,6 +715,9 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
             {
                 if (windows->items[w].id == win->id)
                 {
+                    GF_LOG_INFO ("Move window %u from workspace %u to workspace %u",
+                                 windows->items[w].id, windows->items[w].workspace_id,
+                                 dst_id);
                     windows->items[w].workspace_id = dst_id;
                     break;
                 }
@@ -636,7 +727,6 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
         }
     }
 
-    gf_workspace_list_rebuild_stats (workspaces, windows);
     return GF_SUCCESS;
 }
 
@@ -668,13 +758,13 @@ gf_window_manager_watch (gf_window_manager_t *m)
 
             if (!existing && platform_windows[i].is_valid)
             {
-                platform_windows[i].workspace_id = workspaces->active_workspace;
+                platform_windows[i].workspace_id = gf_workspace_list_find_free (
+                    workspaces, m->config->max_windows_per_workspace);
 
                 gf_window_list_add (windows, &platform_windows[i]);
 
                 char win_name[256] = { 0 };
-                wm_platform (m)->window_name_info (
-                    *wm_display (m), platform_windows[i].id, win_name, sizeof (win_name));
+                _get_window_name (m, platform_windows[i].id, win_name, sizeof (win_name));
                 GF_LOG_DEBUG ("Added window: win=%lu | WS=%u | Name='%s'",
                               platform_windows[i].id, platform_windows[i].workspace_id,
                               win_name);
@@ -708,15 +798,11 @@ gf_window_manager_load_cfg (gf_window_manager_t *m)
         return;
     }
 
-    // Check if file has been modified
     if (st.st_mtime <= m->config->last_modified)
-    {
         return;
-    }
 
-    usleep (10000); // Small delay
+    usleep (10000);
 
-    // Reload and check for changes
     gf_config_t old_config = *m->config;
     gf_config_t new_config = load_or_create_config (config_file);
 
@@ -728,6 +814,7 @@ gf_window_manager_load_cfg (gf_window_manager_t *m)
         m->config->last_modified = st.st_mtime;
 
         gf_window_manager_sync_workspaces (m);
+        gf_window_manager_print_stats (m);
     }
     else
     {
@@ -786,34 +873,10 @@ gf_window_manager_event (gf_window_manager_t *m)
         if (gf_window_list_get_by_workspace (windows, ws_id, &list, &count) != GF_SUCCESS)
             continue;
 
-        for (uint32_t w = 0; w < count; w++)
-        {
-            gf_window_info_t *win = &list[w];
-
-            if (wm_is_excluded (m, win->native_handle))
-            {
-                continue;
-            }
-
-            platform->minimize_window (display, win->native_handle);
-        }
-
+        _minimize_workspace_windows (m, list, count);
         gf_free (list);
     }
 
-    for (uint32_t i = 0; i < workspace_win_count; i++)
-    {
-        gf_window_info_t *win = &workspace_windows[i];
-
-        if (wm_is_excluded (m, win->native_handle))
-        {
-            GF_LOG_DEBUG ("Skip unminimize (excluded): win=%lu ws=%u", win->native_handle,
-                          win->workspace_id);
-            continue;
-        }
-
-        platform->unminimize_window (display, win->native_handle);
-    }
-
+    _unminimize_workspace_windows (m, workspace_windows, workspace_win_count);
     gf_free (workspace_windows);
 }

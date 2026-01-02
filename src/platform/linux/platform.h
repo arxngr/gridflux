@@ -68,4 +68,23 @@ static gf_error_code_t gf_platform_noop_set_window_geometry (gf_display_t displa
                                                              gf_geometry_flags_t flags,
                                                              gf_config_t *cfg);
 
+gf_error_code_t gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds);
+
+gf_error_code_t gf_platform_set_window_geometry (gf_display_t display,
+                                                 gf_native_window_t window,
+                                                 const gf_rect_t *geometry,
+                                                 gf_geometry_flags_t flags,
+                                                 gf_config_t *cfg);
+
+gf_error_code_t gf_platform_get_frame_extents (Display *dpy, Window win, int *left,
+                                               int *right, int *top, int *bottom);
+gf_error_code_t gf_platform_get_window_property (Display *display, Window window,
+                                                 Atom property, Atom type,
+                                                 unsigned char **data,
+                                                 unsigned long *nitems);
+gf_error_code_t gf_platform_send_client_message (Display *display, Window window,
+                                                 Atom message_type, long *data,
+                                                 int count);
+bool gf_platform_window_has_state (Display *display, Window window, Atom state);
+
 #endif // GF_PLATFORM_LINUX_H
