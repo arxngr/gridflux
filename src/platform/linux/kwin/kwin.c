@@ -1,11 +1,10 @@
+#include "../../../core/logger.h"
+#include "../../../core/types.h"
+#include "../../../utils/file.h"
 #include "../backend.h"
 #include "../platform.h"
-#include "../../../core/logger.h"
-#include "../../../utils/file.h"
-#include "../../../core/types.h"
 
 #include <dbus/dbus.h>
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
