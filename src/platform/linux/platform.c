@@ -78,7 +78,6 @@ gf_platform_create (void)
     switch (env)
     {
     default:
-        GF_LOG_DEBUG ("KDE Desktop detected");
         platform->get_screen_bounds = gf_platform_get_screen_bounds;
         platform->set_window_geometry = gf_platform_set_window_geometry;
         break;
@@ -833,28 +832,8 @@ gf_platform_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
     if (flags & GF_GEOMETRY_APPLY_PADDING)
         gf_rect_apply_padding (&rect, cfg->default_padding);
 
-    if (rect.width < GF_MIN_WINDOW_SIZE)
-        rect.width = GF_MIN_WINDOW_SIZE;
-    if (rect.height < GF_MIN_WINDOW_SIZE)
-        rect.height = GF_MIN_WINDOW_SIZE;
-
-    int left = 0, right = 0, top = 0, bottom = 0;
-    gf_platform_get_frame_extents (dpy, win, &left, &right, &top, &bottom);
-
-    // Just adjust the size to be CLIENT size (KDE will add frame decorations)
-    rect.width -= (left + right);
-    rect.height -= (top + bottom);
-
-    // Simple bounds checking - just ensure we don't go negative or too large
-    if (rect.width < GF_MIN_WINDOW_SIZE)
-        rect.width = GF_MIN_WINDOW_SIZE;
-    if (rect.height < GF_MIN_WINDOW_SIZE)
-        rect.height = GF_MIN_WINDOW_SIZE;
-
     long data[5];
 
-    // Use NorthWestGravity so KDE positions the FRAME at rect.x, rect.y
-    // not the client area
     data[0] = NorthWestGravity | // gravity = NorthWestGravity
               (1 << 8) |         // set x
               (1 << 9) |         // set y
@@ -1000,7 +979,6 @@ gf_platform_unminimize_window (gf_display_t display, Window window)
     if (!display || window == None)
         return GF_ERROR_INVALID_PARAMETER;
 
-    // Verify window exists
     XWindowAttributes attr;
     if (XGetWindowAttributes (display, window, &attr) == 0)
     {
@@ -1008,9 +986,37 @@ gf_platform_unminimize_window (gf_display_t display, Window window)
         return GF_ERROR_PLATFORM_ERROR;
     }
 
-    XMapWindow (display, window);
-    XRaiseWindow (display, window);
-    XFlush (display);
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    if (!atoms)
+        return GF_ERROR_PLATFORM_ERROR;
+
+    gf_desktop_env_t env = gf_detect_desktop_env ();
+
+    if (env == GF_DE_KDE)
+    {
+        XMapWindow (display, window);
+        XRaiseWindow (display, window);
+        XFlush (display);
+        return GF_SUCCESS;
+    }
+
+    if (atoms->net_wm_state != None && atoms->net_wm_state_hidden != None)
+    {
+        long data[5] = { 0, /* _NET_WM_STATE_REMOVE */
+                         atoms->net_wm_state_hidden, 0, 0, 0 };
+
+        gf_platform_send_client_message (display, window, atoms->net_wm_state, data, 5);
+    }
+
+    if (atoms->net_active_window != None)
+    {
+        long data[5] = { 1, /* source: application */
+                         CurrentTime, 0, 0, 0 };
+
+        gf_platform_send_client_message (display, window, atoms->net_active_window, data,
+                                         5);
+    }
+
     return GF_SUCCESS;
 }
 

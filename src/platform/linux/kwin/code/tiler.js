@@ -4,7 +4,7 @@ function log(msg) {
     console.log("[GridFlux] " + msg)
 }
 
-function toArray(qList) {
+function to_array(qList) {
     var arr = []
     for (var i = 0; i < qList.length; i++) {
         arr.push(qList[i])
@@ -12,7 +12,7 @@ function toArray(qList) {
     return arr
 }
 
-function bspSplit(clients, area, depth, padding) {
+function apply_layout(clients, area, depth, padding) {
     if (clients.length === 0) return
     
     if (clients.length === 1) {
@@ -32,26 +32,26 @@ function bspSplit(clients, area, depth, padding) {
     if (splitVertically) {
         var leftWidth = Math.floor(area.width / 2)
         var rightWidth = area.width - leftWidth
-        bspSplit(clients.slice(0, mid), 
+        apply_layout(clients.slice(0, mid), 
                 {x: area.x, y: area.y, width: leftWidth, height: area.height}, 
                 depth + 1, padding)
-        bspSplit(clients.slice(mid), 
+        apply_layout(clients.slice(mid), 
                 {x: area.x + leftWidth, y: area.y, width: rightWidth, height: area.height}, 
                 depth + 1, padding)
     } else {
         var topHeight = Math.floor(area.height / 2)
         var bottomHeight = area.height - topHeight
-        bspSplit(clients.slice(0, mid), 
+        apply_layout(clients.slice(0, mid), 
                 {x: area.x, y: area.y, width: area.width, height: topHeight}, 
                 depth + 1, padding)
-        bspSplit(clients.slice(mid), 
+        apply_layout(clients.slice(mid), 
                 {x: area.x, y: area.y + topHeight, width: area.width, height: bottomHeight}, 
                 depth + 1, padding)
     }
 }
 
 function retile(workspace, padding, currentDesktop) {
-    var clients = toArray(workspace.clientList()).filter(function(c) {
+    var clients = to_array(workspace.clientList()).filter(function(c) {
             var rc = (c.resourceClass || "").toLowerCase()
             var rn = (c.resourceName || "").toLowerCase()
 
@@ -73,5 +73,5 @@ function retile(workspace, padding, currentDesktop) {
     
     var screenArea = workspace.clientArea(0, workspace.activeScreen, currentDesktop)
     
-    bspSplit(clients, screenArea, 0, padding)
+    apply_layout(clients, screenArea, 0, padding)
 }
