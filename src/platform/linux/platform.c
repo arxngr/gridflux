@@ -1016,7 +1016,7 @@ gf_platform_unminimize_window (gf_display_t display, Window window)
 
     if (atoms->net_active_window != None)
     {
-        long data[5] = { 1, /* source: application */
+        long data[5] = { 0, /* source: application */
                          CurrentTime, 0, 0, 0 };
 
         gf_platform_send_client_message (display, window, atoms->net_active_window, data,
