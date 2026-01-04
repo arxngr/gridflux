@@ -84,7 +84,7 @@ _minimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list,
 
     for (uint32_t i = 0; i < count; i++)
     {
-        if (!wm_is_excluded (m, ws_list[i].native_handle))
+        if (!wm_is_excluded (m, ws_list[i].native_handle) || !ws_list[i].is_minimized)
         {
             platform->minimize_window (display, ws_list[i].native_handle);
             ws_list[i].is_minimized = true;
@@ -110,6 +110,11 @@ _unminimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list
 
         platform->unminimize_window (display, win->native_handle);
         win->is_minimized = false;
+        
+        gf_window_info_t *actual = gf_window_list_find_by_window_id(wm_windows(m), win->id);
+        if (actual) {
+            actual->is_minimized = false;
+        }
     }
 }
 
@@ -126,6 +131,92 @@ static void
 _print_window_info (uint32_t window_id, const char *name)
 {
     GF_LOG_INFO ("  - [%u] %s", window_id, name);
+}
+
+static void
+_window_manager_handle_new_window (gf_window_manager_t *m, 
+                                     gf_window_info_t *new_window,
+                                     gf_workspace_id_t workspace_id)
+{
+    if (!m || !new_window)
+        return;
+
+    gf_platform_interface_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+    gf_window_list_t *windows = wm_windows (m);
+    gf_workspace_list_t *workspaces = wm_workspaces (m);
+
+    GF_LOG_INFO ("Handling new window %lu in workspace %u", 
+                 new_window->id, workspace_id);
+
+    //  Get all windows in the assigned workspace
+    gf_window_info_t *workspace_windows = NULL;
+    uint32_t workspace_win_count = 0;
+
+    if (gf_window_list_get_by_workspace (windows, workspace_id,
+                                         &workspace_windows, &workspace_win_count)
+        != GF_SUCCESS)
+    {
+        GF_LOG_WARN ("Failed to get windows for workspace %u", workspace_id);
+        return;
+    }
+
+    // Minimize ALL windows in that workspace EXCEPT the new one
+    for (uint32_t i = 0; i < workspace_win_count; i++)
+    {
+        gf_window_info_t *win = &workspace_windows[i];
+
+        // Skip the new window itself
+        if (win->id == new_window->id)
+            continue;
+
+        if (wm_is_excluded (m, win->native_handle))
+            continue;
+
+        if (!win->is_minimized)
+        {
+            GF_LOG_DEBUG ("Minimizing window %lu in workspace %u", win->id, workspace_id);
+            platform->minimize_window (display, win->native_handle);
+            
+            // Update the actual window in the list
+            gf_window_info_t *actual = gf_window_list_find_by_window_id(windows, win->id);
+            if (actual) {
+                actual->is_minimized = true;
+            }
+        }
+    }
+
+    gf_free (workspace_windows);
+
+    // Minimize windows in OTHER workspaces
+    for (uint32_t i = 0; i < workspaces->count; i++)
+    {
+        gf_workspace_id_t ws_id = workspaces->items[i].id;
+
+        // Skip the workspace where the new window is
+        if (ws_id == workspace_id)
+            continue;
+
+        gf_window_info_t *list = NULL;
+        uint32_t count = 0;
+
+        if (gf_window_list_get_by_workspace (windows, ws_id, &list, &count) != GF_SUCCESS)
+            continue;
+
+        _minimize_workspace_windows (m, list, count);
+        gf_free (list);
+    }
+
+    GF_LOG_INFO ("Focusing new window %lu", new_window->id);
+    platform->unminimize_window (display, new_window->native_handle);
+    
+    m->state.last_active_window = new_window->id;
+    m->state.last_active_workspace = workspace_id;
+    
+    workspaces->active_workspace = workspace_id;
+
+    GF_LOG_INFO ("New window %lu is now focused in workspace %u", 
+                 new_window->id, workspace_id);
 }
 
 gf_error_code_t
@@ -739,6 +830,8 @@ gf_window_manager_watch (gf_window_manager_t *m)
 
     gf_workspace_list_t *workspaces = wm_workspaces (m);
     gf_window_list_t *windows = wm_windows (m);
+    gf_platform_interface_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
 
     gf_window_manager_sync_workspaces (m);
 
@@ -747,8 +840,8 @@ gf_window_manager_watch (gf_window_manager_t *m)
         gf_window_info_t *platform_windows = NULL;
         uint32_t count = 0;
 
-        if (wm_platform (m)->get_windows (*wm_display (m), (gf_workspace_id_t *)&ws_id,
-                                          &platform_windows, &count)
+        if (platform->get_windows (display, (gf_workspace_id_t *)&ws_id,
+                                   &platform_windows, &count)
             != GF_SUCCESS)
             continue;
 
@@ -759,17 +852,22 @@ gf_window_manager_watch (gf_window_manager_t *m)
 
             if (!existing && platform_windows[i].is_valid)
             {
-                platform_windows[i].workspace_id = gf_workspace_list_find_free (
+                // New window detected!
+                gf_workspace_id_t assigned_ws = gf_workspace_list_find_free (
                     workspaces, m->config->max_windows_per_workspace);
-
-                platform_windows[i].is_minimized = true;
+                
+                platform_windows[i].workspace_id = assigned_ws;
+                platform_windows[i].is_minimized = false;
+                
                 gf_window_list_add (windows, &platform_windows[i]);
 
                 char win_name[256] = { 0 };
                 _get_window_name (m, platform_windows[i].id, win_name, sizeof (win_name));
-                GF_LOG_DEBUG ("Added window: win=%lu | WS=%u | Name='%s'",
-                              platform_windows[i].id, platform_windows[i].workspace_id,
-                              win_name);
+                GF_LOG_INFO ("New window detected: win=%lu | WS=%u | Name='%s'",
+                             platform_windows[i].id, assigned_ws, win_name);
+
+                // Handle the new window: focus it and minimize others in workspace
+                _window_manager_handle_new_window (m, &platform_windows[i], assigned_ws);
             }
         }
 
@@ -854,10 +952,22 @@ gf_window_manager_event (gf_window_manager_t *m)
         }
     }
 
+    gf_workspace_id_t current_workspace = focused->workspace_id;
+    
+    if (m->state.last_active_workspace == current_workspace && 
+        m->state.last_active_window != 0)
+    {
+        // Same workspace, don't do anything
+        return;
+    }
+
+    GF_LOG_DEBUG ("Workspace changed from %d to %d", 
+                  m->state.last_active_workspace, current_workspace);
+
     gf_window_info_t *workspace_windows = NULL;
     uint32_t workspace_win_count = 0;
 
-    if (gf_window_list_get_by_workspace (windows, focused->workspace_id,
+    if (gf_window_list_get_by_workspace (windows, current_workspace,
                                          &workspace_windows, &workspace_win_count)
         != GF_SUCCESS)
         return;
@@ -866,7 +976,7 @@ gf_window_manager_event (gf_window_manager_t *m)
     {
         gf_workspace_id_t ws_id = workspaces->items[i].id;
 
-        if (ws_id == focused->workspace_id)
+        if (ws_id == current_workspace)
             continue;
 
         gf_window_info_t *list = NULL;
@@ -881,4 +991,7 @@ gf_window_manager_event (gf_window_manager_t *m)
 
     _unminimize_workspace_windows (m, workspace_windows, workspace_win_count);
     gf_free (workspace_windows);
+
+    m->state.last_active_window = curr_win_id;
+    m->state.last_active_workspace = current_workspace;
 }

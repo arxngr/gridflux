@@ -15,6 +15,8 @@ typedef struct
     time_t last_scan_time;
     time_t last_cleanup_time;
     uint32_t loop_counter;
+    gf_window_id_t last_active_window;
+    gf_workspace_id_t last_active_workspace;
     bool initialized;
 } gf_window_manager_state_t;
 
