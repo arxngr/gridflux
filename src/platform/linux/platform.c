@@ -59,6 +59,20 @@ gf_platform_create (void)
     platform->platform_data = data;
 
     gf_desktop_env_t env = gf_detect_desktop_env ();
+    switch (env)
+    {
+    case GF_DE_GNOME:
+        GF_LOG_INFO ("Using GNOME Extensions backend for tilling");
+        platform->get_screen_bounds = gf_platform_noop_get_screen_bounds;
+        platform->set_window_geometry = gf_platform_noop_set_window_geometry;
+        break;
+
+    default:
+        platform->get_screen_bounds = gf_platform_get_screen_bounds;
+        platform->set_window_geometry = gf_platform_set_window_geometry;
+        break;
+    }
+
     gf_backend_type_t backend = gf_detect_backend ();
     data->use_kwin_backend = false;
 
@@ -74,14 +88,6 @@ gf_platform_create (void)
         return platform;
     }
 #endif
-
-    switch (env)
-    {
-    default:
-        platform->get_screen_bounds = gf_platform_get_screen_bounds;
-        platform->set_window_geometry = gf_platform_set_window_geometry;
-        break;
-    }
 
     return platform;
 }
