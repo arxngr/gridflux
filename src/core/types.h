@@ -80,6 +80,7 @@ typedef struct
     gf_workspace_id_t workspace_id;
     gf_rect_t geometry;
     bool is_maximized;
+    bool is_minimized;
     bool needs_update;
     bool is_valid;
     time_t last_modified;

@@ -84,7 +84,20 @@ if(UNIX AND NOT APPLE)
     endif()
     
     set(CPACK_GENERATOR "DEB;RPM")
-    
+
+    set(GF_GNOME_EXT_UUID "gridflux@gridflux.dev")
+    set(GF_GNOME_EXT_DIR
+        "$ENV{HOME}/.local/share/gnome-shell/extensions/${GF_GNOME_EXT_UUID}"
+    )
+
+    add_custom_target(gnome_shell_extension ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${GF_GNOME_EXT_DIR}
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_SOURCE_DIR}/src/platform/linux/mutter
+                ${GF_GNOME_EXT_DIR}
+        COMMENT "Installing GNOME Shell extension"
+    )
+
 elseif(WIN32)
     # Windows
     file(GLOB PLATFORM_SOURCES "src/platform/windows/*.c")

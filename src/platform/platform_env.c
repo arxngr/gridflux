@@ -5,17 +5,61 @@
 #include <stdlib.h>
 #include <string.h>
 
+static bool
+str_has (const char *env, const char *token)
+{
+    if (!env || !token)
+        return false;
+
+    size_t len = strlen (token);
+    const char *p = env;
+
+    while (*p)
+    {
+        if (strncmp (p, token, len) == 0 && (p[len] == '\0' || p[len] == ':'))
+            return true;
+
+        p = strchr (p, ':');
+        if (!p)
+            break;
+        p++;
+    }
+
+    return false;
+}
+
 gf_desktop_env_t
 gf_detect_desktop_env (void)
 {
     const char *de = getenv ("XDG_CURRENT_DESKTOP");
+
     if (de)
     {
-        if (strstr (de, "KDE"))
+        /* KDE / Plasma */
+        if (str_has (de, "KDE"))
             return GF_DE_KDE;
-        if (strstr (de, "GNOME"))
+
+        /*
+         * GNOME family:
+         *  - GNOME
+         *  - ubuntu:GNOME
+         *  - GNOME-Classic
+         *  - Budgie:GNOME
+         */
+        if (str_has (de, "GNOME"))
             return GF_DE_GNOME;
     }
+
+    /*
+     * Fallbacks (important for GNOME Shell)
+     */
+    if (getenv ("GNOME_SHELL_SESSION_MODE"))
+        return GF_DE_GNOME;
+
+    const char *session = getenv ("DESKTOP_SESSION");
+    if (session && strstr (session, "gnome"))
+        return GF_DE_GNOME;
+
     return GF_DE_UNKNOWN;
 }
 

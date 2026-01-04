@@ -87,6 +87,7 @@ _minimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list,
         if (!wm_is_excluded (m, ws_list[i].native_handle))
         {
             platform->minimize_window (display, ws_list[i].native_handle);
+            ws_list[i].is_minimized = true;
         }
     }
 }
@@ -102,14 +103,13 @@ _unminimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list
     {
         gf_window_info_t *win = &ws_list[i];
 
-        if (wm_is_excluded (m, win->native_handle))
+        if (wm_is_excluded (m, win->native_handle) || !win->is_minimized)
         {
-            GF_LOG_DEBUG ("Skip unminimize (excluded): win=%lu ws=%u", win->native_handle,
-                          win->workspace_id);
             continue;
         }
 
         platform->unminimize_window (display, win->native_handle);
+        win->is_minimized = false;
     }
 }
 
@@ -224,6 +224,7 @@ gf_window_manager_update_window_info (gf_window_manager_t *m, gf_native_window_t
         .native_handle = window,
         .workspace_id = workspace_id,
         .geometry = geom,
+        .is_minimized = true,
         .is_valid = true,
         .needs_update = true,
         .last_modified = time (NULL),
@@ -761,6 +762,7 @@ gf_window_manager_watch (gf_window_manager_t *m)
                 platform_windows[i].workspace_id = gf_workspace_list_find_free (
                     workspaces, m->config->max_windows_per_workspace);
 
+                platform_windows[i].is_minimized = true;
                 gf_window_list_add (windows, &platform_windows[i]);
 
                 char win_name[256] = { 0 };
