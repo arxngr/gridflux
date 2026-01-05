@@ -1,7 +1,7 @@
 #ifndef GF_INTERNAL_H
 #define GF_INTERNAL_H
 
-#include "core/layout.h"
+#include "layout.h"
 #include "window_manager.h"
 
 static inline gf_platform_interface_t *

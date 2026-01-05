@@ -3,7 +3,7 @@ set -e
 INSTALL_DIR="/usr/local/bin"
 BUILD_DIR="build"
 KWIN_SCRIPT_NAME="gridflux-tiler"
-KWIN_QML_FILE="kwin_tiler.qml"
+KWIN_QML_FILE="main.qml"
 KWIN_INSTALL_DIR="/usr/share/gridflux"
 SERVICE_FILE="$HOME/.config/systemd/user/gridflux.service"
 
@@ -69,7 +69,7 @@ install_kwin_script() {
     echo "Installing KWin script..."
     unload_kwin_script
     sudo install -Dm644 \
-        "src/platform/kwin/$KWIN_QML_FILE" \
+        "src/platform/unix/kwin/$KWIN_QML_FILE" \
         "$KWIN_INSTALL_DIR/$KWIN_QML_FILE"
     echo "✓ KWin script installed to $KWIN_INSTALL_DIR"
     echo "Registering script with KWin via D-Bus..."

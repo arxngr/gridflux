@@ -1,7 +1,7 @@
 #ifndef GF_CORE_CONFIG_H
 #define GF_CORE_CONFIG_H
 
-#include "core/types.h"
+#include "types.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/stat.h>

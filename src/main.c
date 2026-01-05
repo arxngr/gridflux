@@ -1,11 +1,11 @@
-#include "core/config.h"
-#include "core/layout.h"
-#include "core/logger.h"
-#include "core/window_manager.h"
+#include "config.h"
+#include "layout.h"
+#include "logger.h"
+#include "window_manager.h"
 #include "platform/platform.h"
-#include "utils/memory.h"
+#include "memory.h"
 #ifdef __linux__
-#include "platform/linux/platform.h"
+#include "platform/unix/platform.h"
 #endif
 #include <signal.h>
 #include <stdlib.h>

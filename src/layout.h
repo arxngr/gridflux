@@ -1,8 +1,8 @@
 #ifndef GF_CORE_LAYOUT_H
 #define GF_CORE_LAYOUT_H
 
-#include "../core/config.h"
-#include "../core/types.h"
+#include "config.h"
+#include "types.h"
 
 /* Forward declaration */
 typedef struct gf_layout_engine gf_layout_engine_t;

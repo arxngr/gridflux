@@ -2,7 +2,7 @@
 #ifndef GF_UTILS_MEMORY_H
 #define GF_UTILS_MEMORY_H
 
-#include "../core/types.h"
+#include "types.h"
 
 // Safe memory operations
 void *gf_malloc(size_t size);

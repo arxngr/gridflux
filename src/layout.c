@@ -1,5 +1,5 @@
 #include "layout.h"
-#include "../utils/memory.h"
+#include "memory.h"
 #include <string.h>
 
 typedef struct

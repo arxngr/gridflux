@@ -1,5 +1,5 @@
 #include "config.h"
-#include "core/logger.h"
+#include "logger.h"
 #include "types.h"
 #include <json-c/json.h>
 #include <stdint.h>

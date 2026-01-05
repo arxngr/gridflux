@@ -1,6 +1,6 @@
 #include "list.h"
-#include "../core/logger.h"
-#include "core/config.h"
+#include "logger.h"
+#include "config.h"
 #include "memory.h"
 #include <stdbool.h>
 #include <stdint.h>

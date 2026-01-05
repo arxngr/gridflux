@@ -21,9 +21,8 @@ pkg_check_modules(JSONC REQUIRED json-c)
 include_directories(src ${JSONC_INCLUDE_DIRS})
 
 # Automatically collect common source files
-file(GLOB_RECURSE COMMON_SOURCES CONFIGURE_DEPENDS
-    "src/core/*.c"
-    "src/utils/*.c"
+file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS
+    "src/*.c"
     "src/main.c"
 )
 
@@ -35,9 +34,9 @@ if(UNIX AND NOT APPLE)
     # Check for D-Bus (for KWin backend)
     pkg_check_modules(DBUS dbus-1)
     
-    # Collect Linux platform sources
+    # Collect Unix platform sources
     file(GLOB_RECURSE PLATFORM_SOURCES CONFIGURE_DEPENDS
-        "${CMAKE_SOURCE_DIR}/src/platform/linux/*.c"
+        "${CMAKE_SOURCE_DIR}/src/platform/unix/*.c"
         "${CMAKE_SOURCE_DIR}/src/platform/platform_env.c"
     )
     
@@ -45,7 +44,7 @@ if(UNIX AND NOT APPLE)
     if(DBUS_FOUND)
         message(STATUS "D-Bus found - KWin backend will be available")
         file(GLOB_RECURSE KWIN_SOURCES CONFIGURE_DEPENDS
-            "${CMAKE_SOURCE_DIR}/src/platform/linux/kwin/*.c"
+            "${CMAKE_SOURCE_DIR}/src/platform/unix/kwin/*.c"
         )
         list(APPEND PLATFORM_SOURCES ${KWIN_SOURCES})
         add_definitions(-DGF_KWIN_SUPPORT)
@@ -64,8 +63,8 @@ if(UNIX AND NOT APPLE)
         # Install KWin QML script (only in production mode)
         if(NOT GF_DEV_MODE)
             install(FILES 
-                "${CMAKE_SOURCE_DIR}/src/platform/linux/kwin/main.qml"
-                DESTINATION share/gridflux
+                "${CMAKE_SOURCE_DIR}/src/platform/unix/kwin/main.qml"
+                DESTINATION share/gridflux/kwin
                 PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
             )
         endif()
@@ -93,7 +92,7 @@ if(UNIX AND NOT APPLE)
     add_custom_target(gnome_shell_extension ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory ${GF_GNOME_EXT_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-                ${CMAKE_SOURCE_DIR}/src/platform/linux/mutter
+                ${CMAKE_SOURCE_DIR}/src/platform/unix/mutter
                 ${GF_GNOME_EXT_DIR}
         COMMENT "Installing GNOME Shell extension"
     )
@@ -179,7 +178,7 @@ message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Development mode: ${GF_DEV_MODE}")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
 if(UNIX AND NOT APPLE)
-    message(STATUS "  Linux support: YES")
+    message(STATUS "  Unix support: YES")
     if(DBUS_FOUND)
         message(STATUS "  KWin backend: YES")
         message(STATUS "  D-Bus version: ${DBUS_VERSION}")

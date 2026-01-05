@@ -1,7 +1,7 @@
 #ifdef GF_KWIN_SUPPORT
-#include "platform/linux/backend.h"
+#include "platform/unix/backend.h"
 #endif
-#include "platform/linux/backend.h"
+#include "platform/unix/backend.h"
 #include <stdlib.h>
 #include <string.h>
 

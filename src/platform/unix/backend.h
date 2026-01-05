@@ -1,9 +1,9 @@
 #ifndef GF_PLATFORM_LINUX_BACKEND_H
 #define GF_PLATFORM_LINUX_BACKEND_H
 
-#include "../../core/config.h"
-#include "../../core/types.h"
-#include "platform/platform.h"
+#include "../../config.h"
+#include "../../types.h"
+#include "../../platform/platform.h"
 #include <X11/Xlib.h>
 #include <stdbool.h>
 
@@ -47,7 +47,7 @@ static const char *const KWIN_SCRIPT_SEARCH_PATHS[]
         "/usr/share/kwin/scripts/gridflux/contents/ui/main.qml",
         "/usr/local/share/gridflux/contents/ui/main.qml",
         "/usr/share/gridflux/contents/ui/main.qml",
-        "./src/platform/linux/kwin/main.qml",
+        "./src/platform/unix/kwin/main.qml",
         NULL };
 
 gf_desktop_env_t gf_detect_desktop_env (void);

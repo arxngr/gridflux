@@ -1,8 +1,8 @@
 #ifndef GF_PLATFORM_H
 #define GF_PLATFORM_H
 
-#include "../core/config.h"
-#include "../core/types.h"
+#include "../config.h"
+#include "../types.h"
 
 // Platform-agnostic types
 #ifdef __linux__

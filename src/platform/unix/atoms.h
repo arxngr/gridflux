@@ -1,7 +1,7 @@
 #ifndef GF_PLATFORM_LINUX_ATOMS_H
 #define GF_PLATFORM_LINUX_ATOMS_H
 #ifdef __linux__
-#include "../../core/types.h"
+#include "../../types.h"
 #include <X11/Xlib.h>
 
 // Platform atoms

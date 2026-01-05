@@ -1,6 +1,6 @@
 #include <X11/Xlib.h>
 #ifdef __linux__
-#include "../../core/logger.h"
+#include "../../logger.h"
 #include "atoms.h"
 #include <X11/Xatom.h>
 

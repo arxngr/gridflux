@@ -1,7 +1,7 @@
 #ifndef GF_UTILS_LISTS_H
 #define GF_UTILS_LISTS_H
 
-#include "core/types.h"
+#include "types.h"
 
 typedef struct
 {

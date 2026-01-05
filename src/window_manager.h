@@ -1,12 +1,12 @@
 #ifndef GF_CORE_WINDOW_MANAGER_H
 #define GF_CORE_WINDOW_MANAGER_H
 
-#include "core/layout.h"
+#include "layout.h"
 #define GLOB_CFG "config.json"
 
-#include "../platform/platform.h"
-#include "../utils/list.h"
-#include "core/config.h"
+#include "platform/platform.h"
+#include "list.h"
+#include "config.h"
 
 typedef struct
 {
