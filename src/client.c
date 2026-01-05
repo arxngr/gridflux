@@ -11,12 +11,14 @@ print_usage (const char *prog)
     printf ("  query windows [WORKSPACE_ID]    List windows\n");
     printf ("  query workspaces                List workspaces\n");
     printf ("  query count [WORKSPACE_ID]      Count windows\n");
+    printf ("  move <WINDOW_ID> <WORKSPACE_ID> Move window to workspace\n");
     printf ("\nExamples:\n");
     printf ("  %s query windows              # List all windows\n", prog);
     printf ("  %s query windows 0            # List windows in workspace 0\n", prog);
     printf ("  %s query workspaces           # List all workspaces\n", prog);
     printf ("  %s query count                # Total window count\n", prog);
     printf ("  %s query count 1              # Window count in workspace 1\n", prog);
+    printf ("  %s move 12345 2               # Move window 12345 to workspace 2\n", prog);
 }
 
 int

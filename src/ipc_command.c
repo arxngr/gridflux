@@ -155,6 +155,98 @@ gf_cmd_query_count (const char *args, gf_ipc_response_t *response, void *user_da
     }
 }
 
+static void
+gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_data)
+{
+    gf_window_manager_t *m = (gf_window_manager_t *)user_data;
+    gf_window_list_t *windows = wm_windows (m);
+    gf_workspace_list_t *workspaces = wm_workspaces (m);
+
+    uint32_t window_id = 0;
+    int target_workspace = -1;
+
+    if (!args || sscanf (args, "%u %d", &window_id, &target_workspace) != 2)
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        snprintf (response->message, sizeof (response->message),
+                  "Usage: move <window_id> <workspace_id>");
+        return;
+    }
+
+    if (target_workspace < 0 || target_workspace >= (int)m->config->max_workspaces)
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        snprintf (response->message, sizeof (response->message),
+                  "Invalid workspace ID: %d (must be 0-%u)", target_workspace,
+                  m->config->max_workspaces - 1);
+        return;
+    }
+
+    gf_window_info_t *win = NULL;
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        if (windows->items[i].id == window_id)
+        {
+            win = &windows->items[i];
+            break;
+        }
+    }
+
+    if (!win)
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        snprintf (response->message, sizeof (response->message), "Window %u not found",
+                  window_id);
+        return;
+    }
+
+    gf_workspace_id_t old_workspace = win->workspace_id;
+
+    if (old_workspace == target_workspace)
+    {
+        snprintf (response->message, sizeof (response->message),
+                  "Window %u is already in workspace %d", window_id, target_workspace);
+        return;
+    }
+
+    gf_workspace_list_ensure (workspaces, target_workspace,
+                              m->config->max_windows_per_workspace);
+
+    gf_workspace_info_t *target_ws = &workspaces->items[target_workspace];
+
+    if (target_ws->is_locked)
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        snprintf (response->message, sizeof (response->message), "Workspace %d is locked",
+                  target_workspace);
+        return;
+    }
+
+    if (target_ws->window_count >= m->config->max_windows_per_workspace)
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        snprintf (response->message, sizeof (response->message),
+                  "Workspace %d is full (%u/%u windows)", target_workspace,
+                  target_ws->window_count, m->config->max_windows_per_workspace);
+        return;
+    }
+
+    win->workspace_id = target_workspace;
+
+    if (old_workspace >= 0 && old_workspace < (int)workspaces->count)
+    {
+        workspaces->items[old_workspace].window_count--;
+        workspaces->items[old_workspace].available_space++;
+    }
+
+    target_ws->window_count++;
+    target_ws->available_space--;
+
+    snprintf (response->message, sizeof (response->message),
+              "Moved window %u from workspace %d to workspace %d", window_id,
+              old_workspace, target_workspace);
+}
+
 void
 gf_handle_client_message (const char *message, gf_ipc_response_t *response,
                           void *user_data)
@@ -188,6 +280,10 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
             snprintf (response->message, sizeof (response->message), "Unknown query: %s",
                       subcommand);
         }
+    }
+    else if (strcmp (command, "move") == 0)
+    {
+        gf_cmd_move_window (args, response, user_data);
     }
     else
     {
