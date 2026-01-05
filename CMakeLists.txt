@@ -12,7 +12,6 @@ endif()
 set(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -Wextra -DDEBUG")
 set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
 
-# Development mode option
 option(GF_DEV_MODE "Enable development mode (read config from current dir)" OFF)
 
 find_package(PkgConfig REQUIRED)
@@ -20,27 +19,23 @@ pkg_check_modules(JSONC REQUIRED json-c)
 
 include_directories(src ${JSONC_INCLUDE_DIRS})
 
-# Automatically collect common source files
 file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS
     "src/*.c"
-    "src/main.c"
 )
 
-# Platform-specific configuration
+list(REMOVE_ITEM COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/client.c")
+
 if(UNIX AND NOT APPLE)
-    # Linux
     find_package(X11 REQUIRED)
-    
-    # Check for D-Bus (for KWin backend)
     pkg_check_modules(DBUS dbus-1)
     
-    # Collect Unix platform sources
     file(GLOB_RECURSE PLATFORM_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_SOURCE_DIR}/src/platform/unix/*.c"
         "${CMAKE_SOURCE_DIR}/src/platform/platform_env.c"
     )
     
-    # Add KWin backend if D-Bus is available
+    add_compile_definitions(_GNU_SOURCE)
+
     if(DBUS_FOUND)
         message(STATUS "D-Bus found - KWin backend will be available")
         file(GLOB_RECURSE KWIN_SOURCES CONFIGURE_DEPENDS
@@ -60,7 +55,6 @@ if(UNIX AND NOT APPLE)
             ${DBUS_INCLUDE_DIRS}
         )
         
-        # Install KWin QML script (only in production mode)
         if(NOT GF_DEV_MODE)
             install(FILES 
                 "${CMAKE_SOURCE_DIR}/src/platform/unix/kwin/main.qml"
@@ -69,7 +63,6 @@ if(UNIX AND NOT APPLE)
             )
         endif()
         
-        # Package dependencies (with D-Bus)
         set(CPACK_DEBIAN_PACKAGE_DEPENDS "libx11-6, libjson-c5, libdbus-1-3")
         set(CPACK_RPM_PACKAGE_REQUIRES "libX11, json-c, dbus-libs")
     else()
@@ -77,7 +70,6 @@ if(UNIX AND NOT APPLE)
         set(PLATFORM_LIBRARIES ${X11_LIBRARIES} m ${JSONC_LIBRARIES})
         set(PLATFORM_INCLUDES ${X11_INCLUDE_DIR})
         
-        # Package dependencies (without D-Bus)
         set(CPACK_DEBIAN_PACKAGE_DEPENDS "libx11-6, libjson-c5")
         set(CPACK_RPM_PACKAGE_REQUIRES "libX11, json-c")
     endif()
@@ -98,53 +90,65 @@ if(UNIX AND NOT APPLE)
     )
 
 elseif(WIN32)
-    # Windows
     file(GLOB PLATFORM_SOURCES "src/platform/windows/*.c")
     set(PLATFORM_LIBRARIES user32 gdi32 kernel32 ${JSONC_LIBRARIES})
-    
     set(CPACK_GENERATOR "NSIS;ZIP")
     
 elseif(APPLE)
-    # macOS
     file(GLOB PLATFORM_SOURCES "src/platform/macos/*.c")
     find_library(COCOA_FRAMEWORK Cocoa)
     set(PLATFORM_LIBRARIES ${COCOA_FRAMEWORK} ${JSONC_LIBRARIES})
-    
     set(CPACK_GENERATOR "DragNDrop")
 endif()
 
-# Create executable
 add_executable(gridflux 
     ${COMMON_SOURCES}
     ${PLATFORM_SOURCES}
 )
 
-# Add dev mode definition if enabled
-if(GF_DEV_MODE)
-    target_compile_definitions(gridflux PRIVATE GF_DEV_MODE)
+add_executable(gridflux-cli
+    src/client.c
+    src/ipc_command.c
+    src/window_manager.c
+    src/list.c
+    src/memory.c
+    src/logger.c
+    src/config.c
+    src/layout.c
+    src/file.c
+)
+
+if(UNIX AND NOT APPLE)
+    target_sources(gridflux-cli PRIVATE src/platform/unix/ipc.c)
+elseif(WIN32)
+    target_sources(gridflux-cli PRIVATE src/platform/windows/ipc.c)
 endif()
 
-# Link libraries
+if(GF_DEV_MODE)
+    target_compile_definitions(gridflux PRIVATE GF_DEV_MODE)
+    target_compile_definitions(gridflux-cli PRIVATE GF_DEV_MODE)
+endif()
+
 target_link_libraries(gridflux ${PLATFORM_LIBRARIES})
+target_link_libraries(gridflux-cli ${PLATFORM_LIBRARIES} ${JSONC_LIBRARIES})
 
 if(PLATFORM_INCLUDES)
     target_include_directories(gridflux PRIVATE ${PLATFORM_INCLUDES})
+    target_include_directories(gridflux-cli PRIVATE ${PLATFORM_INCLUDES})
 endif()
 
 if(JSONC_LIBRARY_DIRS)
     target_link_directories(gridflux PRIVATE ${JSONC_LIBRARY_DIRS})
+    target_link_directories(gridflux-cli PRIVATE ${JSONC_LIBRARY_DIRS})
 endif()
 
-# Link D-Bus directories if available
 if(DBUS_FOUND AND DBUS_LIBRARY_DIRS)
     target_link_directories(gridflux PRIVATE ${DBUS_LIBRARY_DIRS})
 endif()
 
-# Install binary (only in production mode)
 if(NOT GF_DEV_MODE)
-    install(TARGETS gridflux DESTINATION bin)
+    install(TARGETS gridflux gridflux-cli DESTINATION bin)
     
-    # Install example config file
     if(EXISTS "${CMAKE_SOURCE_DIR}/config.json")
         install(FILES 
             "${CMAKE_SOURCE_DIR}/config.json"
@@ -154,13 +158,11 @@ if(NOT GF_DEV_MODE)
         )
     endif()
     
-    # CPack configuration
     set(CPACK_PACKAGE_NAME "GridFlux")
     set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
     set(CPACK_PACKAGE_DESCRIPTION "Cross-platform tiling window manager with KDE/KWin support")
     set(CPACK_PACKAGE_CONTACT "GridFlux Team")
     
-    # Add post-install script for KWin
     if(DBUS_FOUND)
         set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA 
             "${CMAKE_CURRENT_SOURCE_DIR}/scripts/postinst"
@@ -170,7 +172,6 @@ if(NOT GF_DEV_MODE)
     include(CPack)
 endif()
 
-# Print build summary
 message(STATUS "")
 message(STATUS "GridFlux Build Configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
