@@ -247,6 +247,112 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
               old_workspace, target_workspace);
 }
 
+static void
+gf_cmd_lock_workspace (const char *args, gf_ipc_response_t *response, void *user_data)
+{
+    gf_window_manager_t *m = (gf_window_manager_t *)user_data;
+    gf_workspace_list_t *workspaces = wm_workspaces (m);
+
+    int workspace_id = -1;
+
+    if (!args || sscanf (args, "%d", &workspace_id) != 1)
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        snprintf (response->message, sizeof (response->message),
+                  "Usage: lock <workspace_id>");
+        return;
+    }
+
+    if (workspace_id < 0 || workspace_id >= (int)m->config->max_workspaces)
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        snprintf (response->message, sizeof (response->message),
+                  "Invalid workspace ID: %d (must be 0-%u)", workspace_id,
+                  m->config->max_workspaces - 1);
+        return;
+    }
+
+    gf_workspace_list_ensure (workspaces, workspace_id,
+                              m->config->max_windows_per_workspace);
+
+    gf_workspace_info_t *ws = &workspaces->items[workspace_id];
+
+    if (ws->is_locked)
+    {
+        snprintf (response->message, sizeof (response->message),
+                  "Workspace %d is already locked", workspace_id);
+        return;
+    }
+
+    ws->is_locked = true;
+    ws->available_space = 0;
+
+    if (gf_config_add_locked_workspace (m->config, workspace_id) == GF_SUCCESS)
+    {
+        snprintf (response->message, sizeof (response->message),
+                  "Locked workspace %d (%u windows will remain)", workspace_id,
+                  ws->window_count);
+    }
+    else
+    {
+        snprintf (response->message, sizeof (response->message),
+                  "Locked workspace %d but failed to save to config", workspace_id);
+    }
+}
+
+static void
+gf_cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *user_data)
+{
+    gf_window_manager_t *m = (gf_window_manager_t *)user_data;
+    gf_workspace_list_t *workspaces = wm_workspaces (m);
+
+    int workspace_id = -1;
+
+    if (!args || sscanf (args, "%d", &workspace_id) != 1)
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        snprintf (response->message, sizeof (response->message),
+                  "Usage: unlock <workspace_id>");
+        return;
+    }
+
+    if (workspace_id < 0 || workspace_id >= (int)m->config->max_workspaces)
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        snprintf (response->message, sizeof (response->message),
+                  "Invalid workspace ID: %d (must be 0-%u)", workspace_id,
+                  m->config->max_workspaces - 1);
+        return;
+    }
+
+    gf_workspace_list_ensure (workspaces, workspace_id,
+                              m->config->max_windows_per_workspace);
+
+    gf_workspace_info_t *ws = &workspaces->items[workspace_id];
+
+    if (!ws->is_locked)
+    {
+        snprintf (response->message, sizeof (response->message),
+                  "Workspace %d is already unlocked", workspace_id);
+        return;
+    }
+
+    ws->is_locked = false;
+    ws->available_space = m->config->max_windows_per_workspace - ws->window_count;
+
+    if (gf_config_remove_locked_workspace (m->config, workspace_id) == GF_SUCCESS)
+    {
+        snprintf (response->message, sizeof (response->message),
+                  "Unlocked workspace %d (%d slots available)", workspace_id,
+                  ws->available_space);
+    }
+    else
+    {
+        snprintf (response->message, sizeof (response->message),
+                  "Unlocked workspace %d but failed to save to config", workspace_id);
+    }
+}
+
 void
 gf_handle_client_message (const char *message, gf_ipc_response_t *response,
                           void *user_data)
@@ -284,6 +390,14 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     else if (strcmp (command, "move") == 0)
     {
         gf_cmd_move_window (args, response, user_data);
+    }
+    else if (strcmp (command, "lock") == 0)
+    {
+        gf_cmd_lock_workspace (args, response, user_data);
+    }
+    else if (strcmp (command, "unlock") == 0)
+    {
+        gf_cmd_unlock_workspace (args, response, user_data);
     }
     else
     {

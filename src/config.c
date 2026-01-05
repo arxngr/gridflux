@@ -16,7 +16,7 @@ static const gf_config_t DEFAULT_CONFIG
         .max_workspaces = GF_MAX_WORKSPACES,
         .default_padding = GF_DEFAULT_PADDING,
         .min_window_size = GF_MIN_WINDOW_SIZE,
-        .locked_workspace_count = 0 };
+        .locked_workspaces_count = 0 };
 
 const char *
 gf_config_get_path (void)
@@ -107,7 +107,7 @@ save_config (const char *filename, const gf_config_t *cfg)
                             json_object_new_int (cfg->min_window_size));
 
     struct json_object *arr = json_object_new_array ();
-    for (uint32_t i = 0; i < cfg->locked_workspace_count; i++)
+    for (uint32_t i = 0; i < cfg->locked_workspaces_count; i++)
     {
         json_object_array_add (arr, json_object_new_int (cfg->locked_workspaces[i]));
     }
@@ -129,7 +129,7 @@ gf_config_has_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
             || old_cfg->max_workspaces != new_cfg->max_workspaces
             || old_cfg->default_padding != new_cfg->default_padding
             || old_cfg->min_window_size != new_cfg->min_window_size
-            || old_cfg->locked_workspace_count != new_cfg->locked_workspace_count);
+            || old_cfg->locked_workspaces_count != new_cfg->locked_workspaces_count);
 }
 
 static void
@@ -187,12 +187,12 @@ load_or_create_config (const char *filename)
         && json_object_is_type (arr_obj, json_type_array))
     {
         size_t len = json_object_array_length (arr_obj);
-        cfg.locked_workspace_count = 0;
+        cfg.locked_workspaces_count = 0;
 
         if (len > cfg.max_workspaces)
             changed = true; // truncated
 
-        for (size_t i = 0; i < len && cfg.locked_workspace_count < cfg.max_workspaces;
+        for (size_t i = 0; i < len && cfg.locked_workspaces_count < cfg.max_workspaces;
              i++)
         {
             int ws = json_object_get_int (json_object_array_get_idx (arr_obj, i));
@@ -203,12 +203,12 @@ load_or_create_config (const char *filename)
                 continue;
             }
 
-            cfg.locked_workspaces[cfg.locked_workspace_count++] = ws;
+            cfg.locked_workspaces[cfg.locked_workspaces_count++] = ws;
         }
     }
     else
     {
-        cfg.locked_workspace_count = 0;
+        cfg.locked_workspaces_count = 0;
         changed = true;
     }
 
@@ -229,10 +229,77 @@ gf_config_is_workspace_locked (const gf_config_t *cfg, gf_workspace_id_t ws)
     if (!cfg || ws < 0 || ws >= (gf_workspace_id_t)cfg->max_workspaces)
         return false;
 
-    for (uint32_t i = 0; i < cfg->locked_workspace_count; i++)
+    for (uint32_t i = 0; i < cfg->locked_workspaces_count; i++)
     {
         if (cfg->locked_workspaces[i] == (uint32_t)ws)
+        {
             return true;
+        }
     }
     return false;
+}
+
+gf_error_code_t
+gf_config_add_locked_workspace (gf_config_t *config, gf_workspace_id_t ws_id)
+{
+    if (!config || ws_id < 0)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    for (uint32_t i = 0; i < config->locked_workspaces_count; i++)
+    {
+        if (config->locked_workspaces[i] == ws_id)
+        {
+            return GF_SUCCESS;
+        }
+    }
+
+    if (config->locked_workspaces_count >= config->max_workspaces)
+    {
+        return GF_ERROR_INVALID_PARAMETER;
+    }
+
+    config->locked_workspaces[config->locked_workspaces_count++] = ws_id;
+
+    const char *config_path = gf_config_get_path ();
+    if (config_path)
+    {
+        save_config (config_path, config);
+    }
+
+    return GF_SUCCESS;
+}
+
+gf_error_code_t
+gf_config_remove_locked_workspace (gf_config_t *config, gf_workspace_id_t ws_id)
+{
+    if (!config || ws_id < 0)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    bool found = false;
+    for (uint32_t i = 0; i < config->locked_workspaces_count; i++)
+    {
+        if (config->locked_workspaces[i] == ws_id)
+        {
+            found = true;
+            for (uint32_t j = i; j < config->locked_workspaces_count - 1; j++)
+            {
+                config->locked_workspaces[j] = config->locked_workspaces[j + 1];
+            }
+            config->locked_workspaces_count--;
+            break;
+        }
+    }
+
+    if (!found)
+    {
+        return GF_SUCCESS;
+    }
+
+    const char *config_path = gf_config_get_path ();
+    if (config_path)
+    {
+        save_config (config_path, config);
+    }
+
+    return GF_SUCCESS;
 }

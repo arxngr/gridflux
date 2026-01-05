@@ -432,7 +432,7 @@ gf_window_manager_sync_workspaces (gf_window_manager_t *m)
         gf_workspace_list_ensure (workspaces, i, max_per_ws);
         gf_workspace_info_t *ws = &workspaces->items[i];
 
-        ws->is_locked = gf_config_is_workspace_locked (m->config, ws->id);
+        ws->is_locked = gf_config_is_workspace_locked (m->config, i);
         ws->available_space = ws->is_locked ? 0 : (max_per_ws - ws->window_count);
         ws->max_windows = max_per_ws;
     }
@@ -476,9 +476,9 @@ gf_window_manager_print_stats (const gf_window_manager_t *m)
     for (gf_workspace_id_t i = 0; i <= max_workspace; i++)
     {
         uint32_t count = workspace_counts[i];
-        uint32_t max_windows = 0;
+        uint32_t max_windows = m->config->max_windows_per_workspace;
         int32_t available = -1;
-        bool is_locked = false;
+        bool is_locked = gf_config_is_workspace_locked (m->config, i);
 
         gf_workspace_info_t *ws = _get_workspace ((gf_workspace_list_t *)workspaces, i);
         if (ws)
@@ -486,6 +486,11 @@ gf_window_manager_print_stats (const gf_window_manager_t *m)
             max_windows = ws->max_windows;
             available = ws->available_space;
             is_locked = ws->is_locked;
+        }
+        else
+        {
+            // Workspace doesn't exist yet, calculate available space
+            available = is_locked ? 0 : max_windows;
         }
 
         _print_workspace_header (i, is_locked, count, max_windows, available);
