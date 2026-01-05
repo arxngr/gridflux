@@ -32,16 +32,29 @@ install_dependencies() {
     . /etc/os-release
     case "$ID" in
     ubuntu | debian)
+        echo "Installing dependencies for Ubuntu/Debian..."
+        sudo apt update
         sudo apt install -y libx11-dev libjson-c-dev libdbus-1-dev cmake gcc make pkg-config
+        echo "Installing GUI dependencies..."
+        sudo apt install -y libgtk-4-dev libglib2.0-dev
         ;;
     fedora | rhel | centos | almalinux | rocky)
+        echo "Installing dependencies for Fedora/RHEL..."
+        sudo dnf update -y
         sudo dnf install -y libX11-devel json-c-devel dbus-devel cmake gcc make pkgconfig
+        echo "Installing GUI dependencies..."
+        sudo dnf install -y gtk4-devel glib2-devel
         ;;
     arch | manjaro)
-        sudo pacman -Syu --noconfirm libx11 json-c dbus cmake gcc make pkgconf
+        echo "Installing dependencies for Arch/Manjaro..."
+        sudo pacman -Syu --noconfirm
+        sudo pacman -S --noconfirm libx11 json-c dbus cmake gcc make pkgconf
+        echo "Installing GUI dependencies..."
+        sudo pacman -S --noconfirm gtk4 glib2
         ;;
     *)
         echo "Unsupported distro — install libX11, json-c, dbus manually"
+        echo "For GUI, also install GTK4 development packages"
         ;;
     esac
 }
@@ -51,8 +64,26 @@ build_and_install() {
     rm -rf "$BUILD_DIR" CMakeCache.txt CMakeFiles/
     cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release .
     cmake --build "$BUILD_DIR" -- -j$(nproc)
+    
+    echo "Installing binaries..."
     sudo install -Dm755 "$BUILD_DIR/gridflux" "$INSTALL_DIR/gridflux"
-    echo "Binary installed: $INSTALL_DIR/gridflux"
+    echo "✓ Binary installed: $INSTALL_DIR/gridflux"
+    
+    # Install GUI if GTK4 is available
+    if [ -f "$BUILD_DIR/gridflux-gui" ]; then
+        sudo install -Dm755 "$BUILD_DIR/gridflux-gui" "$INSTALL_DIR/gridflux-gui"
+        echo "✓ GUI installed: $INSTALL_DIR/gridflux-gui"
+    else
+        echo "⚠ GUI not built - GTK4 dependencies missing"
+    fi
+    
+    # Install CLI if available
+    if [ -f "$BUILD_DIR/gridflux-cli" ]; then
+        sudo install -Dm755 "$BUILD_DIR/gridflux-cli" "$INSTALL_DIR/gridflux-cli"
+        echo "✓ CLI installed: $INSTALL_DIR/gridflux-cli"
+    else
+        echo "⚠ CLI not built - dependencies missing"
+    fi
 }
 
 unload_kwin_script() {
@@ -128,6 +159,25 @@ EOF
     echo "  Check status: systemctl --user status gridflux"
 }
 
+create_desktop_entry() {
+    echo "Creating desktop entry for GUI..."
+    mkdir -p "$HOME/.local/share/applications"
+    cat >"$HOME/.local/share/applications/gridflux-gui.desktop" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GridFlux Control Panel
+Comment=Control GridFlux window manager
+Exec=$INSTALL_DIR/gridflux-gui
+Icon=applications-system
+Terminal=false
+Categories=System;Settings;
+Keywords=window;manager;tiling;grid;
+EOF
+    echo "✓ Desktop entry created: $HOME/.local/share/applications/gridflux-gui.desktop"
+    update-desktop-database ~/.local/share/applications 2>/dev/null || true
+}
+
 create_default_config() {
     mkdir -p "$HOME/.config/gridflux"
     cat >"$HOME/.config/gridflux/config.json" <<EOF
@@ -146,6 +196,7 @@ remove_existing_service
 install_dependencies
 build_and_install
 create_default_config
+create_desktop_entry
 
 if [[ $IS_KDE -eq 1 ]]; then
     echo "KDE detected — installing KWin integration"
@@ -159,7 +210,22 @@ else
     install_systemd_service
 fi
 
+echo ""
 echo "=== Installation Complete ==="
+echo ""
+echo "📦 Installed Components:"
+echo "  • gridflux        - Main window manager"
+echo "  • gridflux-gui    - GUI Control Panel"
+echo "  • gridflux-cli    - Command-line interface"
+echo ""
+echo "🚀 Usage:"
+echo "  • Start GUI:     gridflux-gui"
+echo "  • Start CLI:     gridflux-cli"
+echo "  • Start service: systemctl --user start gridflux"
+echo ""
+echo "📋 Desktop Entry: GridFlux Control Panel (in applications menu)"
+echo ""
+echo "🔧 Configuration: $HOME/.config/gridflux/config.json"
 echo ""
 echo "To check if it's running:"
 echo "  systemctl --user status gridflux"

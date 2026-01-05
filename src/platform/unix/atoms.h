@@ -8,6 +8,7 @@
 typedef struct
 {
     Atom net_active_window;
+    Atom wm_class;
     Atom wm_state;
     Atom wm_change_state;
     Atom net_wm_state;
@@ -54,4 +55,3 @@ gf_platform_atoms_t *gf_platform_atoms_get_global (void);
 
 #endif // __linux__
 #endif // GF_PLATFORM_LINUX_ATOMS_H
-

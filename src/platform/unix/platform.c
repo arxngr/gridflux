@@ -1,9 +1,9 @@
 #include "platform.h"
-#include "../../logger.h"
-#include "../../types.h"
-#include "../../memory.h"
-#include "backend.h"
 #include "../../layout.h"
+#include "../../logger.h"
+#include "../../memory.h"
+#include "../../types.h"
+#include "backend.h"
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <limits.h>

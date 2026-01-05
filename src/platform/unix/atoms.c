@@ -14,6 +14,7 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
 
     atoms->net_active_window = XInternAtom (display, "_NET_ACTIVE_WINDOW", False);
     atoms->wm_state = XInternAtom (display, "WM_STATE", False);
+    atoms->wm_class = XInternAtom (display, "WM_CLASS", False);
     atoms->wm_change_state = XInternAtom (display, "WM_CHANGE_STATE", False);
     atoms->net_wm_state = XInternAtom (display, "_NET_WM_STATE", False);
     atoms->net_wm_state_maximized_horz
@@ -85,4 +86,3 @@ gf_platform_atoms_get_global (void)
     return &g_atoms;
 }
 #endif // __linux__
-

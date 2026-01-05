@@ -21,8 +21,10 @@ if [ -f "$SERVICE_FILE" ]; then
     echo "  ✓ Systemd service removed"
 fi
 
-echo "→ Stopping GridFlux processes..."
+echo "→ Removing GridFlux processes..."
 pkill -f "$INSTALL_DIR/gridflux" 2>/dev/null || true
+pkill -f "$INSTALL_DIR/gridflux-gui" 2>/dev/null || true
+pkill -f "$INSTALL_DIR/gridflux-cli" 2>/dev/null || true
 sleep 1
 echo "  ✓ Processes stopped"
 
@@ -75,10 +77,29 @@ if [ -f "$INSTALL_DIR/gridflux" ]; then
     echo "  ✓ Binary removed"
 fi
 
+if [ -f "$INSTALL_DIR/gridflux-gui" ]; then
+    echo "→ Removing GUI binary..."
+    sudo rm -f "$INSTALL_DIR/gridflux-gui"
+    echo "  ✓ GUI removed"
+fi
+
+if [ -f "$INSTALL_DIR/gridflux-cli" ]; then
+    echo "→ Removing CLI binary..."
+    sudo rm -f "$INSTALL_DIR/gridflux-cli"
+    echo "  ✓ CLI removed"
+fi
+
 if [ -d "$CONFIG_DIR" ]; then
     echo "→ Removing configuration directory..."
     rm -rf "$CONFIG_DIR"
     echo "  ✓ Configuration removed"
+fi
+
+if [ -f "$HOME/.local/share/applications/gridflux-gui.desktop" ]; then
+    echo "→ Removing desktop entry..."
+    rm -f "$HOME/.local/share/applications/gridflux-gui.desktop"
+    echo "  ✓ Desktop entry removed"
+    update-desktop-database ~/.local/share/applications 2>/dev/null || true
 fi
 
 if [ -d "$KWIN_INSTALL_DIR" ]; then
@@ -91,12 +112,17 @@ fi
 echo ""
 echo "=== GridFlux Uninstalled Successfully ==="
 echo ""
-echo "Summary:"
-echo "  ✓ Service stopped and disabled"
-echo "  ✓ Binary removed from $INSTALL_DIR"
-echo "  ✓ Configuration removed from $CONFIG_DIR"
-echo "  ✓ KWin script removed (if applicable)"
-echo "  ✓ GNOME extension removed (if applicable)"
+echo "🗑️ Removed Components:"
+echo "  • gridflux        - Main window manager"
+echo "  • gridflux-gui    - GUI Control Panel"
+echo "  • gridflux-cli    - Command-line interface"
+echo "  • Desktop entry   - Application menu shortcut"
+echo "  • Configuration    - Settings and data"
+echo "  • KWin script     - Window tiling integration"
+echo "  • GNOME extension - Shell integration (if applicable)"
+echo "  • Systemd service  - Auto-start service"
+echo ""
+echo "🧹 Cleanup complete!"
 echo ""
 
 if [ -n "$XDG_CURRENT_DESKTOP" ]; then
