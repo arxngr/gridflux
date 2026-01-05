@@ -24,6 +24,33 @@ file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS
 )
 
 list(REMOVE_ITEM COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/client.c")
+list(REMOVE_ITEM COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/gui.c")
+
+find_package(PkgConfig)
+pkg_check_modules(GTK4 gtk4)
+
+if(GTK4_FOUND)
+    add_executable(gridflux-gui
+        src/gui.c
+        src/ipc_command.c
+        src/window_manager.c
+        src/list.c
+        src/memory.c
+        src/config.c
+        src/logger.c
+        src/layout.c
+        src/file.c
+    )
+    
+    if(UNIX AND NOT APPLE)
+        target_sources(gridflux-gui PRIVATE src/platform/unix/ipc.c)
+    endif()
+    
+    target_include_directories(gridflux-gui PRIVATE ${GTK4_INCLUDE_DIRS})
+    target_link_libraries(gridflux-gui ${GTK4_LIBRARIES} ${JSONC_LIBRARIES})
+    
+    install(TARGETS gridflux-gui DESTINATION bin)
+endif()
 
 if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
