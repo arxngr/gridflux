@@ -65,7 +65,7 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
                 gf_window_manager_get_window_name (m, ws_windows[i].native_handle,
                                                    win_name, sizeof (win_name));
 
-                n = snprintf (ptr, remaining, "  [%u] %s\n", ws_windows[i].id, win_name);
+                n = snprintf (ptr, remaining, "  [%lu] %s\n", ws_windows[i].id, win_name);
                 if (n > 0 && (size_t)n < remaining)
                 {
                     ptr += n;
@@ -90,7 +90,7 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
             gf_window_manager_get_window_name (m, windows->items[i].native_handle,
                                                win_name, sizeof (win_name));
 
-            n = snprintf (ptr, remaining, "  [%u] Workspace %d: %s\n",
+            n = snprintf (ptr, remaining, "  [%lu] Workspace %d: %s\n",
                           windows->items[i].id, windows->items[i].workspace_id, win_name);
             if (n > 0 && (size_t)n < remaining)
             {
