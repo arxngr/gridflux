@@ -4,9 +4,10 @@
 #include "layout.h"
 #define GLOB_CFG "config.json"
 
-#include "platform/platform.h"
-#include "list.h"
 #include "config.h"
+#include "ipc.h"
+#include "list.h"
+#include "platform/platform.h"
 
 typedef struct
 {
@@ -27,6 +28,7 @@ typedef struct
     gf_layout_engine_t *layout;
     gf_display_t display;
     gf_config_t *config;
+    gf_ipc_handle_t ipc_handle;
 } gf_window_manager_t;
 
 gf_error_code_t gf_window_manager_create (gf_window_manager_t **manager,
@@ -63,5 +65,7 @@ static void gf_window_manager_apply_layout (gf_window_manager_t *m,
                                             gf_rect_t *geometry, uint32_t window_count);
 static gf_error_code_t gf_window_manager_arrange_overflow (gf_window_manager_t *m);
 static void gf_window_manager_watch (gf_window_manager_t *m);
-
+void gf_window_manager_get_window_name (const gf_window_manager_t *m,
+                                        gf_native_window_t handle, char *buffer,
+                                        size_t size);
 #endif // GF_CORE_WINDOW_MANAGER_H

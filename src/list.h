@@ -60,4 +60,8 @@ void gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
 
 void gf_workspace_list_rebuild_stats (gf_workspace_list_t *ws,
                                       const gf_window_list_t *windows);
+gf_error_code_t gf_window_list_get_by_workspace (const gf_window_list_t *list,
+                                                 gf_workspace_id_t workspace_id,
+                                                 gf_window_info_t **windows,
+                                                 uint32_t *count);
 #endif
