@@ -84,6 +84,7 @@ typedef struct
     bool needs_update;
     bool is_valid;
     time_t last_modified;
+    char name[256];
 } gf_window_info_t;
 
 // Workspace information
