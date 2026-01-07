@@ -323,6 +323,9 @@ gf_window_manager_update_window_info (gf_window_manager_t *m, gf_native_window_t
 
     gf_window_id_t id = (gf_window_id_t)window;
 
+    if (wm_is_excluded (m, window))
+        return GF_SUCCESS;
+
     gf_rect_t geom;
     if (platform->get_window_geometry (display, window, &geom) != GF_SUCCESS)
         return GF_ERROR_PLATFORM_ERROR;
@@ -1036,4 +1039,111 @@ gf_window_manager_event (gf_window_manager_t *m)
 
     m->state.last_active_window = curr_win_id;
     m->state.last_active_workspace = current_workspace;
+}
+
+gf_error_code_t
+gf_window_manager_move_window (gf_window_manager_t *m, gf_window_id_t window_id,
+                               gf_workspace_id_t target_workspace)
+{
+    if (!m)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_window_list_t *windows = wm_windows (m);
+    gf_workspace_list_t *workspaces = wm_workspaces (m);
+
+    // Find window
+    gf_window_info_t *win = NULL;
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        if (windows->items[i].id == window_id)
+        {
+            win = &windows->items[i];
+            break;
+        }
+    }
+
+    if (!win)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    if (target_workspace < 0 || target_workspace >= m->config->max_workspaces)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_workspace_list_ensure (workspaces, target_workspace,
+                              m->config->max_windows_per_workspace);
+
+    gf_workspace_info_t *target_ws = &workspaces->items[target_workspace];
+
+    if (target_ws->is_locked)
+        return GF_ERROR_WORKSPACE_LOCKED;
+
+    if (target_ws->window_count >= m->config->max_windows_per_workspace)
+        return GF_ERROR_WORKSPACE_FULL;
+
+    win->workspace_id = target_workspace;
+
+    _rebuild_workspace_stats (workspaces, windows, m->config->max_windows_per_workspace);
+    gf_window_manager_sync_workspaces (m);
+
+    return GF_SUCCESS;
+}
+
+gf_error_code_t
+gf_window_manager_lock_workspace (gf_window_manager_t *m, gf_workspace_id_t workspace_id)
+{
+    if (!m)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_workspace_list_t *workspaces = wm_workspaces (m);
+
+    if (workspace_id < 0 || workspace_id >= m->config->max_workspaces)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_workspace_list_ensure (workspaces, workspace_id,
+                              m->config->max_windows_per_workspace);
+
+    gf_workspace_info_t *ws = &workspaces->items[workspace_id];
+
+    if (ws->is_locked)
+        return GF_ERROR_ALREADY_LOCKED;
+
+    ws->is_locked = true;
+
+    gf_config_add_locked_workspace (m->config, workspace_id);
+
+    _rebuild_workspace_stats (workspaces, wm_windows (m),
+                              m->config->max_windows_per_workspace);
+    gf_window_manager_sync_workspaces (m);
+
+    return GF_SUCCESS;
+}
+
+gf_error_code_t
+gf_window_manager_unlock_workspace (gf_window_manager_t *m,
+                                    gf_workspace_id_t workspace_id)
+{
+    if (!m)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_workspace_list_t *workspaces = wm_workspaces (m);
+
+    if (workspace_id < 0 || workspace_id >= m->config->max_workspaces)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_workspace_list_ensure (workspaces, workspace_id,
+                              m->config->max_windows_per_workspace);
+
+    gf_workspace_info_t *ws = &workspaces->items[workspace_id];
+
+    if (!ws->is_locked)
+        return GF_ERROR_ALREADY_UNLOCKED;
+
+    ws->is_locked = false;
+
+    gf_config_remove_locked_workspace (m->config, workspace_id);
+
+    _rebuild_workspace_stats (workspaces, wm_windows (m),
+                              m->config->max_windows_per_workspace);
+    gf_window_manager_sync_workspaces (m);
+
+    return GF_SUCCESS;
 }

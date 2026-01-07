@@ -68,4 +68,13 @@ static void gf_window_manager_watch (gf_window_manager_t *m);
 void gf_window_manager_get_window_name (const gf_window_manager_t *m,
                                         gf_native_window_t handle, char *buffer,
                                         size_t size);
+gf_error_code_t gf_window_manager_move_window (gf_window_manager_t *m,
+                                               gf_window_id_t window_id,
+                                               gf_workspace_id_t target_workspace);
+
+gf_error_code_t gf_window_manager_lock_workspace (gf_window_manager_t *m,
+                                                  gf_workspace_id_t workspace_id);
+
+gf_error_code_t gf_window_manager_unlock_workspace (gf_window_manager_t *m,
+                                                    gf_workspace_id_t workspace_id);
 #endif // GF_CORE_WINDOW_MANAGER_H

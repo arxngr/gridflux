@@ -2,9 +2,10 @@
 #include "ipc_command.h"
 #include "list.h"
 #include "types.h"
+#ifdef __linux__
 #include <gdk/x11/gdkx.h>
+#endif
 #include <gtk/gtk.h>
-#include <json-c/json.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -20,56 +21,44 @@ typedef struct
     GtkStringList *target_ws_model;
 } AppWidgets;
 
-static char *
-gf_extract_message (const char *json_str)
-{
-    json_object *root = json_tokener_parse (json_str);
-    if (!root)
-        return g_strdup ("Invalid response");
-
-    json_object *msg;
-    if (!json_object_object_get_ex (root, "message", &msg))
-    {
-        json_object_put (root);
-        return g_strdup ("No message");
-    }
-
-    const char *text = json_object_get_string (msg);
-    char *copy = g_strdup (text ? text : "No message");
-
-    json_object_put (root);
-    return copy;
-}
-
-static char *
+static gf_ipc_response_t
 gf_run_client_command (const char *command)
 {
     gf_ipc_handle_t handle = gf_ipc_client_connect ();
     if (handle < 0)
-        return g_strdup (
-            "{\"type\":\"error\",\"message\":\"Cannot connect to GridFlux\"}");
+    {
+        gf_ipc_response_t err = { .status = GF_IPC_ERROR_CONNECTION };
+        gf_command_response_t resp = { .type = 1 };
+        snprintf (resp.message, sizeof (resp.message), "Cannot connect to GridFlux");
+        memcpy (err.message, &resp, sizeof (resp));
+        return err;
+    }
 
     gf_ipc_response_t response;
     if (!gf_ipc_client_send (handle, command, &response))
     {
         gf_ipc_client_disconnect (handle);
-        return g_strdup ("{\"type\":\"error\",\"message\":\"IPC send failed\"}");
+        gf_ipc_response_t err = { .status = GF_IPC_ERROR_INVALID_COMMAND };
+        gf_command_response_t resp = { .type = 1 };
+        snprintf (resp.message, sizeof (resp.message), "IPC send failed");
+        memcpy (err.message, &resp, sizeof (resp));
+        return err;
     }
 
     gf_ipc_client_disconnect (handle);
 
-    return g_strdup (response.message);
+    return response;
 }
 
 static void
 gf_refresh_workspaces (AppWidgets *app)
 {
-    char *ws_json = gf_run_client_command ("query workspaces");
-    char *windows_json = gf_run_client_command ("query windows");
+    gf_ipc_response_t ws_response = gf_run_client_command ("query workspaces");
+    gf_ipc_response_t win_response = gf_run_client_command ("query windows");
 
-    // Parse JSON responses
-    gf_workspace_list_t *workspaces = gf_parse_workspace_list (ws_json);
-    gf_window_list_t *windows = gf_parse_window_list (windows_json);
+    // Parse responses
+    gf_workspace_list_t *workspaces = gf_parse_workspace_list (ws_response.message);
+    gf_window_list_t *windows = gf_parse_window_list (win_response.message);
 
     if (!workspaces || !windows)
     {
@@ -97,7 +86,7 @@ gf_refresh_workspaces (AppWidgets *app)
     for (uint32_t i = 0; i < windows->count; i++)
     {
         char dropdown_text[512];
-        snprintf (dropdown_text, sizeof (dropdown_text), "%s (%u)",
+        snprintf (dropdown_text, sizeof (dropdown_text), "%s (%lu)",
                   windows->items[i].name, windows->items[i].id);
         gtk_string_list_append (new_window_model, dropdown_text);
     }
@@ -185,9 +174,6 @@ cleanup:
 
     if (windows)
         gf_window_list_cleanup (windows);
-
-    g_free (ws_json);
-    g_free (windows_json);
 }
 
 static gboolean
@@ -209,7 +195,7 @@ on_lock_clicked (GtkButton *btn, gpointer data)
     guint selected = gtk_drop_down_get_selected (GTK_DROP_DOWN (app->ws_dropdown));
     if (selected == GTK_INVALID_LIST_POSITION)
     {
-        GtkAlertDialog *d = gtk_alert_dialog_new ("");
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Please select a workspace");
         gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
@@ -219,7 +205,7 @@ on_lock_clicked (GtkButton *btn, gpointer data)
         gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->ws_dropdown)));
     if (!item)
     {
-        GtkAlertDialog *d = gtk_alert_dialog_new ("");
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Invalid selection");
         gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
@@ -228,7 +214,7 @@ on_lock_clicked (GtkButton *btn, gpointer data)
     const char *ws_id = gtk_string_object_get_string (item);
     if (!ws_id || !is_number (ws_id))
     {
-        GtkAlertDialog *d = gtk_alert_dialog_new ("");
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Please select a valid workspace");
         gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
@@ -237,16 +223,8 @@ on_lock_clicked (GtkButton *btn, gpointer data)
     char command[64];
     snprintf (command, sizeof (command), "lock %s", ws_id);
 
-    char *result = gf_run_client_command (command);
+    gf_ipc_response_t response = gf_run_client_command (command);
 
-    char *msg = gf_extract_message (result);
-
-    GtkAlertDialog *d = gtk_alert_dialog_new ("");
-    gtk_alert_dialog_set_message (d, msg);
-    gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
-
-    g_free (msg);
-    g_free (result);
     gf_refresh_workspaces (app);
 }
 
@@ -258,7 +236,7 @@ on_unlock_clicked (GtkButton *btn, gpointer data)
     guint selected = gtk_drop_down_get_selected (GTK_DROP_DOWN (app->ws_dropdown));
     if (selected == GTK_INVALID_LIST_POSITION)
     {
-        GtkAlertDialog *d = gtk_alert_dialog_new ("");
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Please select a workspace");
         gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
@@ -268,7 +246,7 @@ on_unlock_clicked (GtkButton *btn, gpointer data)
         gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->ws_dropdown)));
     if (!item)
     {
-        GtkAlertDialog *d = gtk_alert_dialog_new ("");
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Invalid selection");
         gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
@@ -277,7 +255,7 @@ on_unlock_clicked (GtkButton *btn, gpointer data)
     const char *ws_id = gtk_string_object_get_string (item);
     if (!ws_id || !is_number (ws_id))
     {
-        GtkAlertDialog *d = gtk_alert_dialog_new ("");
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Please select a valid workspace");
         gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
@@ -286,16 +264,8 @@ on_unlock_clicked (GtkButton *btn, gpointer data)
     char command[64];
     snprintf (command, sizeof (command), "unlock %s", ws_id);
 
-    char *result = gf_run_client_command (command);
+    gf_ipc_response_t response = gf_run_client_command (command);
 
-    char *msg = gf_extract_message (result);
-
-    GtkAlertDialog *d = gtk_alert_dialog_new ("");
-    gtk_alert_dialog_set_message (d, msg);
-    gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
-
-    g_free (msg);
-    g_free (result);
     gf_refresh_workspaces (app);
 }
 
@@ -317,7 +287,7 @@ on_move_clicked (GtkButton *btn, gpointer data)
     if (window_selected == GTK_INVALID_LIST_POSITION
         || target_selected == GTK_INVALID_LIST_POSITION)
     {
-        GtkAlertDialog *d = gtk_alert_dialog_new ("");
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Please select a window and target workspace");
         gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
@@ -329,7 +299,7 @@ on_move_clicked (GtkButton *btn, gpointer data)
         gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->target_ws_dropdown)));
     if (!window_item || !target_item)
     {
-        GtkAlertDialog *d = gtk_alert_dialog_new ("");
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Invalid selection");
         gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
@@ -342,7 +312,7 @@ on_move_clicked (GtkButton *btn, gpointer data)
     char *paren = strrchr (window_text, '(');
     if (!paren)
     {
-        GtkAlertDialog *d = gtk_alert_dialog_new ("");
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Invalid window selection");
         gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
@@ -357,22 +327,15 @@ on_move_clicked (GtkButton *btn, gpointer data)
     char command[64];
     snprintf (command, sizeof (command), "move %s %s", window_id_str, target_ws);
 
-    char *result = gf_run_client_command (command);
+    gf_ipc_response_t response = gf_run_client_command (command);
 
-    char *msg = gf_extract_message (result);
-
-    GtkAlertDialog *d = gtk_alert_dialog_new ("");
-    gtk_alert_dialog_set_message (d, msg);
-    gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
-
-    g_free (msg);
-    g_free (result);
     gf_refresh_workspaces (app);
 }
 
 static void
 on_window_realize (GtkWidget *widget, gpointer user_data)
 {
+#ifdef __linux__
     GdkSurface *surface = gtk_native_get_surface (GTK_NATIVE (widget));
 
     if (!surface || !GDK_IS_X11_SURFACE (surface))
@@ -380,6 +343,7 @@ on_window_realize (GtkWidget *widget, gpointer user_data)
 
     gdk_x11_surface_set_skip_taskbar_hint (GDK_X11_SURFACE (surface), TRUE);
     gdk_x11_surface_set_skip_pager_hint (GDK_X11_SURFACE (surface), TRUE);
+#endif
 }
 
 static void

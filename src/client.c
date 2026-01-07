@@ -1,4 +1,5 @@
 #include "ipc.h"
+#include "ipc_command.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,12 +72,60 @@ main (int argc, char **argv)
         return 1;
     }
 
-    if (response.message[0])
+    if (strncmp (command, "query workspaces", 16) == 0)
     {
-        printf ("%s", response.message);
-        if (response.message[strlen (response.message) - 1] != '\n')
+        gf_workspace_list_t *workspaces = gf_parse_workspace_list (response.message);
+        if (!workspaces)
         {
-            printf ("\n");
+            fprintf (stderr, "Error: Failed to parse workspace data\n");
+            return 1;
+        }
+
+        printf ("Workspaces:\n");
+        printf ("%-5s %-12s %-12s %-8s %-6s\n", "ID", "Windows", "Max", "Avail", "Locked");
+        printf ("%-5s %-12s %-12s %-8s %-6s\n", "----", "------", "---", "-----", "------");
+
+        for (uint32_t i = 0; i < workspaces->count; i++)
+        {
+            gf_workspace_info_t *ws = &workspaces->items[i];
+            printf ("%-5d %-12u %-12u %-8d %-6s\n", ws->id, ws->window_count, ws->max_windows,
+                    ws->available_space, ws->is_locked ? "Yes" : "No");
+        }
+
+        gf_workspace_list_cleanup (workspaces);
+    }
+    else if (strncmp (command, "query windows", 13) == 0)
+    {
+        gf_window_list_t *windows = gf_parse_window_list (response.message);
+        if (!windows)
+        {
+            fprintf (stderr, "Error: Failed to parse window data\n");
+            return 1;
+        }
+
+        printf ("Windows:\n");
+        printf ("%-10s %-20s %-10s %-6s\n", "ID", "Name", "Workspace", "State");
+        printf ("%-10s %-20s %-10s %-6s\n", "----------", "--------------------", "----------", "------");
+
+        for (uint32_t i = 0; i < windows->count; i++)
+        {
+            gf_window_info_t *win = &windows->items[i];
+            const char *state = win->is_minimized ? "Min" : (win->is_maximized ? "Max" : "Norm");
+            printf ("%-10lu %-20s %-10d %-6s\n", (unsigned long)win->id, win->name, win->workspace_id, state);
+        }
+
+        gf_window_list_cleanup (windows);
+    }
+    else
+    {
+        gf_command_response_t *resp = (gf_command_response_t *)response.message;
+        if (resp->message[0])
+        {
+            printf ("%s", resp->message);
+            if (resp->message[strlen (resp->message) - 1] != '\n')
+            {
+                printf ("\n");
+            }
         }
     }
 
