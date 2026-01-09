@@ -1,3 +1,4 @@
+#include "glib.h"
 #include "ipc.h"
 #include "ipc_command.h"
 #include "list.h"
@@ -345,7 +346,10 @@ on_move_clicked (GtkButton *btn, gpointer data)
     GArray *window_data = g_object_get_data (G_OBJECT (model), "window-data");
 
     if (!window_data || wsel >= window_data->len)
+    {
+        g_warning ("[move] window-data missing or index out of range");
         return;
+    }
 
     gf_window_info_t *win = &g_array_index (window_data, gf_window_info_t, wsel);
 
@@ -356,6 +360,7 @@ on_move_clicked (GtkButton *btn, gpointer data)
         return;
 
     const char *target_ws = gtk_string_object_get_string (target_item);
+
     if (!target_ws)
         return;
 
@@ -364,7 +369,31 @@ on_move_clicked (GtkButton *btn, gpointer data)
     char cmd[64];
     snprintf (cmd, sizeof cmd, "move %lu %s", window_id, target_ws);
 
-    gf_run_client_command (cmd);
+    g_debug ("[move] ipc cmd=\"%s\"", cmd);
+
+    gf_ipc_response_t resp = gf_run_client_command (cmd);
+
+    gf_command_response_t cmd_resp;
+    memset (&cmd_resp, 0, sizeof cmd_resp);
+    memcpy (&cmd_resp, resp.message, sizeof cmd_resp);
+    cmd_resp.message[sizeof (cmd_resp.message) - 1] = '\0';
+
+    const char *text = cmd_resp.message[0] ? cmd_resp.message
+                                           : (resp.status == GF_IPC_SUCCESS
+                                                  ? "Command executed successfully"
+                                                  : "Command failed");
+
+    if (resp.status == GF_IPC_SUCCESS)
+        g_debug ("[move] success: %s", text);
+    else
+        g_warning ("[move] failed: %s", text);
+
+    GtkAlertDialog *dialog = gtk_alert_dialog_new ("");
+
+    gtk_alert_dialog_set_message (dialog, text);
+    gtk_alert_dialog_show (dialog, GTK_WINDOW (app->window));
+
+    g_debug ("[move] refreshing workspaces");
     gf_refresh_workspaces (app);
 }
 
