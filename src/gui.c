@@ -1,6 +1,8 @@
+#include "internal.h"
 #include "ipc.h"
 #include "ipc_command.h"
 #include "list.h"
+#include "logger.h"
 #include "types.h"
 #ifdef __linux__
 #include <gdk/x11/gdkx.h>
@@ -20,6 +22,16 @@ typedef struct
     GtkWidget *target_ws_dropdown;
     GtkStringList *target_ws_model;
 } AppWidgets;
+
+static gboolean
+_is_window_itself (const gf_window_info_t *win)
+{
+    if (!win || !win->name[0])
+        return FALSE;
+
+    /* Adjust if you later change the window title */
+    return g_strcmp0 (win->name, "GridFlux") == 0;
+}
 
 static gf_ipc_response_t
 gf_run_client_command (const char *command)
@@ -51,12 +63,62 @@ gf_run_client_command (const char *command)
 }
 
 static void
+on_window_dropdown_changed (GtkDropDown *dropdown, GParamSpec *pspec, gpointer data)
+{
+    AppWidgets *app = (AppWidgets *)data;
+
+    guint selected = gtk_drop_down_get_selected (dropdown);
+    if (selected == GTK_INVALID_LIST_POSITION)
+    {
+        return;
+    }
+
+    GListModel *model = gtk_drop_down_get_model (dropdown);
+    GArray *window_data = g_object_get_data (G_OBJECT (model), "window-data");
+
+    if (!window_data || selected >= window_data->len)
+    {
+        return;
+    }
+
+    gf_window_info_t *win = &g_array_index (window_data, gf_window_info_t, selected);
+    int current_workspace = win->workspace_id;
+
+    gf_ipc_response_t ws_response = gf_run_client_command ("query workspaces");
+    gf_workspace_list_t *workspaces = gf_parse_workspace_list (ws_response.message);
+
+    if (!workspaces)
+    {
+        return;
+    }
+
+    GtkStringList *new_target_ws_model = gtk_string_list_new (NULL);
+
+    for (uint32_t i = 0; i < workspaces->count; i++)
+    {
+        gf_workspace_info_t *ws = &workspaces->items[i];
+
+        if (ws->id == current_workspace)
+            continue;
+
+        char ws_id_str[16];
+        snprintf (ws_id_str, sizeof (ws_id_str), "%d", ws->id);
+        gtk_string_list_append (new_target_ws_model, ws_id_str);
+    }
+
+    gtk_drop_down_set_model (GTK_DROP_DOWN (app->target_ws_dropdown),
+                             G_LIST_MODEL (new_target_ws_model));
+    app->target_ws_model = new_target_ws_model;
+
+    gf_workspace_list_cleanup (workspaces);
+}
+
+static void
 gf_refresh_workspaces (AppWidgets *app)
 {
     gf_ipc_response_t ws_response = gf_run_client_command ("query workspaces");
     gf_ipc_response_t win_response = gf_run_client_command ("query windows");
 
-    // Parse responses
     gf_workspace_list_t *workspaces = gf_parse_workspace_list (ws_response.message);
     gf_window_list_t *windows = gf_parse_window_list (win_response.message);
 
@@ -66,13 +128,35 @@ gf_refresh_workspaces (AppWidgets *app)
         goto cleanup;
     }
 
-    // Clear models
     GtkStringList *new_ws_model = gtk_string_list_new (NULL);
     gtk_drop_down_set_model (GTK_DROP_DOWN (app->ws_dropdown),
                              G_LIST_MODEL (new_ws_model));
     app->ws_model = new_ws_model;
 
     GtkStringList *new_window_model = gtk_string_list_new (NULL);
+
+    GArray *window_data = g_array_new (FALSE, FALSE, sizeof (gf_window_info_t));
+
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+
+        gf_window_info_t *win = &windows->items[i];
+
+        if (_is_window_itself (win) || !win->is_valid)
+        {
+            continue;
+        }
+
+        char dropdown_text[512];
+        snprintf (dropdown_text, sizeof (dropdown_text), "%s", win->name);
+        gtk_string_list_append (new_window_model, dropdown_text);
+
+        g_array_append_val (window_data, win);
+    }
+
+    g_object_set_data_full (G_OBJECT (new_window_model), "window-data", window_data,
+                            (GDestroyNotify)g_array_unref);
+
     gtk_drop_down_set_model (GTK_DROP_DOWN (app->window_dropdown),
                              G_LIST_MODEL (new_window_model));
     app->window_model = new_window_model;
@@ -82,16 +166,6 @@ gf_refresh_workspaces (AppWidgets *app)
                              G_LIST_MODEL (new_target_ws_model));
     app->target_ws_model = new_target_ws_model;
 
-    // Populate window dropdown (all windows)
-    for (uint32_t i = 0; i < windows->count; i++)
-    {
-        char dropdown_text[512];
-        snprintf (dropdown_text, sizeof (dropdown_text), "%s (%lu)",
-                  windows->items[i].name, windows->items[i].id);
-        gtk_string_list_append (new_window_model, dropdown_text);
-    }
-
-    // Create grid for workspace display
     GtkWidget *old
         = gtk_scrolled_window_get_child (GTK_SCROLLED_WINDOW (app->workspace_table));
     if (old)
@@ -105,7 +179,6 @@ gf_refresh_workspaces (AppWidgets *app)
     gtk_widget_set_margin_start (grid, 12);
     gtk_widget_set_margin_end (grid, 12);
 
-    // Headers
     GtkWidget *ws_header = gtk_label_new ("Workspace");
     gtk_widget_add_css_class (ws_header, "table-header");
     gtk_grid_attach (GTK_GRID (grid), ws_header, 0, 0, 1, 1);
@@ -122,38 +195,32 @@ gf_refresh_workspaces (AppWidgets *app)
     gtk_widget_add_css_class (status_header, "table-header");
     gtk_grid_attach (GTK_GRID (grid), status_header, 3, 0, 1, 1);
 
-    // Separator
     GtkWidget *sep = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
     gtk_grid_attach (GTK_GRID (grid), sep, 0, 1, 4, 1);
 
-    // Populate grid with workspaces
     int row = 2;
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_workspace_info_t *ws = &workspaces->items[i];
 
-        // Workspace ID
         char ws_id_str[16];
         snprintf (ws_id_str, sizeof (ws_id_str), "%d", ws->id);
         GtkWidget *ws_label = gtk_label_new (ws_id_str);
         gtk_widget_add_css_class (ws_label, "table-cell");
         gtk_grid_attach (GTK_GRID (grid), ws_label, 0, row, 1, 1);
 
-        // Window count
         char count_str[16];
         snprintf (count_str, sizeof (count_str), "%u", ws->window_count);
         GtkWidget *count_label = gtk_label_new (count_str);
         gtk_widget_add_css_class (count_label, "table-cell");
         gtk_grid_attach (GTK_GRID (grid), count_label, 1, row, 1, 1);
 
-        // Available slots
         char slots_str[16];
         snprintf (slots_str, sizeof (slots_str), "%d", ws->available_space);
         GtkWidget *slots_label = gtk_label_new (slots_str);
         gtk_widget_add_css_class (slots_label, "table-cell");
         gtk_grid_attach (GTK_GRID (grid), slots_label, 2, row, 1, 1);
 
-        // Status
         const char *status_text = ws->is_locked ? "🔒 Locked" : "🔓 Unlocked";
         GtkWidget *status_label = gtk_label_new (status_text);
         gtk_widget_add_css_class (status_label, "table-cell");
@@ -161,7 +228,6 @@ gf_refresh_workspaces (AppWidgets *app)
 
         row++;
 
-        // Add to dropdowns
         gtk_string_list_append (new_ws_model, ws_id_str);
         gtk_string_list_append (new_target_ws_model, ws_id_str);
     }
@@ -284,6 +350,7 @@ on_move_clicked (GtkButton *btn, gpointer data)
         = gtk_drop_down_get_selected (GTK_DROP_DOWN (app->window_dropdown));
     guint target_selected
         = gtk_drop_down_get_selected (GTK_DROP_DOWN (app->target_ws_dropdown));
+
     if (window_selected == GTK_INVALID_LIST_POSITION
         || target_selected == GTK_INVALID_LIST_POSITION)
     {
@@ -293,24 +360,11 @@ on_move_clicked (GtkButton *btn, gpointer data)
         return;
     }
 
-    GtkStringObject *window_item = GTK_STRING_OBJECT (
-        gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->window_dropdown)));
-    GtkStringObject *target_item = GTK_STRING_OBJECT (
-        gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->target_ws_dropdown)));
-    if (!window_item || !target_item)
-    {
-        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
-        gtk_alert_dialog_set_message (d, "Invalid selection");
-        gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
-        return;
-    }
+    GListModel *window_model
+        = gtk_drop_down_get_model (GTK_DROP_DOWN (app->window_dropdown));
+    GArray *window_data = g_object_get_data (G_OBJECT (window_model), "window-data");
 
-    const char *window_text = gtk_string_object_get_string (window_item);
-    const char *target_ws = gtk_string_object_get_string (target_item);
-
-    // Parse window id from "name (id)"
-    char *paren = strrchr (window_text, '(');
-    if (!paren)
+    if (!window_data || window_selected >= window_data->len)
     {
         GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
         gtk_alert_dialog_set_message (d, "Invalid window selection");
@@ -318,17 +372,28 @@ on_move_clicked (GtkButton *btn, gpointer data)
         return;
     }
 
-    char window_id_str[32];
-    strcpy (window_id_str, paren + 1);
-    char *end = strchr (window_id_str, ')');
-    if (end)
-        *end = '\0';
+    gf_window_info_t *win
+        = &g_array_index (window_data, gf_window_info_t, window_selected);
+
+    guint window_id = win->id;
+
+    GtkStringObject *target_item = GTK_STRING_OBJECT (
+        gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->target_ws_dropdown)));
+
+    if (!target_item)
+    {
+        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
+        gtk_alert_dialog_set_message (d, "Invalid target workspace");
+        gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
+        return;
+    }
+
+    const char *target_ws = gtk_string_object_get_string (target_item);
 
     char command[64];
-    snprintf (command, sizeof (command), "move %s %s", window_id_str, target_ws);
+    snprintf (command, sizeof (command), "move %u %s", window_id, target_ws);
 
-    gf_ipc_response_t response = gf_run_client_command (command);
-
+    gf_run_client_command (command);
     gf_refresh_workspaces (app);
 }
 
@@ -402,6 +467,9 @@ gf_gtk_activate (GtkApplication *app, gpointer user_data)
         = gtk_drop_down_new (G_LIST_MODEL (widgets->window_model), NULL);
     gtk_widget_set_size_request (widgets->window_dropdown, 200, -1);
     gtk_box_append (GTK_BOX (move_controls), widgets->window_dropdown);
+
+    g_signal_connect (widgets->window_dropdown, "notify::selected",
+                      G_CALLBACK (on_window_dropdown_changed), widgets);
 
     widgets->target_ws_model = gtk_string_list_new (NULL);
     widgets->target_ws_dropdown

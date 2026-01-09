@@ -616,7 +616,6 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
     unsigned char *data = NULL;
     unsigned long nitems = 0;
 
-    // Check window name for GridFlux GUI
     char name[256];
     gf_platform_get_window_name (display, window, name, sizeof (name));
     if (strcmp (name, "GridFlux") == 0)

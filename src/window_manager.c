@@ -84,11 +84,11 @@ _minimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list,
 
     for (uint32_t i = 0; i < count; i++)
     {
-        if (!wm_is_excluded (m, ws_list[i].native_handle) || !ws_list[i].is_minimized)
-        {
-            platform->minimize_window (display, ws_list[i].native_handle);
-            ws_list[i].is_minimized = true;
-        }
+        if (wm_is_excluded (m, ws_list[i].native_handle))
+            continue;
+
+        platform->minimize_window (display, ws_list[i].native_handle);
+        ws_list[i].is_minimized = true;
     }
 }
 
@@ -103,7 +103,7 @@ _unminimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list
     {
         gf_window_info_t *win = &ws_list[i];
 
-        if (wm_is_excluded (m, win->native_handle) || !win->is_minimized)
+        if (wm_is_excluded (m, win->native_handle))
         {
             continue;
         }
@@ -843,6 +843,9 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
 
             for (uint32_t w = 0; w < windows->count; w++)
             {
+                if (wm_is_excluded (m, win->native_handle))
+                    continue;
+
                 if (windows->items[w].id == win->id)
                 {
                     GF_LOG_INFO ("Move window %u from workspace %u to workspace %u",
@@ -894,7 +897,8 @@ gf_window_manager_watch (gf_window_manager_t *m)
             gf_window_info_t *existing
                 = gf_window_list_find_by_window_id (windows, platform_windows[i].id);
 
-            if (!existing && platform_windows[i].is_valid)
+            if (!existing && platform_windows[i].is_valid
+                && !wm_is_excluded (m, platform_windows[i].native_handle))
             {
                 // New window detected!
                 gf_workspace_id_t assigned_ws = gf_workspace_list_find_free (
