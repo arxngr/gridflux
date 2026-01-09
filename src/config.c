@@ -1,12 +1,13 @@
 #include "config.h"
 #include "logger.h"
 #include "types.h"
+#include "platform_compat.h"  // Centralized platform-specific includes
 #include <json-c/json.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
@@ -28,21 +29,30 @@ gf_config_get_path (void)
     config_path[sizeof (config_path) - 1] = '\0';
     return config_path;
 #else
+#ifdef _WIN32
+    const char *appdata = getenv ("APPDATA");
+    if (!appdata || appdata[0] == '\0')
+    {
+        fprintf (stderr, "Error: APPDATA environment variable not set or empty\n");
+        return NULL;
+    }
 
-    // Try XDG_CONFIG_HOME first (follows XDG Base Directory spec)
+    snprintf (config_path, sizeof (config_path), "%s\\gridflux\\config.json", appdata);
+
+    // Ensure the directory exists
+    char gridflux_dir[PATH_MAX];
+    snprintf (gridflux_dir, sizeof (gridflux_dir), "%s\\gridflux", appdata);
+
+    return config_path;
+#else
+    // Unix-like systems
     const char *xdg_config = getenv ("XDG_CONFIG_HOME");
     if (xdg_config && xdg_config[0] != '\0')
     {
-        int ret = snprintf (config_path, sizeof (config_path), "%s/gridflux/config.json",
-                            xdg_config);
-        GF_LOG_DEBUG ("Installation mode, XDG Path: ", config_path);
-        if (ret > 0 && (size_t)ret < sizeof (config_path))
-        {
-            return config_path;
-        }
+        snprintf (config_path, sizeof (config_path), "%s/gridflux/config.json", xdg_config);
+        return config_path;
     }
 
-    // Fall back to HOME/.config
     const char *home = getenv ("HOME");
     if (!home || home[0] == '\0')
     {
@@ -50,17 +60,9 @@ gf_config_get_path (void)
         return NULL;
     }
 
-    // Build the final path
-    int ret = snprintf (config_path, sizeof (config_path),
-                        "%s/.config/gridflux/config.json", home);
-
-    if (ret < 0 || (size_t)ret >= sizeof (config_path))
-    {
-        fprintf (stderr, "Error: Config path too long\n");
-        return NULL;
-    }
-
+    snprintf (config_path, sizeof (config_path), "%s/.config/gridflux/config.json", home);
     return config_path;
+#endif
 #endif
 }
 
@@ -69,13 +71,23 @@ read_file (const char *filename)
 {
     FILE *f = fopen (filename, "r");
     if (!f)
+    {
+        fprintf (stderr, "Error: Unable to open file '%s' for reading. Check permissions.\n", filename);
         return NULL;
+    }
 
     fseek (f, 0, SEEK_END);
     long len = ftell (f);
     rewind (f);
 
     char *data = malloc (len + 1);
+    if (!data)
+    {
+        fprintf (stderr, "Error: Memory allocation failed while reading file '%s'.\n", filename);
+        fclose (f);
+        return NULL;
+    }
+
     fread (data, 1, len, f);
     data[len] = '\0';
     fclose (f);
@@ -87,7 +99,10 @@ write_file (const char *filename, const char *data)
 {
     FILE *f = fopen (filename, "w");
     if (!f)
+    {
+        fprintf (stderr, "Error: Unable to open file '%s' for writing. Check permissions.\n", filename);
         return;
+    }
     fputs (data, f);
     fclose (f);
 }

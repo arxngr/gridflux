@@ -31,7 +31,7 @@ Make sure you have the following installed:
 ### Clone the Repository 📂
 
 ```bash
-git clone https://github.com/zyxidra/gridflux.git
+git clone https://github.com/arxngr/gridflux.git
 cd gridflux
 chmod +x install.sh
 ./scripts/install.sh
