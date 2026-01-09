@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 static gf_workspace_info_t *
@@ -17,6 +18,18 @@ _get_workspace (gf_workspace_list_t *workspaces, gf_workspace_id_t id)
     if (!workspaces || id < 0 || id >= workspaces->count)
         return NULL;
     return &workspaces->items[id];
+}
+
+void
+_cleanup_unused_workspace (gf_workspace_list_t *list, uint32_t index)
+{
+    if (!list || index >= list->count)
+        return;
+
+    memmove (&list->items[index], &list->items[index + 1],
+             (list->count - index - 1) * sizeof (gf_workspace_info_t));
+
+    list->count--;
 }
 
 static bool
@@ -348,7 +361,7 @@ gf_window_manager_update_window_info (gf_window_manager_t *m, gf_native_window_t
 }
 
 void
-gf_window_manager_cleanup_invalid_windows (gf_window_manager_t *m)
+gf_window_manager_cleanup_invalid_data (gf_window_manager_t *m)
 {
     if (!m || !wm_platform (m))
         return;
@@ -356,14 +369,12 @@ gf_window_manager_cleanup_invalid_windows (gf_window_manager_t *m)
     gf_window_list_t *windows = wm_windows (m);
     gf_workspace_list_t *workspaces = wm_workspaces (m);
 
-    gf_platform_interface_t *platform = wm_platform (m);
-    gf_display_t display = *wm_display (m);
-
     if (!windows || !workspaces)
         return;
 
     uint32_t removed_windows = 0;
 
+    /* Remove invalid/excluded windows */
     for (uint32_t i = 0; i < windows->count;)
     {
         gf_window_info_t *win = &windows->items[i];
@@ -384,17 +395,17 @@ gf_window_manager_cleanup_invalid_windows (gf_window_manager_t *m)
     if (removed_windows > 0)
         GF_LOG_DEBUG ("Cleaned %u invalid/excluded windows", removed_windows);
 
-    // Update workspace window counts
+    /* Recalculate window counts */
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         workspaces->items[i].window_count
             = gf_window_list_count_by_workspace (windows, workspaces->items[i].id);
     }
 
-    // Remove empty workspaces
     for (uint32_t i = 0; i < workspaces->count;)
     {
         gf_workspace_info_t *ws = &workspaces->items[i];
+
         bool is_active = (ws->id == workspaces->active_workspace);
         bool is_empty = (ws->window_count == 0);
         bool can_remove = (workspaces->count > 1);
@@ -403,18 +414,8 @@ gf_window_manager_cleanup_invalid_windows (gf_window_manager_t *m)
         {
             GF_LOG_INFO ("Removing empty workspace %u", ws->id);
 
-            if (platform->remove_workspace (display, ws->id) == GF_SUCCESS)
-            {
-                ws->id = -1;
-                ws->available_space = 0;
-                ws->max_windows = 0;
-                ws->window_count = 0;
-                continue;
-            }
-            else
-            {
-                GF_LOG_WARN ("Failed to remove workspace %u", ws->id);
-            }
+            _cleanup_unused_workspace (workspaces, i);
+            continue;
         }
 
         i++;
@@ -695,7 +696,7 @@ gf_window_manager_run (gf_window_manager_t *m)
 
         if (current_time - m->state.last_cleanup_time >= 1)
         {
-            gf_window_manager_cleanup_invalid_windows (m);
+            gf_window_manager_cleanup_invalid_data (m);
             m->state.last_cleanup_time = current_time;
         }
 
@@ -994,6 +995,9 @@ gf_window_manager_event (gf_window_manager_t *m)
         win.is_valid = true;
         win.workspace_id = gf_workspace_list_find_free (
             workspaces, m->config->max_windows_per_workspace);
+
+        if (wm_is_excluded (m, win.native_handle))
+            return;
 
         if (gf_window_list_add (windows, &win) == GF_SUCCESS)
         {

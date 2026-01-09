@@ -49,9 +49,6 @@ bool gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t wi
 gf_error_code_t gf_platform_is_window_drag (gf_display_t display,
                                             gf_native_window_t window,
                                             gf_rect_t *geometry);
-gf_error_code_t gf_platform_remove_workspace (gf_display_t display,
-                                              gf_workspace_id_t workspace_id);
-
 // Additional platform functions
 gf_window_id_t gf_platform_active_window (gf_display_t dpy);
 gf_error_code_t gf_platform_minimize_window (gf_display_t display,

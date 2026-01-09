@@ -46,7 +46,7 @@ gf_error_code_t gf_window_manager_arrange_workspace (gf_window_manager_t *manage
 gf_error_code_t gf_window_manager_update_window_info (gf_window_manager_t *manager,
                                                       gf_native_window_t window,
                                                       gf_workspace_id_t workspace_id);
-void gf_window_manager_cleanup_invalid_windows (gf_window_manager_t *manager);
+void gf_window_manager_cleanup_invalid_data (gf_window_manager_t *manager);
 void gf_window_manager_print_stats (const gf_window_manager_t *manager);
 gf_error_code_t gf_window_manager_swap (gf_window_manager_t *manager,
                                         const gf_window_info_t *src_copy,

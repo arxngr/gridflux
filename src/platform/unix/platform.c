@@ -54,7 +54,6 @@ gf_platform_create (void)
     platform->is_window_valid = gf_platform_is_window_valid;
     platform->is_window_excluded = gf_platform_is_window_excluded;
     platform->is_window_drag = gf_platform_is_window_drag;
-    platform->remove_workspace = gf_platform_remove_workspace;
     platform->get_active_window = gf_platform_active_window;
     platform->platform_data = data;
 
@@ -861,56 +860,6 @@ gf_platform_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
 
     return gf_platform_send_client_message (dpy, win, atoms->net_moveresize_window, data,
                                             5);
-}
-
-gf_error_code_t
-gf_platform_remove_workspace (gf_display_t display, gf_workspace_id_t workspace_id)
-{
-    if (!display)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    Display *dpy = (Display *)display;
-    Window root = DefaultRootWindow (dpy);
-
-    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
-
-    Atom type;
-    int format;
-    unsigned long nitems, bytes_after;
-    unsigned char *data = NULL;
-
-    int status
-        = XGetWindowProperty (dpy, root, atoms->net_number_of_desktops, 0, 1, False,
-                              XA_CARDINAL, &type, &format, &nitems, &bytes_after, &data);
-
-    if (status != Success || !data || nitems != 1)
-    {
-        if (data)
-            XFree (data);
-
-        GF_LOG_ERROR ("Failed to read workspace count");
-        return GF_ERROR_PLATFORM_ERROR;
-    }
-
-    uint32_t current = *(uint32_t *)data;
-    XFree (data);
-
-    if (current <= 1)
-    {
-        GF_LOG_WARN ("Refusing to remove last workspace");
-        return GF_ERROR_INITIALIZATION_FAILED;
-    }
-
-    uint32_t new_count = current - 1;
-
-    XChangeProperty (dpy, root, atoms->net_number_of_desktops, XA_CARDINAL, 32,
-                     PropModeReplace, (unsigned char *)&new_count, 1);
-
-    XFlush (dpy);
-
-    GF_LOG_INFO ("Requested workspace removal: %u → %u", current, new_count);
-
-    return GF_SUCCESS;
 }
 
 static Window
