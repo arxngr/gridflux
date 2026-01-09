@@ -1,8 +1,6 @@
-#include "internal.h"
 #include "ipc.h"
 #include "ipc_command.h"
 #include "list.h"
-#include "logger.h"
 #include "types.h"
 #ifdef __linux__
 #include <gdk/x11/gdkx.h>
@@ -29,7 +27,6 @@ _is_window_itself (const gf_window_info_t *win)
     if (!win || !win->name[0])
         return FALSE;
 
-    /* Adjust if you later change the window title */
     return g_strcmp0 (win->name, "GridFlux") == 0;
 }
 
@@ -123,10 +120,7 @@ gf_refresh_workspaces (AppWidgets *app)
     gf_window_list_t *windows = gf_parse_window_list (win_response.message);
 
     if (!workspaces || !windows)
-    {
-        g_warning ("Failed to parse IPC response");
         goto cleanup;
-    }
 
     GtkStringList *new_ws_model = gtk_string_list_new (NULL);
     gtk_drop_down_set_model (GTK_DROP_DOWN (app->ws_dropdown),
@@ -139,19 +133,14 @@ gf_refresh_workspaces (AppWidgets *app)
 
     for (uint32_t i = 0; i < windows->count; i++)
     {
-
         gf_window_info_t *win = &windows->items[i];
 
         if (_is_window_itself (win) || !win->is_valid)
-        {
             continue;
-        }
 
-        char dropdown_text[512];
-        snprintf (dropdown_text, sizeof (dropdown_text), "%s", win->name);
-        gtk_string_list_append (new_window_model, dropdown_text);
+        gtk_string_list_append (new_window_model, win->name);
 
-        g_array_append_val (window_data, win);
+        g_array_append_val (window_data, *win);
     }
 
     g_object_set_data_full (G_OBJECT (new_window_model), "window-data", window_data,
@@ -346,54 +335,36 @@ on_move_clicked (GtkButton *btn, gpointer data)
 {
     AppWidgets *app = data;
 
-    guint window_selected
-        = gtk_drop_down_get_selected (GTK_DROP_DOWN (app->window_dropdown));
-    guint target_selected
-        = gtk_drop_down_get_selected (GTK_DROP_DOWN (app->target_ws_dropdown));
+    guint wsel = gtk_drop_down_get_selected (GTK_DROP_DOWN (app->window_dropdown));
+    guint tsel = gtk_drop_down_get_selected (GTK_DROP_DOWN (app->target_ws_dropdown));
 
-    if (window_selected == GTK_INVALID_LIST_POSITION
-        || target_selected == GTK_INVALID_LIST_POSITION)
-    {
-        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
-        gtk_alert_dialog_set_message (d, "Please select a window and target workspace");
-        gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
+    if (wsel == GTK_INVALID_LIST_POSITION || tsel == GTK_INVALID_LIST_POSITION)
         return;
-    }
 
-    GListModel *window_model
-        = gtk_drop_down_get_model (GTK_DROP_DOWN (app->window_dropdown));
-    GArray *window_data = g_object_get_data (G_OBJECT (window_model), "window-data");
+    GListModel *model = gtk_drop_down_get_model (GTK_DROP_DOWN (app->window_dropdown));
+    GArray *window_data = g_object_get_data (G_OBJECT (model), "window-data");
 
-    if (!window_data || window_selected >= window_data->len)
-    {
-        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
-        gtk_alert_dialog_set_message (d, "Invalid window selection");
-        gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
+    if (!window_data || wsel >= window_data->len)
         return;
-    }
 
-    gf_window_info_t *win
-        = &g_array_index (window_data, gf_window_info_t, window_selected);
-
-    guint window_id = win->id;
+    gf_window_info_t *win = &g_array_index (window_data, gf_window_info_t, wsel);
 
     GtkStringObject *target_item = GTK_STRING_OBJECT (
         gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->target_ws_dropdown)));
 
     if (!target_item)
-    {
-        GtkAlertDialog *d = gtk_alert_dialog_new (NULL);
-        gtk_alert_dialog_set_message (d, "Invalid target workspace");
-        gtk_alert_dialog_show (d, GTK_WINDOW (app->window));
         return;
-    }
 
     const char *target_ws = gtk_string_object_get_string (target_item);
+    if (!target_ws)
+        return;
 
-    char command[64];
-    snprintf (command, sizeof (command), "move %u %s", window_id, target_ws);
+    unsigned long window_id = win->id;
 
-    gf_run_client_command (command);
+    char cmd[64];
+    snprintf (cmd, sizeof cmd, "move %lu %s", window_id, target_ws);
+
+    gf_run_client_command (cmd);
     gf_refresh_workspaces (app);
 }
 

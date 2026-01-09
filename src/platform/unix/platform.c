@@ -645,6 +645,7 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
     {
         Atom *types = (Atom *)data;
         Atom excluded_types[] = { atoms->net_wm_window_type_dock,
+                                  atoms->net_wm_window_type_desktop,
                                   atoms->net_wm_window_type_toolbar,
                                   atoms->net_wm_window_type_menu,
                                   atoms->net_wm_window_type_splash,

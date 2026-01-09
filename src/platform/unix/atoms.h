@@ -36,6 +36,7 @@ typedef struct
     Atom net_wm_window_type_tooltip;
     Atom net_wm_window_type_notification;
     Atom net_wm_window_type_dock;
+    Atom net_wm_window_type_desktop;
     Atom net_wm_window_type_combo;
     Atom net_frame_extents;
     Atom gtk_frame_extents;
