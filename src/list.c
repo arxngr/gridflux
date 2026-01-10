@@ -1,6 +1,6 @@
 #include "list.h"
-#include "logger.h"
 #include "config.h"
+#include "logger.h"
 #include "memory.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -266,7 +266,8 @@ gf_workspace_list_add (gf_workspace_list_t *list, const gf_workspace_info_t *wor
     // Check if workspace already exists
     if (gf_workspace_list_find (list, workspace->id))
     {
-        return GF_SUCCESS;
+        if (list->capacity < workspace->max_windows)
+            return GF_SUCCESS;
     }
 
     if (list->count >= list->capacity)
@@ -364,8 +365,6 @@ gf_workspace_list_find_free (gf_workspace_list_t *ws, uint32_t max_win_per_ws)
                                  .is_locked = false };
 
     gf_workspace_list_add (ws, &info);
-    GF_LOG_INFO ("Created a new workspace id %u from find free", info.id);
-
     return info.id;
 }
 
@@ -386,7 +385,6 @@ gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
             .is_locked = false,
         };
 
-        GF_LOG_INFO ("Created a new workspace id %u from ensure", info.id);
         gf_workspace_list_add (ws, &info);
     }
 }

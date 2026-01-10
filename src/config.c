@@ -1,12 +1,15 @@
 #include "config.h"
+#include "file.h"
 #include "logger.h"
+#include "memory.h"
+#include "platform_compat.h"
 #include "types.h"
-#include "platform_compat.h"  // Centralized platform-specific includes
 #include <json-c/json.h>
-#include <stdint.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -49,7 +52,14 @@ gf_config_get_path (void)
     const char *xdg_config = getenv ("XDG_CONFIG_HOME");
     if (xdg_config && xdg_config[0] != '\0')
     {
-        snprintf (config_path, sizeof (config_path), "%s/gridflux/config.json", xdg_config);
+        snprintf (config_path, sizeof (config_path), "%s/gridflux/config.json",
+                  xdg_config);
+
+        // Ensure the directory exists
+        char gridflux_dir[PATH_MAX];
+        snprintf (gridflux_dir, sizeof (gridflux_dir), "%s/gridflux", xdg_config);
+        mkdir (gridflux_dir, 0755);
+
         return config_path;
     }
 
@@ -61,6 +71,16 @@ gf_config_get_path (void)
     }
 
     snprintf (config_path, sizeof (config_path), "%s/.config/gridflux/config.json", home);
+
+    // Ensure the directory exists
+    char config_dir[PATH_MAX];
+    snprintf (config_dir, sizeof (config_dir), "%s/.config", home);
+    mkdir (config_dir, 0755);
+
+    char gridflux_dir[PATH_MAX];
+    snprintf (gridflux_dir, sizeof (gridflux_dir), "%s/.config/gridflux", home);
+    mkdir (gridflux_dir, 0755);
+
     return config_path;
 #endif
 #endif
@@ -72,7 +92,9 @@ read_file (const char *filename)
     FILE *f = fopen (filename, "r");
     if (!f)
     {
-        fprintf (stderr, "Error: Unable to open file '%s' for reading. Check permissions.\n", filename);
+        fprintf (stderr,
+                 "Error: Unable to open file '%s' for reading. Check permissions.\n",
+                 filename);
         return NULL;
     }
 
@@ -83,7 +105,8 @@ read_file (const char *filename)
     char *data = malloc (len + 1);
     if (!data)
     {
-        fprintf (stderr, "Error: Memory allocation failed while reading file '%s'.\n", filename);
+        fprintf (stderr, "Error: Memory allocation failed while reading file '%s'.\n",
+                 filename);
         fclose (f);
         return NULL;
     }
@@ -100,7 +123,9 @@ write_file (const char *filename, const char *data)
     FILE *f = fopen (filename, "w");
     if (!f)
     {
-        fprintf (stderr, "Error: Unable to open file '%s' for writing. Check permissions.\n", filename);
+        fprintf (stderr,
+                 "Error: Unable to open file '%s' for writing. Check permissions.\n",
+                 filename);
         return;
     }
     fputs (data, f);
@@ -108,7 +133,7 @@ write_file (const char *filename, const char *data)
 }
 
 void
-save_config (const char *filename, const gf_config_t *cfg)
+gf_config_save_config (const char *filename, const gf_config_t *cfg)
 {
     struct json_object *json = json_object_new_object ();
 
@@ -172,7 +197,7 @@ load_or_create_config (const char *filename)
     char *data = read_file (filename);
     if (!data)
     {
-        save_config (filename, &cfg);
+        gf_config_save_config (filename, &cfg);
         return cfg;
     }
 
@@ -181,7 +206,7 @@ load_or_create_config (const char *filename)
 
     if (!json)
     {
-        save_config (filename, &cfg);
+        gf_config_save_config (filename, &cfg);
         return cfg;
     }
 
@@ -232,7 +257,7 @@ load_or_create_config (const char *filename)
     if (changed)
     {
         GF_LOG_INFO ("Config upgraded with missing fields");
-        save_config (filename, &cfg);
+        gf_config_save_config (filename, &cfg);
     }
 
     return cfg;
@@ -278,7 +303,7 @@ gf_config_add_locked_workspace (gf_config_t *config, gf_workspace_id_t ws_id)
     const char *config_path = gf_config_get_path ();
     if (config_path)
     {
-        save_config (config_path, config);
+        gf_config_save_config (config_path, config);
     }
 
     return GF_SUCCESS;
@@ -313,7 +338,7 @@ gf_config_remove_locked_workspace (gf_config_t *config, gf_workspace_id_t ws_id)
     const char *config_path = gf_config_get_path ();
     if (config_path)
     {
-        save_config (config_path, config);
+        gf_config_save_config (config_path, config);
     }
 
     return GF_SUCCESS;

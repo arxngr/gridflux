@@ -1,15 +1,15 @@
-#include <glib.h>
+#include "config.h"
 #include "ipc.h"
 #include "ipc_command.h"
 #include "list.h"
 #include "types.h"
+#include <glib.h>
 #ifdef __linux__
 #include <gdk/x11/gdkx.h>
 #endif
 #include <gtk/gtk.h>
 #include <stdio.h>
 #include <string.h>
-
 
 typedef struct
 {
@@ -51,6 +51,11 @@ typedef struct
 
 // Forward declarations
 static void gf_refresh_workspaces (gf_gtk_app_widget_t *app);
+static void on_config_button_clicked (GtkButton *btn, gpointer data);
+static void on_lock_clicked (GtkButton *btn, gpointer data);
+static void on_unlock_clicked (GtkButton *btn, gpointer data);
+static void on_refresh_clicked (GtkButton *btn, gpointer data);
+static void on_move_clicked (GtkButton *btn, gpointer data);
 #ifdef _WIN32
 static gboolean handle_command_response (gpointer user_data);
 static gboolean handle_refresh_response (gpointer user_data);
@@ -101,12 +106,12 @@ static void
 on_alert_dialog_response (GObject *source, GAsyncResult *result, gpointer user_data)
 {
     GtkAlertDialog *dialog = GTK_ALERT_DIALOG (source);
-    
+
     // Get the response (we don't need to do anything with it)
     gtk_alert_dialog_choose_finish (dialog, result, NULL);
-    
+
     g_debug ("[dialog] Alert dialog dismissed");
-    
+
     // Dialog is automatically freed by GTK
 }
 
@@ -115,26 +120,26 @@ static gpointer
 run_command_thread (gpointer user_data)
 {
     gf_gtk_command_data_t *data = (gf_gtk_command_data_t *)user_data;
-    
+
     g_debug ("[async] Executing command: %s", data->command);
-    
+
     gf_ipc_response_t response = gf_run_client_command (data->command);
-    
+
     g_debug ("[async] Command completed with status: %d", response.status);
-    
+
     // Prepare data for main thread
     gf_gtk_resp_data_t *resp_data = g_new0 (gf_gtk_resp_data_t, 1);
     resp_data->app = data->app;
     resp_data->response = response;
     resp_data->should_refresh = data->should_refresh;
     resp_data->show_dialog = data->show_dialog;
-    
+
     // Schedule UI update on main thread
     g_idle_add ((GSourceFunc)handle_command_response, resp_data);
-    
+
     g_free (data->command);
     g_free (data);
-    
+
     return NULL;
 }
 
@@ -142,12 +147,12 @@ static gboolean
 handle_command_response (gpointer user_data)
 {
     gf_gtk_resp_data_t *data = (gf_gtk_resp_data_t *)user_data;
-    
+
     g_debug ("[async] Handling response on main thread");
-    
+
     // Clear operation flag
     data->app->operation_in_progress = FALSE;
-    
+
     if (data->show_dialog)
     {
         gf_command_response_t cmd_resp;
@@ -166,35 +171,37 @@ handle_command_response (gpointer user_data)
         GtkWidget *dialog = gtk_window_new ();
         gtk_window_set_title (GTK_WINDOW (dialog), "GridFlux");
         gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
-        gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (data->app->window));
+        gtk_window_set_transient_for (GTK_WINDOW (dialog),
+                                      GTK_WINDOW (data->app->window));
         gtk_window_set_default_size (GTK_WINDOW (dialog), 300, 100);
-        
+
         GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
         gtk_widget_set_margin_top (box, 20);
         gtk_widget_set_margin_bottom (box, 20);
         gtk_widget_set_margin_start (box, 20);
         gtk_widget_set_margin_end (box, 20);
-        
+
         GtkWidget *label = gtk_label_new (text);
         gtk_label_set_wrap (GTK_LABEL (label), TRUE);
         gtk_box_append (GTK_BOX (box), label);
-        
+
         GtkWidget *button = gtk_button_new_with_label ("OK");
         gtk_widget_set_halign (button, GTK_ALIGN_CENTER);
-        g_signal_connect_swapped (button, "clicked", G_CALLBACK (gtk_window_destroy), dialog);
+        g_signal_connect_swapped (button, "clicked", G_CALLBACK (gtk_window_destroy),
+                                  dialog);
         gtk_box_append (GTK_BOX (box), button);
-        
+
         gtk_window_set_child (GTK_WINDOW (dialog), box);
         gtk_window_present (GTK_WINDOW (dialog));
     }
-    
+
     if (data->should_refresh)
     {
         g_debug ("[async] Scheduling refresh");
         // Schedule async refresh instead of blocking
         run_refresh_async (data->app);
     }
-    
+
     g_free (data);
     return G_SOURCE_REMOVE;
 }
@@ -204,31 +211,29 @@ static gpointer
 run_refresh_thread (gpointer user_data)
 {
     gf_gtk_refresh_data_t *data = (gf_gtk_refresh_data_t *)user_data;
-    
+
     g_debug ("[refresh-async] Fetching workspace data");
-    
+
     // Give server time to process the move
     g_usleep (200000); // 200ms delay
-    
+
     gf_ipc_response_t ws_response = gf_run_client_command ("query workspaces");
     gf_ipc_response_t win_response = gf_run_client_command ("query windows");
-    
+
     // Create response data with both results
     gf_gtk_refresh_data_t *resp_data = g_new0 (gf_gtk_refresh_data_t, 1);
     resp_data->app = data->app;
-    
+
     // Store the responses in app's temporary storage
     // We'll parse them on the main thread
     g_object_set_data_full (G_OBJECT (data->app->window), "ws_response",
-                           g_memdup2 (&ws_response, sizeof (ws_response)),
-                           g_free);
+                            g_memdup2 (&ws_response, sizeof (ws_response)), g_free);
     g_object_set_data_full (G_OBJECT (data->app->window), "win_response",
-                           g_memdup2 (&win_response, sizeof (win_response)),
-                           g_free);
-    
+                            g_memdup2 (&win_response, sizeof (win_response)), g_free);
+
     // Schedule UI update on main thread
     g_idle_add ((GSourceFunc)handle_refresh_response, resp_data);
-    
+
     g_free (data);
     return NULL;
 }
@@ -237,41 +242,45 @@ static gboolean
 handle_refresh_response (gpointer user_data)
 {
     gf_gtk_refresh_data_t *data = (gf_gtk_refresh_data_t *)user_data;
-    
+
     g_debug ("[refresh-async] Updating UI on main thread");
-    
+
     // Retrieve responses from temporary storage
-    gf_ipc_response_t *ws_response = g_object_get_data (G_OBJECT (data->app->window), "ws_response");
-    gf_ipc_response_t *win_response = g_object_get_data (G_OBJECT (data->app->window), "win_response");
-    
+    gf_ipc_response_t *ws_response
+        = g_object_get_data (G_OBJECT (data->app->window), "ws_response");
+    gf_ipc_response_t *win_response
+        = g_object_get_data (G_OBJECT (data->app->window), "win_response");
+
     if (!ws_response || !win_response)
     {
         g_warning ("[refresh-async] Missing response data");
         g_free (data);
         return G_SOURCE_REMOVE;
     }
-    
+
     if (ws_response->status != GF_IPC_SUCCESS || win_response->status != GF_IPC_SUCCESS)
     {
         g_warning ("[refresh-async] IPC query failed");
         g_free (data);
         return G_SOURCE_REMOVE;
     }
-    
+
     gf_workspace_list_t *workspaces = gf_parse_workspace_list (ws_response->message);
     gf_window_list_t *windows = gf_parse_window_list (win_response->message);
 
     if (!workspaces || !windows)
     {
         g_warning ("[refresh-async] Failed to parse responses");
-        if (workspaces) gf_workspace_list_cleanup (workspaces);
-        if (windows) gf_window_list_cleanup (windows);
+        if (workspaces)
+            gf_workspace_list_cleanup (workspaces);
+        if (windows)
+            gf_window_list_cleanup (windows);
         g_free (data);
         return G_SOURCE_REMOVE;
     }
 
-    g_debug ("[refresh-async] Parsed %u workspaces and %u windows", 
-             workspaces->count, windows->count);
+    g_debug ("[refresh-async] Parsed %u workspaces and %u windows", workspaces->count,
+             windows->count);
 
     // Update UI (same code as gf_refresh_workspaces but inline)
     GtkStringList *new_ws_model = gtk_string_list_new (NULL);
@@ -302,9 +311,11 @@ handle_refresh_response (gpointer user_data)
                              G_LIST_MODEL (new_target_ws_model));
     data->app->target_ws_model = new_target_ws_model;
 
-    GtkWidget *old = gtk_scrolled_window_get_child (GTK_SCROLLED_WINDOW (data->app->workspace_table));
+    GtkWidget *old = gtk_scrolled_window_get_child (
+        GTK_SCROLLED_WINDOW (data->app->workspace_table));
     if (old)
-        gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (data->app->workspace_table), NULL);
+        gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (data->app->workspace_table),
+                                       NULL);
 
     GtkWidget *grid = gtk_grid_new ();
     gtk_grid_set_row_spacing (GTK_GRID (grid), 5);
@@ -367,13 +378,14 @@ handle_refresh_response (gpointer user_data)
         gtk_string_list_append (new_target_ws_model, ws_id_str);
     }
 
-    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (data->app->workspace_table), grid);
+    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (data->app->workspace_table),
+                                   grid);
 
     gf_workspace_list_cleanup (workspaces);
     gf_window_list_cleanup (windows);
-    
+
     g_debug ("[refresh-async] UI update completed");
-    
+
     g_free (data);
     return G_SOURCE_REMOVE;
 }
@@ -383,13 +395,14 @@ run_refresh_async (gf_gtk_app_widget_t *app)
 {
     gf_gtk_refresh_data_t *data = g_new0 (gf_gtk_refresh_data_t, 1);
     data->app = app;
-    
+
     g_debug ("[refresh-async] Starting async refresh");
     g_thread_new ("ipc-refresh", run_refresh_thread, data);
 }
 
 static void
-run_command_async (gf_gtk_app_widget_t *app, const char *command, gboolean should_refresh, gboolean show_dialog)
+run_command_async (gf_gtk_app_widget_t *app, const char *command, gboolean should_refresh,
+                   gboolean show_dialog)
 {
     // Prevent multiple simultaneous operations
     if (app->operation_in_progress)
@@ -397,15 +410,15 @@ run_command_async (gf_gtk_app_widget_t *app, const char *command, gboolean shoul
         g_debug ("[async] Operation already in progress, ignoring request");
         return;
     }
-    
+
     app->operation_in_progress = TRUE;
-    
+
     gf_gtk_command_data_t *data = g_new0 (gf_gtk_command_data_t, 1);
     data->app = app;
     data->command = g_strdup (command);
     data->should_refresh = should_refresh;
     data->show_dialog = show_dialog;
-    
+
     g_debug ("[async] Starting async command: %s", command);
     g_thread_new ("ipc-command", run_command_thread, data);
 }
@@ -463,17 +476,17 @@ on_window_dropdown_changed (GtkDropDown *dropdown, GParamSpec *pspec, gpointer d
 }
 
 static void
-gf_refresh_workspaces (gf_gtk_app_widget_t *app)  // Definition
+gf_refresh_workspaces (gf_gtk_app_widget_t *app) // Definition
 {
     g_debug ("[refresh] Starting workspace refresh");
-    
+
     gf_ipc_response_t ws_response = gf_run_client_command ("query workspaces");
     if (ws_response.status != GF_IPC_SUCCESS)
     {
         g_warning ("[refresh] Failed to query workspaces");
         return;
     }
-    
+
     gf_ipc_response_t win_response = gf_run_client_command ("query windows");
     if (win_response.status != GF_IPC_SUCCESS)
     {
@@ -490,8 +503,8 @@ gf_refresh_workspaces (gf_gtk_app_widget_t *app)  // Definition
         goto cleanup;
     }
 
-    g_debug ("[refresh] Parsed %u workspaces and %u windows", 
-             workspaces->count, windows->count);
+    g_debug ("[refresh] Parsed %u workspaces and %u windows", workspaces->count,
+             windows->count);
 
     GtkStringList *new_ws_model = gtk_string_list_new (NULL);
     gtk_drop_down_set_model (GTK_DROP_DOWN (app->ws_dropdown),
@@ -593,7 +606,7 @@ gf_refresh_workspaces (gf_gtk_app_widget_t *app)  // Definition
     }
 
     gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (app->workspace_table), grid);
-    
+
     g_debug ("[refresh] Workspace refresh completed successfully");
 
 cleanup:
@@ -841,14 +854,17 @@ gf_gtk_activate (GtkApplication *app, gpointer user_data)
     GtkWidget *lock = gtk_button_new_with_label ("🔒 Lock");
     GtkWidget *unlock = gtk_button_new_with_label ("🔓 Unlock");
     GtkWidget *refresh = gtk_button_new_with_label ("🔄 Refresh");
+    GtkWidget *config = gtk_button_new_with_label ("⚙️ Config");
 
     gtk_box_append (GTK_BOX (controls), lock);
     gtk_box_append (GTK_BOX (controls), unlock);
     gtk_box_append (GTK_BOX (controls), refresh);
+    gtk_box_append (GTK_BOX (controls), config);
 
     g_signal_connect (lock, "clicked", G_CALLBACK (on_lock_clicked), widgets);
     g_signal_connect (unlock, "clicked", G_CALLBACK (on_unlock_clicked), widgets);
     g_signal_connect (refresh, "clicked", G_CALLBACK (on_refresh_clicked), widgets);
+    g_signal_connect (config, "clicked", G_CALLBACK (on_config_button_clicked), widgets);
 
     // Move window controls
     GtkWidget *move_controls = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
@@ -883,6 +899,162 @@ gf_gtk_activate (GtkApplication *app, gpointer user_data)
 
     gtk_widget_grab_focus (widgets->ws_dropdown);
     gtk_window_present (GTK_WINDOW (widgets->window));
+}
+
+static void
+on_config_save_clicked (GtkButton *btn, gpointer data)
+{
+    GtkWidget *config_window = g_object_get_data (G_OBJECT (btn), "config_window");
+
+    // Get current config
+    const char *config_path = gf_config_get_path ();
+    if (!config_path)
+    {
+        GtkAlertDialog *dialog = gtk_alert_dialog_new (NULL);
+        gtk_alert_dialog_set_message (dialog, "Failed to get config path");
+        gtk_alert_dialog_show (dialog, GTK_WINDOW (config_window));
+        return;
+    }
+
+    gf_config_t config = load_or_create_config (config_path);
+
+    // Get values from UI
+    GtkWidget *max_windows_spin
+        = g_object_get_data (G_OBJECT (config_window), "max_windows_spin");
+    GtkWidget *max_workspaces_spin
+        = g_object_get_data (G_OBJECT (config_window), "max_workspaces_spin");
+    GtkWidget *default_padding_spin
+        = g_object_get_data (G_OBJECT (config_window), "default_padding_spin");
+    GtkWidget *min_window_size_spin
+        = g_object_get_data (G_OBJECT (config_window), "min_window_size_spin");
+
+    config.max_windows_per_workspace
+        = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (max_windows_spin));
+    config.max_workspaces
+        = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (max_workspaces_spin));
+    config.default_padding
+        = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (default_padding_spin));
+    config.min_window_size
+        = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (min_window_size_spin));
+
+    // Save config
+    gf_config_save_config (config_path, &config);
+
+    GtkAlertDialog *dialog = gtk_alert_dialog_new ("");
+    gtk_alert_dialog_set_message (dialog, "Configuration saved successfully!");
+    gtk_alert_dialog_show (dialog, GTK_WINDOW (config_window));
+}
+
+static void
+on_config_button_clicked (GtkButton *btn, gpointer data)
+{
+    gf_gtk_app_widget_t *app = (gf_gtk_app_widget_t *)data;
+
+    // Create config window
+    GtkWidget *config_window = gtk_window_new ();
+    gtk_window_set_title (GTK_WINDOW (config_window), "GridFlux Configuration");
+    gtk_window_set_default_size (GTK_WINDOW (config_window), 400, 450);
+    gtk_window_set_modal (GTK_WINDOW (config_window), TRUE);
+    gtk_window_set_transient_for (GTK_WINDOW (config_window), GTK_WINDOW (app->window));
+
+    GtkWidget *main = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_set_margin_top (main, 20);
+    gtk_widget_set_margin_bottom (main, 20);
+    gtk_widget_set_margin_start (main, 20);
+    gtk_widget_set_margin_end (main, 20);
+    gtk_window_set_child (GTK_WINDOW (config_window), main);
+
+    // Title
+    GtkWidget *title = gtk_label_new ("GridFlux Configuration");
+    gtk_widget_add_css_class (title, "config-title");
+    gtk_box_append (GTK_BOX (main), title);
+
+    // Get current config
+    const char *config_path = gf_config_get_path ();
+    gf_config_t config = { 0 };
+    if (config_path)
+    {
+        config = load_or_create_config (config_path);
+    }
+    else
+    {
+        config = (gf_config_t){ .max_windows_per_workspace = 4,
+                                .max_workspaces = 10,
+                                .default_padding = 10,
+                                .min_window_size = 100 };
+    }
+
+    // Configuration form
+    GtkWidget *form = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
+    gtk_box_append (GTK_BOX (main), form);
+
+    // Max windows per workspace
+    GtkWidget *max_windows_label = gtk_label_new ("Max Windows per Workspace:");
+    gtk_widget_set_halign (max_windows_label, GTK_ALIGN_START);
+    gtk_box_append (GTK_BOX (form), max_windows_label);
+
+    GtkWidget *max_windows_spin = gtk_spin_button_new_with_range (1, 20, 1);
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON (max_windows_spin),
+                               config.max_windows_per_workspace);
+    gtk_widget_set_hexpand (max_windows_spin, TRUE);
+    g_object_set_data (G_OBJECT (config_window), "max_windows_spin", max_windows_spin);
+    gtk_box_append (GTK_BOX (form), max_windows_spin);
+
+    // Max workspaces
+    GtkWidget *max_workspaces_label = gtk_label_new ("Max Workspaces:");
+    gtk_widget_set_halign (max_workspaces_label, GTK_ALIGN_START);
+    gtk_box_append (GTK_BOX (form), max_workspaces_label);
+
+    GtkWidget *max_workspaces_spin = gtk_spin_button_new_with_range (1, 50, 1);
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON (max_workspaces_spin),
+                               config.max_workspaces);
+    gtk_widget_set_hexpand (max_workspaces_spin, TRUE);
+    g_object_set_data (G_OBJECT (config_window), "max_workspaces_spin",
+                       max_workspaces_spin);
+    gtk_box_append (GTK_BOX (form), max_workspaces_spin);
+
+    // Default padding
+    GtkWidget *default_padding_label = gtk_label_new ("Default Padding:");
+    gtk_widget_set_halign (default_padding_label, GTK_ALIGN_START);
+    gtk_box_append (GTK_BOX (form), default_padding_label);
+
+    GtkWidget *default_padding_spin = gtk_spin_button_new_with_range (0, 50, 1);
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON (default_padding_spin),
+                               config.default_padding);
+    gtk_widget_set_hexpand (default_padding_spin, TRUE);
+    g_object_set_data (G_OBJECT (config_window), "default_padding_spin",
+                       default_padding_spin);
+    gtk_box_append (GTK_BOX (form), default_padding_spin);
+
+    // Min window size
+    GtkWidget *min_window_size_label = gtk_label_new ("Min Window Size:");
+    gtk_widget_set_halign (min_window_size_label, GTK_ALIGN_START);
+    gtk_box_append (GTK_BOX (form), min_window_size_label);
+
+    GtkWidget *min_window_size_spin = gtk_spin_button_new_with_range (50, 500, 10);
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON (min_window_size_spin),
+                               config.min_window_size);
+    gtk_widget_set_hexpand (min_window_size_spin, TRUE);
+    g_object_set_data (G_OBJECT (config_window), "min_window_size_spin",
+                       min_window_size_spin);
+    gtk_box_append (GTK_BOX (form), min_window_size_spin);
+
+    // Buttons
+    GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (main), button_box);
+
+    GtkWidget *save_btn = gtk_button_new_with_label ("Save");
+    gtk_widget_add_css_class (save_btn, "config-save-btn");
+    g_object_set_data (G_OBJECT (save_btn), "config_window", config_window);
+    g_signal_connect (save_btn, "clicked", G_CALLBACK (on_config_save_clicked), NULL);
+    gtk_box_append (GTK_BOX (button_box), save_btn);
+
+    GtkWidget *close_btn = gtk_button_new_with_label ("Close");
+    g_signal_connect_swapped (close_btn, "clicked", G_CALLBACK (gtk_window_destroy),
+                              config_window);
+    gtk_box_append (GTK_BOX (button_box), close_btn);
+
+    gtk_window_present (GTK_WINDOW (config_window));
 }
 
 int

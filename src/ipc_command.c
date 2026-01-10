@@ -255,6 +255,7 @@ gf_cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *us
 
     memcpy (response->message, &resp, sizeof (resp));
 }
+
 void
 gf_handle_client_message (const char *message, gf_ipc_response_t *response,
                           void *user_data)
