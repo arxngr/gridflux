@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <time.h>
 
-#include "platform_compat.h"  // Centralized platform-specific includes
+#include "platform_compat.h" // Centralized platform-specific includes
 
 #define GF_MAX_LOCKED_WORKSPACES 32
 
@@ -31,5 +31,6 @@ gf_error_code_t gf_config_add_locked_workspace (gf_config_t *config,
                                                 gf_workspace_id_t ws_id);
 gf_error_code_t gf_config_remove_locked_workspace (gf_config_t *config,
                                                    gf_workspace_id_t ws_id);
+void gf_config_save_config (const char *filename, const gf_config_t *cfg);
 
 #endif
