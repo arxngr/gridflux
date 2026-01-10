@@ -4,8 +4,10 @@
 #include "types.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include <sys/stat.h>
 #include <time.h>
+
+#include "platform_compat.h"  // Centralized platform-specific includes
+
 #define GF_MAX_LOCKED_WORKSPACES 32
 
 typedef struct gf_config gf_config_t;

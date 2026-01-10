@@ -4,6 +4,7 @@ compile_commands.json
 .cache/
 *.swp
 *.swo
+.vs
 
 # Compiled object files
 *.o

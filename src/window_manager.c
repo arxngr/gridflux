@@ -10,7 +10,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
+#include "platform_compat.h"
+
 
 static gf_workspace_info_t *
 _get_workspace (gf_workspace_list_t *workspaces, gf_workspace_id_t id)
@@ -911,7 +912,7 @@ gf_window_manager_watch (gf_window_manager_t *m)
                 gf_window_list_add (windows, &platform_windows[i]);
 
                 char win_name[256] = { 0 };
-                gf_window_manager_get_window_name (m, platform_windows[i].id, win_name,
+                gf_window_manager_get_window_name (m, platform_windows[i].native_handle, win_name,
                                                    sizeof (win_name));
                 GF_LOG_INFO ("New window detected: win=%lu | WS=%u | Name='%s'",
                              platform_windows[i].id, assigned_ws, win_name);

@@ -38,7 +38,7 @@ struct gf_platform_interface
                                          gf_workspace_id_t workspace_id);
     gf_window_id_t (*get_active_window) (gf_display_t display);
     gf_error_code_t (*minimize_window) (gf_display_t display, gf_native_window_t window);
-    gf_error_code_t (*unminimize_window) (gf_display_t display, gf_window_id_t window);
+    gf_error_code_t (*unminimize_window) (gf_display_t display, gf_native_window_t window);
 
     void (*window_name_info) (gf_display_t display, gf_native_window_t win, char *buffer,
                               size_t bufsize);

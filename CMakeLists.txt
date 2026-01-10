@@ -1,7 +1,7 @@
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 cmake_minimum_required(VERSION 3.12)
 project(gridflux VERSION 2.0.0 LANGUAGES C)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
@@ -9,126 +9,101 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -Wextra -DDEBUG")
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
-
 option(GF_DEV_MODE "Enable development mode (read config from current dir)" OFF)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSONC REQUIRED json-c)
+include_directories(src)
 
-include_directories(src ${JSONC_INCLUDE_DIRS})
-
-file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS
-    "src/*.c"
-)
-
+file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS "src/*.c")
 list(REMOVE_ITEM COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/client.c")
 list(REMOVE_ITEM COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/gui.c")
 
-find_package(PkgConfig)
-pkg_check_modules(GTK4 gtk4)
 
-if(GTK4_FOUND)
-    add_executable(gridflux-gui
-        src/gui.c
-        src/ipc_command.c
-        src/window_manager.c
-        src/list.c
-        src/memory.c
-        src/config.c
-        src/logger.c
-        src/layout.c
-        src/file.c
+if(WIN32)
+    add_compile_definitions(
+        _CRT_SECURE_NO_WARNINGS
+        _CRT_NONSTDC_NO_DEPRECATE
     )
-    
-    if(UNIX AND NOT APPLE)
-        target_sources(gridflux-gui PRIVATE src/platform/unix/ipc.c)
-    endif()
-    
-    target_include_directories(gridflux-gui PRIVATE ${GTK4_INCLUDE_DIRS})
-    target_link_libraries(gridflux-gui ${GTK4_LIBRARIES} ${JSONC_LIBRARIES})
-    
-    install(TARGETS gridflux-gui DESTINATION bin)
+
+    find_package(PkgConfig REQUIRED)
+
+    pkg_check_modules(JSONC REQUIRED json-c)
+    pkg_check_modules(GTK4 gtk4)
+
 endif()
 
+
 if(UNIX AND NOT APPLE)
+    find_package(PkgConfig REQUIRED)
     find_package(X11 REQUIRED)
+
+    pkg_check_modules(GTK4 gtk4)
     pkg_check_modules(DBUS dbus-1)
-    
+    pkg_check_modules(JSONC REQUIRED json-c)
+
+    add_compile_definitions(_GNU_SOURCE)
+
     file(GLOB_RECURSE PLATFORM_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_SOURCE_DIR}/src/platform/unix/*.c"
         "${CMAKE_SOURCE_DIR}/src/platform/platform_env.c"
     )
-    
-    add_compile_definitions(_GNU_SOURCE)
+
+    set(PLATFORM_LIBRARIES
+        ${X11_LIBRARIES}
+        m
+        ${JSONC_LIBRARIES}
+    )
+
+    set(PLATFORM_INCLUDES
+        ${X11_INCLUDE_DIR}
+        ${JSONC_INCLUDE_DIRS}
+    )
 
     if(DBUS_FOUND)
-        message(STATUS "D-Bus found - KWin backend will be available")
         file(GLOB_RECURSE KWIN_SOURCES CONFIGURE_DEPENDS
             "${CMAKE_SOURCE_DIR}/src/platform/unix/kwin/*.c"
         )
         list(APPEND PLATFORM_SOURCES ${KWIN_SOURCES})
         add_definitions(-DGF_KWIN_SUPPORT)
-        
-        set(PLATFORM_LIBRARIES 
-            ${X11_LIBRARIES} 
-            ${DBUS_LIBRARIES}
-            m 
-            ${JSONC_LIBRARIES}
-        )
-        set(PLATFORM_INCLUDES 
-            ${X11_INCLUDE_DIR}
-            ${DBUS_INCLUDE_DIRS}
-        )
-        
-        if(NOT GF_DEV_MODE)
-            install(FILES 
-                "${CMAKE_SOURCE_DIR}/src/platform/unix/kwin/main.qml"
-                DESTINATION share/gridflux/kwin
-                PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-            )
-        endif()
-        
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "libx11-6, libjson-c5, libdbus-1-3")
-        set(CPACK_RPM_PACKAGE_REQUIRES "libX11, json-c, dbus-libs")
-    else()
-        message(STATUS "D-Bus not found - KWin backend will NOT be available")
-        set(PLATFORM_LIBRARIES ${X11_LIBRARIES} m ${JSONC_LIBRARIES})
-        set(PLATFORM_INCLUDES ${X11_INCLUDE_DIR})
-        
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "libx11-6, libjson-c5")
-        set(CPACK_RPM_PACKAGE_REQUIRES "libX11, json-c")
+
+        list(APPEND PLATFORM_LIBRARIES ${DBUS_LIBRARIES})
+        list(APPEND PLATFORM_INCLUDES ${DBUS_INCLUDE_DIRS})
     endif()
-    
-    set(CPACK_GENERATOR "DEB;RPM")
-
-    set(GF_GNOME_EXT_UUID "gridflux@gridflux.dev")
-    set(GF_GNOME_EXT_DIR
-        "$ENV{HOME}/.local/share/gnome-shell/extensions/${GF_GNOME_EXT_UUID}"
-    )
-
-    add_custom_target(gnome_shell_extension ALL
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${GF_GNOME_EXT_DIR}
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-                ${CMAKE_SOURCE_DIR}/src/platform/unix/mutter
-                ${GF_GNOME_EXT_DIR}
-        COMMENT "Installing GNOME Shell extension"
-    )
 
 elseif(WIN32)
     file(GLOB PLATFORM_SOURCES "src/platform/windows/*.c")
-    set(PLATFORM_LIBRARIES user32 gdi32 kernel32 ${JSONC_LIBRARIES})
-    set(CPACK_GENERATOR "NSIS;ZIP")
-    
+
+    set(PLATFORM_LIBRARIES
+        user32
+        gdi32
+        kernel32
+        shell32
+        dwmapi
+        ${JSONC_LIBRARIES}
+    )
+
+    set(PLATFORM_INCLUDES
+        ${JSONC_INCLUDE_DIRS}
+    )
+
 elseif(APPLE)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(JSONC REQUIRED json-c)
+
     file(GLOB PLATFORM_SOURCES "src/platform/macos/*.c")
     find_library(COCOA_FRAMEWORK Cocoa)
-    set(PLATFORM_LIBRARIES ${COCOA_FRAMEWORK} ${JSONC_LIBRARIES})
-    set(CPACK_GENERATOR "DragNDrop")
+
+    set(PLATFORM_LIBRARIES
+        ${COCOA_FRAMEWORK}
+        ${JSONC_LIBRARIES}
+    )
+
+    set(PLATFORM_INCLUDES
+        ${JSONC_INCLUDE_DIRS}
+    )
 endif()
 
-add_executable(gridflux 
+
+add_executable(gridflux
     ${COMMON_SOURCES}
     ${PLATFORM_SOURCES}
 )
@@ -151,53 +126,64 @@ elseif(WIN32)
     target_sources(gridflux-cli PRIVATE src/platform/windows/ipc.c)
 endif()
 
-if(GF_DEV_MODE)
-    target_compile_definitions(gridflux PRIVATE GF_DEV_MODE)
-    target_compile_definitions(gridflux-cli PRIVATE GF_DEV_MODE)
+
+if(GTK4_FOUND)
+    add_executable(gridflux-gui
+        src/gui.c
+        src/ipc_command.c
+        src/window_manager.c
+        src/list.c
+        src/memory.c
+        src/config.c
+        src/logger.c
+        src/layout.c
+        src/file.c
+        ${PLATFORM_SOURCES}
+    )
+
+    target_include_directories(gridflux-gui PRIVATE
+        ${GTK4_INCLUDE_DIRS}
+        ${PLATFORM_INCLUDES}
+    )
+
+    target_link_libraries(gridflux-gui PRIVATE
+        ${GTK4_LIBRARIES}
+        ${PLATFORM_LIBRARIES}
+    )
 endif()
 
-target_link_libraries(gridflux ${PLATFORM_LIBRARIES})
-target_link_libraries(gridflux-cli ${PLATFORM_LIBRARIES} ${JSONC_LIBRARIES})
 
-if(PLATFORM_INCLUDES)
-    target_include_directories(gridflux PRIVATE ${PLATFORM_INCLUDES})
-    target_include_directories(gridflux-cli PRIVATE ${PLATFORM_INCLUDES})
-endif()
+target_link_libraries(gridflux PRIVATE ${PLATFORM_LIBRARIES})
+target_link_libraries(gridflux-cli PRIVATE ${PLATFORM_LIBRARIES})
+
+target_include_directories(gridflux PRIVATE ${PLATFORM_INCLUDES})
+target_include_directories(gridflux-cli PRIVATE ${PLATFORM_INCLUDES})
 
 if(JSONC_LIBRARY_DIRS)
     target_link_directories(gridflux PRIVATE ${JSONC_LIBRARY_DIRS})
     target_link_directories(gridflux-cli PRIVATE ${JSONC_LIBRARY_DIRS})
+    if(TARGET gridflux-gui)
+        target_link_directories(gridflux-gui PRIVATE ${JSONC_LIBRARY_DIRS})
+    endif()
 endif()
 
-if(DBUS_FOUND AND DBUS_LIBRARY_DIRS)
-    target_link_directories(gridflux PRIVATE ${DBUS_LIBRARY_DIRS})
+
+if(GF_DEV_MODE)
+    target_compile_definitions(gridflux PRIVATE GF_DEV_MODE)
+    target_compile_definitions(gridflux-cli PRIVATE GF_DEV_MODE)
+    if(TARGET gridflux-gui)
+        target_compile_definitions(gridflux-gui PRIVATE GF_DEV_MODE)
+    endif()
 endif()
+
 
 if(NOT GF_DEV_MODE)
     install(TARGETS gridflux gridflux-cli DESTINATION bin)
-    
-    if(EXISTS "${CMAKE_SOURCE_DIR}/config.json")
-        install(FILES 
-            "${CMAKE_SOURCE_DIR}/config.json"
-            DESTINATION share/gridflux/examples
-            RENAME config.json.example
-            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-        )
+    if(TARGET gridflux-gui)
+        install(TARGETS gridflux-gui DESTINATION bin)
     endif()
-    
-    set(CPACK_PACKAGE_NAME "GridFlux")
-    set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-    set(CPACK_PACKAGE_DESCRIPTION "Cross-platform tiling window manager with KDE/KWin support")
-    set(CPACK_PACKAGE_CONTACT "GridFlux Team")
-    
-    if(DBUS_FOUND)
-        set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA 
-            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/postinst"
-        )
-    endif()
-    
-    include(CPack)
 endif()
+
 
 message(STATUS "")
 message(STATUS "GridFlux Build Configuration:")
@@ -205,24 +191,4 @@ message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Development mode: ${GF_DEV_MODE}")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
-if(UNIX AND NOT APPLE)
-    message(STATUS "  Unix support: YES")
-    if(DBUS_FOUND)
-        message(STATUS "  KWin backend: YES")
-        message(STATUS "  D-Bus version: ${DBUS_VERSION}")
-    else()
-        message(STATUS "  KWin backend: NO (D-Bus not found)")
-    endif()
-endif()
-if(GF_DEV_MODE)
-    message(STATUS "")
-    message(STATUS "  ** DEVELOPMENT MODE ENABLED **")
-    message(STATUS "  Config will be read from: ./config.json")
-    message(STATUS "  Installation targets are disabled")
-    message(STATUS "")
-else()
-    message(STATUS "")
-    message(STATUS "  Config will be read from: ~/.config/gridflux/config.json")
-    message(STATUS "")
-endif()
 message(STATUS "")

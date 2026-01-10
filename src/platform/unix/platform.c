@@ -11,9 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
-#include <unistd.h>
+#include "platform_compat.h" 
 
-// Platform implementation
 static int
 gf_platform_error_handler (Display *display, XErrorEvent *error)
 {
