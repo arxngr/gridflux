@@ -11,6 +11,15 @@ endif()
 
 option(GF_DEV_MODE "Enable development mode (read config from current dir)" OFF)
 
+# Packaging configuration
+set(CPACK_PACKAGE_NAME "gridflux")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_DESCRIPTION "Virtual workspace & Window management tool for arranging and managing windows")
+set(CPACK_PACKAGE_VENDOR "GridFlux Project")
+set(CPACK_PACKAGE_CONTACT "0x4rd1@gmail.com")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/arxngr/gridflux")
+set(CPACK_SET_DESTDIR TRUE)
+
 include_directories(src)
 
 file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS "src/*.c")
@@ -28,6 +37,13 @@ if(WIN32)
 
     pkg_check_modules(JSONC REQUIRED json-c)
     pkg_check_modules(GTK4 gtk4)
+
+    # Windows packaging
+    set(CPACK_GENERATOR "NSIS")
+    set(CPACK_NSIS_DISPLAY_NAME "GridFlux Window Manager")
+    set(CPACK_NSIS_PACKAGE_NAME "GridFlux")
+    set(CPACK_NSIS_CONTACT "0x4rd1@gmail.com")
+    set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/arxngr/gridflux")
 
 endif()
 
@@ -69,6 +85,18 @@ if(UNIX AND NOT APPLE)
         list(APPEND PLATFORM_INCLUDES ${DBUS_INCLUDE_DIRS})
     endif()
 
+    # DEB/RPM packaging
+    set(CPACK_GENERATOR "DEB;RPM")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "GridFlux Project <0x4rd1@gmail.com>")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libx11-6, libjson-c5, libdbus-1-3, libgtk-4-1")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+    set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+    
+    set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+    set(CPACK_RPM_PACKAGE_GROUP "Applications/System")
+    set(CPACK_RPM_PACKAGE_REQUIRES "libX11, json-c, dbus-1, gtk4")
+    set(CPACK_RPM_PACKAGE_URL "https://github.com/arxngr/gridflux")
+
 elseif(WIN32)
     file(GLOB PLATFORM_SOURCES "src/platform/windows/*.c")
 
@@ -100,6 +128,11 @@ elseif(APPLE)
     set(PLATFORM_INCLUDES
         ${JSONC_INCLUDE_DIRS}
     )
+    
+    # macOS packaging
+    set(CPACK_GENERATOR "DragNDrop")
+    set(CPACK_DMG_VOLUME_NAME "GridFlux")
+    set(CPACK_DMG_FORMAT "UDZO")
 endif()
 
 
@@ -183,9 +216,15 @@ if(NOT GF_DEV_MODE)
         install(TARGETS gridflux-gui DESTINATION bin)
     endif()
     
-    # Install desktop file
+    # Install desktop file and icons
     if(UNIX AND NOT APPLE)
-        install(FILES gridflux.desktop DESTINATION share/applications)
+        # Generate desktop file dynamically
+        configure_file(
+            "${CMAKE_SOURCE_DIR}/gridflux.desktop.in"
+            "${CMAKE_BINARY_DIR}/gridflux-gui.desktop"
+            @ONLY
+        )
+        install(FILES "${CMAKE_BINARY_DIR}/gridflux-gui.desktop" DESTINATION share/applications)
         
         # Install icons
         install(DIRECTORY icons/hicolor/ DESTINATION share/icons/hicolor)
@@ -200,3 +239,6 @@ message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Development mode: ${GF_DEV_MODE}")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "")
+
+# Include CPack for packaging
+include(CPack)
