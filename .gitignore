@@ -37,4 +37,5 @@ config.json
 gridflux
 gridflux-cli
 gridflux-gui
+packages
 

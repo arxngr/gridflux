@@ -46,6 +46,45 @@ echo "  • Creating TAR archive..."
 mkdir -p "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")"
 cp -r "$BUILD_DIR"/gridflux* "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/" 2>/dev/null || true
 cp -r "$PROJECT_ROOT"/{README.md,LICENSE,scripts,icons} "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/" 2>/dev/null || true
+
+# Add service setup script for packages
+cat > "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/setup-service.sh" << 'EOF'
+#!/bin/bash
+set -e
+INSTALL_DIR="/usr/local/bin"
+SERVICE_FILE="$HOME/.config/systemd/user/gridflux.service"
+
+echo "Setting up GridFlux service..."
+
+# Create systemd service
+mkdir -p "$(dirname "$SERVICE_FILE")"
+cat > "$SERVICE_FILE" << 'EOL'
+[Unit]
+Description=GridFlux Window Tiler
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=$INSTALL_DIR/gridflux
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
+EOL
+
+# Enable and start service
+systemctl --user daemon-reload
+systemctl --user enable gridflux.service
+systemctl --user start gridflux
+
+echo "✓ GridFlux service is now running!"
+echo "Check status: systemctl --user status gridflux"
+EOF
+
+chmod +x "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/setup-service.sh"
+
 cd "$PACKAGE_DIR"
 tar -czf "gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")-$(uname -s)-$(uname -m).tar.gz" "gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/"
 rm -rf "gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")"
@@ -70,6 +109,6 @@ done
 
 echo ""
 echo "🚀 Installation Instructions:"
-echo "  DEB: sudo dpkg -i gridflux_*.deb"
-echo "  RPM: sudo rpm -i gridflux-*.rpm"
+echo "  DEB: sudo dpkg -i gridflux_*.deb && ./gridflux-*/setup-service.sh"
+echo "  RPM: sudo rpm -i gridflux-*.rpm && ./gridflux-*/setup-service.sh"
 echo "  TAR: tar -xzf gridflux-*.tar.gz && cd gridflux-* && sudo ./scripts/install.sh"
