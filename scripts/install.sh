@@ -165,12 +165,14 @@ create_desktop_entry() {
 Version=1.0
 Type=Application
 Name=GridFlux Control Panel
-Comment=Control GridFlux window manager
+Comment=Virtual workspace & Window management tool for arranging and managing windows
 Exec=$INSTALL_DIR/gridflux-gui
-Icon=applications-system
+Icon=gridflux
 Terminal=false
 Categories=System;Settings;
-Keywords=window;manager;tiling;grid;
+Keywords=window;manager;tiling;grid;layout;workspace;
+StartupNotify=true
+StartupWMClass=GridFlux
 EOF
     echo "✓ Desktop entry created: $HOME/.local/share/applications/gridflux-gui.desktop"
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
@@ -217,12 +219,13 @@ install_icons() {
 Version=1.0
 Type=Application
 Name=GridFlux
-Comment=Window management tool for arranging and managing windows
+Comment=Virtual workspace & Window management tool for arranging and managing windows
 Exec=$INSTALL_DIR/gridflux-gui
 Icon=gridflux
 Terminal=false
 Categories=System;Utility;
 StartupNotify=true
+StartupWMClass=GridFlux
 EOF
         chmod +x "$HOME/Desktop/GridFlux.desktop"
         echo "✓ Desktop shortcut created at $HOME/Desktop/GridFlux.desktop"

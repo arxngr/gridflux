@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GridFlux Control Panel
+Comment=Virtual workspace & Window management tool for arranging and managing windows
+Exec=@CMAKE_INSTALL_PREFIX@/bin/gridflux-gui
+Icon=gridflux
+Terminal=false
+Categories=System;Settings;
+Keywords=window;manager;tiling;grid;layout;workspace;
+StartupNotify=true
+StartupWMClass=GridFlux
