@@ -33,14 +33,12 @@ install_dependencies() {
     case "$ID" in
     ubuntu | debian)
         echo "Installing dependencies for Ubuntu/Debian..."
-        sudo apt update
         sudo apt install -y libx11-dev libjson-c-dev libdbus-1-dev cmake gcc make pkg-config
         echo "Installing GUI dependencies..."
         sudo apt install -y libgtk-4-dev libglib2.0-dev
         ;;
     fedora | rhel | centos | almalinux | rocky)
         echo "Installing dependencies for Fedora/RHEL..."
-        sudo dnf update -y
         sudo dnf install -y libX11-devel json-c-devel dbus-devel cmake gcc make pkgconfig
         echo "Installing GUI dependencies..."
         sudo dnf install -y gtk4-devel glib2-devel
@@ -64,11 +62,11 @@ build_and_install() {
     rm -rf "$BUILD_DIR" CMakeCache.txt CMakeFiles/
     cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release .
     cmake --build "$BUILD_DIR" -- -j$(nproc)
-    
+
     echo "Installing binaries..."
     sudo install -Dm755 "$BUILD_DIR/gridflux" "$INSTALL_DIR/gridflux"
     echo "✓ Binary installed: $INSTALL_DIR/gridflux"
-    
+
     # Install GUI if GTK4 is available
     if [ -f "$BUILD_DIR/gridflux-gui" ]; then
         sudo install -Dm755 "$BUILD_DIR/gridflux-gui" "$INSTALL_DIR/gridflux-gui"
@@ -76,7 +74,7 @@ build_and_install() {
     else
         echo "⚠ GUI not built - GTK4 dependencies missing"
     fi
-    
+
     # Install CLI if available
     if [ -f "$BUILD_DIR/gridflux-cli" ]; then
         sudo install -Dm755 "$BUILD_DIR/gridflux-cli" "$INSTALL_DIR/gridflux-cli"
@@ -178,6 +176,66 @@ EOF
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
 }
 
+install_icons() {
+    echo "Installing GridFlux icons..."
+    
+    # Create icon directories
+    ICON_DIR="$HOME/.local/share/icons/hicolor"
+    mkdir -p "$ICON_DIR/16x16/apps"
+    mkdir -p "$ICON_DIR/32x32/apps"
+    mkdir -p "$ICON_DIR/48x48/apps"
+    
+    # Copy icons (using absolute path from script location)
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    
+    if [ -f "$PROJECT_ROOT/icons/gridflux-16.png" ]; then
+        cp "$PROJECT_ROOT/icons/gridflux-16.png" "$ICON_DIR/16x16/apps/gridflux.png"
+        echo "✓ 16x16 icon installed"
+    fi
+    
+    if [ -f "$PROJECT_ROOT/icons/gridflux-32.png" ]; then
+        cp "$PROJECT_ROOT/icons/gridflux-32.png" "$ICON_DIR/32x32/apps/gridflux.png"
+        echo "✓ 32x32 icon installed"
+    fi
+    
+    if [ -f "$PROJECT_ROOT/icons/gridflux-48.png" ]; then
+        cp "$PROJECT_ROOT/icons/gridflux-48.png" "$ICON_DIR/48x48/apps/gridflux.png"
+        echo "✓ 48x48 icon installed"
+    fi
+    
+    # Update desktop entry to use our icon
+    if [ -f "$HOME/.local/share/applications/gridflux-gui.desktop" ]; then
+        sed -i 's|Icon=applications-system|Icon=gridflux|g' "$HOME/.local/share/applications/gridflux-gui.desktop"
+        echo "✓ Desktop entry updated with custom icon"
+    fi
+    
+    # Create desktop shortcut
+    if [ -d "$HOME/Desktop" ]; then
+        cat > "$HOME/Desktop/GridFlux.desktop" << EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GridFlux
+Comment=Window management tool for arranging and managing windows
+Exec=$INSTALL_DIR/gridflux-gui
+Icon=gridflux
+Terminal=false
+Categories=System;Utility;
+StartupNotify=true
+EOF
+        chmod +x "$HOME/Desktop/GridFlux.desktop"
+        echo "✓ Desktop shortcut created at $HOME/Desktop/GridFlux.desktop"
+    fi
+    
+    # Update icon cache
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        gtk-update-icon-cache -f -t "$ICON_DIR" 2>/dev/null || true
+    fi
+    
+    echo "✓ Icons installation complete"
+}
+
 create_default_config() {
     mkdir -p "$HOME/.config/gridflux"
     cat >"$HOME/.config/gridflux/config.json" <<EOF
@@ -197,6 +255,7 @@ install_dependencies
 build_and_install
 create_default_config
 create_desktop_entry
+install_icons
 
 if [[ $IS_KDE -eq 1 ]]; then
     echo "KDE detected — installing KWin integration"
@@ -224,6 +283,7 @@ echo "  • Start CLI:     gridflux-cli"
 echo "  • Start service: systemctl --user start gridflux"
 echo ""
 echo "📋 Desktop Entry: GridFlux Control Panel (in applications menu)"
+echo "🖥️  Desktop Shortcut: GridFlux (on your desktop)"
 echo ""
 echo "🔧 Configuration: $HOME/.config/gridflux/config.json"
 echo ""

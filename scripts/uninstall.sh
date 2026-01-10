@@ -28,6 +28,55 @@ pkill -f "$INSTALL_DIR/gridflux-cli" 2>/dev/null || true
 sleep 1
 echo "  ✓ Processes stopped"
 
+echo "→ Removing binaries..."
+if [ -f "$INSTALL_DIR/gridflux" ]; then
+    sudo rm -f "$INSTALL_DIR/gridflux"
+    echo "  ✓ Binary removed: $INSTALL_DIR/gridflux"
+fi
+
+if [ -f "$INSTALL_DIR/gridflux-gui" ]; then
+    sudo rm -f "$INSTALL_DIR/gridflux-gui"
+    echo "  ✓ GUI removed: $INSTALL_DIR/gridflux-gui"
+fi
+
+if [ -f "$INSTALL_DIR/gridflux-cli" ]; then
+    sudo rm -f "$INSTALL_DIR/gridflux-cli"
+    echo "  ✓ CLI removed: $INSTALL_DIR/gridflux-cli"
+fi
+
+echo "→ Removing desktop entries and icons..."
+if [ -f "$HOME/.local/share/applications/gridflux-gui.desktop" ]; then
+    rm -f "$HOME/.local/share/applications/gridflux-gui.desktop"
+    echo "  ✓ Desktop entry removed"
+fi
+
+if [ -f "$HOME/Desktop/GridFlux.desktop" ]; then
+    rm -f "$HOME/Desktop/GridFlux.desktop"
+    echo "  ✓ Desktop shortcut removed"
+fi
+
+# Remove icons
+ICON_DIR="$HOME/.local/share/icons/hicolor"
+if [ -f "$ICON_DIR/16x16/apps/gridflux.png" ]; then
+    rm -f "$ICON_DIR/16x16/apps/gridflux.png"
+    echo "  ✓ 16x16 icon removed"
+fi
+
+if [ -f "$ICON_DIR/32x32/apps/gridflux.png" ]; then
+    rm -f "$ICON_DIR/32x32/apps/gridflux.png"
+    echo "  ✓ 32x32 icon removed"
+fi
+
+if [ -f "$ICON_DIR/48x48/apps/gridflux.png" ]; then
+    rm -f "$ICON_DIR/48x48/apps/gridflux.png"
+    echo "  ✓ 48x48 icon removed"
+fi
+
+# Update icon cache
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "$ICON_DIR" 2>/dev/null || true
+fi
+
 if command -v qdbus >/dev/null 2>&1; then
     echo "→ Removing KWin script..."
     qdbus org.kde.KWin /Scripting \
@@ -71,52 +120,22 @@ else
     echo "  • GNOME extension not found (already removed or not installed)"
 fi
 
-if [ -f "$INSTALL_DIR/gridflux" ]; then
-    echo "→ Removing GridFlux binary..."
-    sudo rm -f "$INSTALL_DIR/gridflux"
-    echo "  ✓ Binary removed"
-fi
-
-if [ -f "$INSTALL_DIR/gridflux-gui" ]; then
-    echo "→ Removing GUI binary..."
-    sudo rm -f "$INSTALL_DIR/gridflux-gui"
-    echo "  ✓ GUI removed"
-fi
-
-if [ -f "$INSTALL_DIR/gridflux-cli" ]; then
-    echo "→ Removing CLI binary..."
-    sudo rm -f "$INSTALL_DIR/gridflux-cli"
-    echo "  ✓ CLI removed"
-fi
-
-if [ -d "$CONFIG_DIR" ]; then
-    echo "→ Removing configuration directory..."
-    rm -rf "$CONFIG_DIR"
-    echo "  ✓ Configuration removed"
-fi
-
-if [ -f "$HOME/.local/share/applications/gridflux-gui.desktop" ]; then
-    echo "→ Removing desktop entry..."
-    rm -f "$HOME/.local/share/applications/gridflux-gui.desktop"
-    echo "  ✓ Desktop entry removed"
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
-fi
+    echo "✓ Icon cache updated"
+    
+    echo ""
+    echo "=== GridFlux Uninstallation Complete ==="
+    echo "Note: Configuration files in $HOME/.config/gridflux/ were preserved."
+    echo "To remove config files, run: rm -rf $HOME/.config/gridflux"
 
-if [ -d "$KWIN_INSTALL_DIR" ]; then
-    if [ -z "$(ls -A "$KWIN_INSTALL_DIR")" ]; then
-        sudo rm -rf "$KWIN_INSTALL_DIR"
-        echo "  ✓ KWin installation directory removed"
-    fi
-fi
-
-echo ""
-echo "=== GridFlux Uninstalled Successfully ==="
 echo ""
 echo "🗑️ Removed Components:"
 echo "  • gridflux        - Main window manager"
 echo "  • gridflux-gui    - GUI Control Panel"
 echo "  • gridflux-cli    - Command-line interface"
 echo "  • Desktop entry   - Application menu shortcut"
+echo "  • Desktop shortcut - Desktop launcher"
+echo "  • Icons           - All icon sizes (16x16, 32x32, 48x48)"
 echo "  • Configuration    - Settings and data"
 echo "  • KWin script     - Window tiling integration"
 echo "  • GNOME extension - Shell integration (if applicable)"
@@ -129,7 +148,7 @@ if [ -n "$XDG_CURRENT_DESKTOP" ]; then
     if echo "$XDG_CURRENT_DESKTOP" | grep -qi gnome; then
         if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
             echo "⚠ GNOME on Wayland detected:"
-            echo "  → Please log out and log back in to complete the uninstallation"
+            echo "  → Please log out and log back in to complete uninstallation"
         fi
     elif echo "$XDG_CURRENT_DESKTOP" | grep -qi kde; then
         echo "⚠ KDE Plasma detected:"

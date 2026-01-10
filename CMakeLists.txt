@@ -182,6 +182,14 @@ if(NOT GF_DEV_MODE)
     if(TARGET gridflux-gui)
         install(TARGETS gridflux-gui DESTINATION bin)
     endif()
+    
+    # Install desktop file
+    if(UNIX AND NOT APPLE)
+        install(FILES gridflux.desktop DESTINATION share/applications)
+        
+        # Install icons
+        install(DIRECTORY icons/hicolor/ DESTINATION share/icons/hicolor)
+    endif()
 endif()
 
 

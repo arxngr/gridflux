@@ -8,6 +8,7 @@
 #include <gdk/x11/gdkx.h>
 #endif
 #include <gtk/gtk.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -801,14 +802,22 @@ on_move_clicked (GtkButton *btn, gpointer data)
 static void
 on_window_realize (GtkWidget *widget, gpointer user_data)
 {
-#ifdef __linux__
     GdkSurface *surface = gtk_native_get_surface (GTK_NATIVE (widget));
-
-    if (!surface || !GDK_IS_X11_SURFACE (surface))
+    if (!surface)
         return;
 
-    gdk_x11_surface_set_skip_taskbar_hint (GDK_X11_SURFACE (surface), TRUE);
-    gdk_x11_surface_set_skip_pager_hint (GDK_X11_SURFACE (surface), TRUE);
+    // Set window icon from stored pixbuf
+    GdkPixbuf *icon = g_object_get_data (G_OBJECT (widget), "window_icon");
+    if (icon) {
+        // For GTK4, we set the icon name and let the theme handle it
+        // We'll also install the icon to the theme
+    }
+
+#ifdef __linux__
+    if (GDK_IS_X11_SURFACE (surface)) {
+        gdk_x11_surface_set_skip_taskbar_hint (GDK_X11_SURFACE (surface), TRUE);
+        gdk_x11_surface_set_skip_pager_hint (GDK_X11_SURFACE (surface), TRUE);
+    }
 #endif
 }
 
@@ -837,6 +846,20 @@ gf_gtk_activate (GtkApplication *app, gpointer user_data)
     gtk_window_set_title (GTK_WINDOW (widgets->window), "GridFlux");
     gtk_window_set_default_size (GTK_WINDOW (widgets->window), 700, 500);
     gtk_window_set_resizable (GTK_WINDOW (widgets->window), TRUE);
+    
+    // Set icon name for desktop integration
+    gtk_window_set_icon_name (GTK_WINDOW (widgets->window), "gridflux");
+
+    // Set window icon for GTK4
+    GError *error = NULL;
+    GdkPixbuf *icon = gdk_pixbuf_new_from_file_at_scale ("icons/gridflux-48.png", 48, 48, FALSE, &error);
+    if (error) {
+        g_warning ("Failed to load icon: %s", error->message);
+        g_error_free (error);
+    } else {
+        // For GTK4, we need to set the icon on the surface after realization
+        g_object_set_data_full (G_OBJECT (widgets->window), "window_icon", icon, g_object_unref);
+    }
 
     g_signal_connect (widgets->window, "realize", G_CALLBACK (on_window_realize), NULL);
     GtkWidget *main = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
