@@ -43,12 +43,12 @@ fi
 
 # Archive package (universal)
 echo "  • Creating TAR archive..."
-mkdir -p "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")"
-cp -r "$BUILD_DIR"/gridflux* "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/" 2>/dev/null || true
-cp -r "$PROJECT_ROOT"/{README.md,LICENSE,scripts,icons} "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/" 2>/dev/null || true
+mkdir -p "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "0.1.0")"
+cp -r "$BUILD_DIR"/gridflux* "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "0.1.0")/" 2>/dev/null || true
+cp -r "$PROJECT_ROOT"/{README.md,LICENSE,scripts,icons} "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "0.1.0")/" 2>/dev/null || true
 
 # Add service setup script for packages
-cat > "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/setup-service.sh" << 'EOF'
+cat > "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "0.1.0")/setup-service.sh" << 'EOF'
 #!/bin/bash
 set -e
 INSTALL_DIR="/usr/local/bin"
@@ -83,11 +83,11 @@ echo "✓ GridFlux service is now running!"
 echo "Check status: systemctl --user status gridflux"
 EOF
 
-chmod +x "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/setup-service.sh"
+chmod +x "$PACKAGE_DIR/gridflux-$(git describe --tags --always 2>/dev/null || echo "0.1.0")/setup-service.sh"
 
 cd "$PACKAGE_DIR"
-tar -czf "gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")-$(uname -s)-$(uname -m).tar.gz" "gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")/"
-rm -rf "gridflux-$(git describe --tags --always 2>/dev/null || echo "2.0.0")"
+tar -czf "gridflux-$(git describe --tags --always 2>/dev/null || echo "0.1.0")-$(uname -s)-$(uname -m).tar.gz" "gridflux-$(git describe --tags --always 2>/dev/null || echo "0.1.0")/"
+rm -rf "gridflux-$(git describe --tags --always 2>/dev/null || echo "0.1.0")"
 echo "  ✓ TAR archive created"
 
 echo ""

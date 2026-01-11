@@ -6,18 +6,18 @@
 
 ; General Configuration
 Name "GridFlux Window Manager"
-OutFile "GridFlux-Installer-2.0.0.exe"
+OutFile "GridFlux-Installer-0.1.0.exe"
 InstallDir "$PROGRAMFILES64\GridFlux"
 InstallDirRegKey HKLM "Software\GridFlux" "Install_Dir"
 RequestExecutionLevel admin
 
 ; Version Information
-VIProductVersion "2.0.0.0"
+VIProductVersion "0.1.0.0"
 VIAddVersionKey "ProductName" "GridFlux Window Manager"
-VIAddVersionKey "CompanyName" "GridFlux Project"
+VIAddVersionKey "CompanyName" "Ardi Nugraha"
 VIAddVersionKey "LegalCopyright" "Copyright (C) 2025 GridFlux Project"
 VIAddVersionKey "FileDescription" "GridFlux Window Manager Installer"
-VIAddVersionKey "FileVersion" "2.0.0"
+VIAddVersionKey "FileVersion" "0.1.0"
 
 ; MUI Settings
 !define MUI_ABORTWARNING
@@ -83,7 +83,7 @@ Section "GridFlux Core" SecCore
     
     ; Write registry keys
     WriteRegStr HKLM "Software\GridFlux" "Install_Dir" "$INSTDIR"
-    WriteRegStr HKLM "Software\GridFlux" "Version" "2.0.0"
+    WriteRegStr HKLM "Software\GridFlux" "Version" "0.1.0"
     
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -93,7 +93,7 @@ Section "GridFlux Core" SecCore
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\GridFlux" "UninstallString" '"$INSTDIR\Uninstall.exe"'
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\GridFlux" "DisplayIcon" "$INSTDIR\icons\gridflux.ico"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\GridFlux" "Publisher" "GridFlux Project"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\GridFlux" "DisplayVersion" "2.0.0"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\GridFlux" "DisplayVersion" "0.1.0"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\GridFlux" "URLInfoAbout" "https://github.com/arxngr/gridflux"
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\GridFlux" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\GridFlux" "NoRepair" 1

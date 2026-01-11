@@ -232,7 +232,7 @@ echo ================================================
 echo Build Complete!
 echo ================================================
 echo.
-echo Installer created: GridFlux-Installer-2.0.0.exe
+echo Installer created: GridFlux-Installer-0.1.0.exe
 echo.
 echo To prevent virus false positives:
 echo 1. Sign the installer with a code signing certificate
