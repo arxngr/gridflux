@@ -9,8 +9,10 @@ The project supports Linux (X11 with KWin integration) and Windows, with varying
 
 Here are various layout arrangements for windows. The configurations showcase how windows can be arranged in different layouts.
 
-
 https://github.com/user-attachments/assets/f7800812-4ac9-4d3d-bac0-943632cb2f20
+
+https://github.com/user-attachments/assets/894e62fa-d906-4038-b67d-327dc322af66
+
 
 
 ## Platform Support
