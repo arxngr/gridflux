@@ -7,10 +7,17 @@
 #ifdef __linux__
 #include <gdk/x11/gdkx.h>
 #endif
+#ifdef _WIN32
+#include <windows.h>
+#include <gdk/gdk.h>
+#include <gdk/win32/gdkwin32.h>
+#define IDI_ICON1 101
+#endif
 #include <gtk/gtk.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <stdio.h>
 #include <string.h>
+
 
 typedef struct
 {
@@ -806,12 +813,19 @@ on_window_realize (GtkWidget *widget, gpointer user_data)
     if (!surface)
         return;
 
-    // Set window icon from stored pixbuf
-    GdkPixbuf *icon = g_object_get_data (G_OBJECT (widget), "window_icon");
-    if (icon) {
-        // For GTK4, we set the icon name and let the theme handle it
-        // We'll also install the icon to the theme
+#ifdef _WIN32
+    HWND hwnd = GDK_SURFACE_HWND(surface);
+    if (hwnd) {
+        HICON hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
+        if (hIcon) {
+            SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+            SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+            g_debug("Windows icon set successfully");
+        } else {
+            g_warning("Failed to load icon resource");
+        }
     }
+#endif
 
 #ifdef __linux__
     if (GDK_IS_X11_SURFACE (surface)) {
