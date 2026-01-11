@@ -24,6 +24,31 @@ static char pipe_name[256] = { 0 };
 static pipe_instance_t *pipe_instances = NULL;
 static int num_instances = 0;
 
+static SECURITY_ATTRIBUTES *
+gf_pipe_security_attributes(void)
+{
+    SECURITY_ATTRIBUTES *sa = malloc(sizeof(*sa));
+    if (!sa)
+        return NULL;
+
+    PSECURITY_DESCRIPTOR sd = malloc(SECURITY_DESCRIPTOR_MIN_LENGTH);
+    if (!sd)
+    {
+        free(sa);
+        return NULL;
+    }
+
+    InitializeSecurityDescriptor(sd, SECURITY_DESCRIPTOR_REVISION);
+
+    // NULL DACL = allow same-user access (Unix chmod 0600 equivalent)
+    SetSecurityDescriptorDacl(sd, TRUE, NULL, FALSE);
+
+    sa->nLength = sizeof(*sa);
+    sa->lpSecurityDescriptor = sd;
+    sa->bInheritHandle = FALSE;
+    return sa;
+}
+
 const char *
 gf_ipc_get_socket_path (void)
 {
@@ -32,10 +57,8 @@ gf_ipc_get_socket_path (void)
         return pipe_name;
     }
 
-    DWORD session_id = 0;
-    ProcessIdToSessionId (GetCurrentProcessId (), &session_id);
-
-    snprintf (pipe_name, sizeof (pipe_name), "\\\\.\\pipe\\gridflux_%lu", session_id);
+    snprintf(pipe_name, sizeof(pipe_name), "\\\\.\\pipe\\gridflux");
+    
     return pipe_name;
 }
 
@@ -44,15 +67,26 @@ create_pipe_instance (void)
 {
     const char *pipe_path = gf_ipc_get_socket_path ();
     
-    return CreateNamedPipeA (
+    SECURITY_ATTRIBUTES *sa = gf_pipe_security_attributes();
+
+    HANDLE pipe = CreateNamedPipeA(
         pipe_path,
-        PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,  // Async mode
+        PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
         MAX_PIPE_INSTANCES,
         GF_PIPE_BUFSIZE,
         GF_PIPE_BUFSIZE,
-        0,      // Use default timeout
-        NULL);
+        0,
+        sa);
+
+    if (sa)
+    {
+        free(sa->lpSecurityDescriptor);
+        free(sa);
+    }
+
+    return pipe;
+
 }
 
 static BOOL
