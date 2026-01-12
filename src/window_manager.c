@@ -719,7 +719,7 @@ gf_window_manager_unmaximize_all (gf_window_manager_t *m, gf_window_info_t *wind
 
     for (uint32_t i = 0; i < window_count; i++)
     {
-        if (windows[i].is_maximized)
+        if (windows[i].is_maximized || !wm_is_excluded (m, windows[i].native_handle))
             platform->unmaximize_window (display, windows[i].native_handle);
     }
 }

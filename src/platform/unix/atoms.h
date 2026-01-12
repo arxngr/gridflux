@@ -15,6 +15,7 @@ typedef struct
     Atom net_wm_state_maximized_horz;
     Atom net_wm_state_maximized_vert;
     Atom net_wm_state_hidden;
+    Atom net_wm_state_fullscreen;
     Atom net_wm_state_modal;
     Atom net_wm_state_skip_taskbar;
     Atom net_wm_state_above;

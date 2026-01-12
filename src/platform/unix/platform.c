@@ -4,14 +4,117 @@
 #include "../../memory.h"
 #include "../../types.h"
 #include "backend.h"
+#include "platform_compat.h"
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
-#include "platform_compat.h" 
+
+static bool
+_window_name_matches (const char *name, const char *list[], size_t count)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        if (strcmp (name, list[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool
+_is_screenshot_app (gf_display_t display, gf_native_window_t window)
+{
+    const char *screenshot_classes[]
+        = { "flameshot", "Gnome-screenshot", "Spectacle", "Shutter" };
+
+    XClassHint hint;
+    if (XGetClassHint (display, window, &hint))
+    {
+        bool match = (hint.res_class
+                      && _window_name_matches (hint.res_class, screenshot_classes,
+                                               sizeof (screenshot_classes)
+                                                   / sizeof (screenshot_classes[0])))
+                     || (hint.res_name
+                         && _window_name_matches (hint.res_name, screenshot_classes,
+                                                  sizeof (screenshot_classes)
+                                                      / sizeof (screenshot_classes[0])));
+
+        if (hint.res_name)
+            XFree (hint.res_name);
+        if (hint.res_class)
+            XFree (hint.res_class);
+
+        return match;
+    }
+    return false;
+}
+
+static bool
+_window_has_type (gf_display_t display, gf_native_window_t window, Atom type)
+{
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    unsigned char *data = NULL;
+    unsigned long nitems = 0;
+
+    if (gf_platform_get_window_property (display, window, atoms->net_wm_window_type,
+                                         XA_ATOM, &data, &nitems)
+            != GF_SUCCESS
+        || nitems == 0)
+        return false;
+
+    Atom *types = (Atom *)data;
+    bool found = false;
+    for (unsigned long i = 0; i < nitems; i++)
+    {
+        if (types[i] == type)
+        {
+            found = true;
+            break;
+        }
+    }
+    XFree (data);
+    return found;
+}
+
+static bool
+_window_has_excluded_state (gf_display_t display, gf_native_window_t window)
+{
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    Atom excluded_states[] = { atoms->net_wm_state_skip_taskbar,
+                               atoms->net_wm_state_modal, atoms->net_wm_state_above };
+
+    for (size_t i = 0; i < sizeof (excluded_states) / sizeof (excluded_states[0]); i++)
+    {
+        if (gf_platform_window_has_state (display, window, excluded_states[i]))
+            return true;
+    }
+    return false;
+}
+
+static bool
+_window_has_excluded_type (gf_display_t display, gf_native_window_t window)
+{
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    Atom excluded_types[] = {
+        atoms->net_wm_window_type_dock,         atoms->net_wm_window_type_desktop,
+        atoms->net_wm_window_type_toolbar,      atoms->net_wm_window_type_menu,
+        atoms->net_wm_window_type_splash,       atoms->net_wm_window_type_dropdown_menu,
+        atoms->net_wm_window_type_popup_menu,   atoms->net_wm_window_type_tooltip,
+        atoms->net_wm_window_type_notification, atoms->net_wm_window_type_utility,
+        atoms->net_wm_window_type_combo
+    };
+
+    for (size_t i = 0; i < sizeof (excluded_types) / sizeof (excluded_types[0]); i++)
+    {
+        if (_window_has_type (display, window, excluded_types[i]))
+            return true;
+    }
+    return false;
+}
 
 static int
 gf_platform_error_handler (Display *display, XErrorEvent *error)
@@ -610,64 +713,30 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
     if (!display || window == None)
         return true;
 
-    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
-    unsigned char *data = NULL;
-    unsigned long nitems = 0;
-
-    char name[256];
+    char name[256] = { 0 };
     gf_platform_get_window_name (display, window, name, sizeof (name));
+
+    /* Exclude our own app */
     if (strcmp (name, "GridFlux") == 0)
+        return true;
+
+    if (_is_screenshot_app (display, window))
+        return true;
+
+    /* Exclude fullscreen NORMAL windows (games) */
+    if (_window_has_type (display, window,
+                          gf_platform_atoms_get_global ()->net_wm_window_type_normal)
+        && gf_platform_window_has_state (
+            display, window, gf_platform_atoms_get_global ()->net_wm_state_fullscreen))
     {
         return true;
     }
 
-    // 1. Check window states
-    Atom excluded_states[] = {
-        atoms->net_wm_state_skip_taskbar,
-        atoms->net_wm_state_modal,
-        atoms->net_wm_state_above, // Often used by system trays
-    };
+    if (_window_has_excluded_state (display, window))
+        return true;
 
-    for (size_t i = 0; i < sizeof (excluded_states) / sizeof (excluded_states[0]); i++)
-    {
-        if (gf_platform_window_has_state (display, window, excluded_states[i]))
-        {
-            return true;
-        }
-    }
-
-    if (gf_platform_get_window_property (display, window, atoms->net_wm_window_type,
-                                         XA_ATOM, &data, &nitems)
-            == GF_SUCCESS
-        && nitems > 0)
-    {
-        Atom *types = (Atom *)data;
-        Atom excluded_types[] = { atoms->net_wm_window_type_dock,
-                                  atoms->net_wm_window_type_desktop,
-                                  atoms->net_wm_window_type_toolbar,
-                                  atoms->net_wm_window_type_menu,
-                                  atoms->net_wm_window_type_splash,
-                                  atoms->net_wm_window_type_dropdown_menu,
-                                  atoms->net_wm_window_type_popup_menu,
-                                  atoms->net_wm_window_type_tooltip,
-                                  atoms->net_wm_window_type_notification,
-                                  atoms->net_wm_window_type_utility,
-                                  atoms->net_wm_window_type_combo };
-
-        for (unsigned long i = 0; i < nitems; i++)
-        {
-            for (size_t j = 0; j < sizeof (excluded_types) / sizeof (excluded_types[0]);
-                 j++)
-            {
-                if (types[i] == excluded_types[j])
-                {
-                    XFree (data);
-                    return true;
-                }
-            }
-        }
-        XFree (data);
-    }
+    if (_window_has_excluded_type (display, window))
+        return true;
 
     return false;
 }

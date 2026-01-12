@@ -27,6 +27,8 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
         = XInternAtom (display, "_NET_WM_STATE_SKIP_TASKBAR", False);
     atoms->net_wm_state_above = XInternAtom (display, "_NET_WM_STATE_ABOVE", False);
     atoms->net_wm_state_sticky = XInternAtom (display, "_NET_WM_STATE_STICKY", False);
+    atoms->net_wm_state_fullscreen
+        = XInternAtom (display, "_NET_WM_STATE_FULLSCREEN", False);
 
     atoms->net_wm_desktop = XInternAtom (display, "_NET_WM_DESKTOP", True);
     atoms->net_current_desktop = XInternAtom (display, "_NET_CURRENT_DESKTOP", True);
