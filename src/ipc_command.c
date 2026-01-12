@@ -36,7 +36,9 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    // Ensure names are populated
+    int ws_filter = -1;
+    sscanf (args, "workspace %d", &ws_filter);
+
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_window_info_t *w = &windows->items[i];
@@ -47,13 +49,27 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
         }
     }
 
+    gf_window_info_t filtered[windows->count];
+    uint32_t filtered_count = 0;
+
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        gf_window_info_t *w = &windows->items[i];
+        if (ws_filter == -1 || w->workspace_id == (uint32_t)ws_filter)
+        {
+            filtered[filtered_count++] = *w;
+        }
+    }
+
+    // Write response
     size_t offset = 0;
-    memcpy (response->message + offset, &windows->count, sizeof (uint32_t));
+    memcpy (response->message + offset, &filtered_count, sizeof (uint32_t));
     offset += sizeof (uint32_t);
-    memcpy (response->message + offset, &windows->capacity, sizeof (uint32_t));
+    uint32_t capacity = windows->capacity; // keep original capacity
+    memcpy (response->message + offset, &capacity, sizeof (uint32_t));
     offset += sizeof (uint32_t);
-    memcpy (response->message + offset, windows->items,
-            windows->count * sizeof (gf_window_info_t));
+    memcpy (response->message + offset, filtered,
+            filtered_count * sizeof (gf_window_info_t));
 }
 
 static void

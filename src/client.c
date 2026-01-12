@@ -17,6 +17,7 @@ print_usage (const char *prog)
     printf ("  unlock <WORKSPACE_ID>           Unlock workspace\n");
     printf ("\nExamples:\n");
     printf ("  %s query windows              # List all windows\n", prog);
+    printf ("  %s query windows workspace 1  # List windows in workspace 1\n", prog);
     printf ("  %s query workspaces           # List all workspaces\n", prog);
     printf ("  %s move 12345 2               # Move window 12345 to workspace 2\n", prog);
     printf ("  %s lock 3                     # Lock workspace 3\n", prog);
@@ -38,9 +39,7 @@ main (int argc, char **argv)
     for (int i = 1; i < argc && pos < sizeof (command) - 2; i++)
     {
         if (i > 1)
-        {
             command[pos++] = ' ';
-        }
         size_t len = strlen (argv[i]);
         if (pos + len < sizeof (command) - 1)
         {
@@ -82,20 +81,29 @@ main (int argc, char **argv)
         }
 
         printf ("Workspaces:\n");
-        printf ("%-5s %-12s %-12s %-8s %-6s\n", "ID", "Windows", "Max", "Avail", "Locked");
-        printf ("%-5s %-12s %-12s %-8s %-6s\n", "----", "------", "---", "-----", "------");
+        printf ("%-5s %-12s %-12s %-8s %-6s\n", "ID", "Windows", "Max", "Avail",
+                "Locked");
+        printf ("%-5s %-12s %-12s %-8s %-6s\n", "----", "------", "---", "-----",
+                "------");
 
         for (uint32_t i = 0; i < workspaces->count; i++)
         {
             gf_workspace_info_t *ws = &workspaces->items[i];
-            printf ("%-5d %-12u %-12u %-8d %-6s\n", ws->id, ws->window_count, ws->max_windows,
-                    ws->available_space, ws->is_locked ? "Yes" : "No");
+            printf ("%-5d %-12u %-12u %-8d %-6s\n", ws->id, ws->window_count,
+                    ws->max_windows, ws->available_space, ws->is_locked ? "Yes" : "No");
         }
 
         gf_workspace_list_cleanup (workspaces);
     }
     else if (strncmp (command, "query windows", 13) == 0)
     {
+        int ws_filter = -1;
+        char *ws_ptr = strstr (command, "workspace");
+        if (ws_ptr)
+        {
+            sscanf (ws_ptr, "workspace %d", &ws_filter);
+        }
+
         gf_window_list_t *windows = gf_parse_window_list (response.message);
         if (!windows)
         {
@@ -105,13 +113,18 @@ main (int argc, char **argv)
 
         printf ("Windows:\n");
         printf ("%-10s %-20s %-10s %-6s\n", "ID", "Name", "Workspace", "State");
-        printf ("%-10s %-20s %-10s %-6s\n", "----------", "--------------------", "----------", "------");
+        printf ("%-10s %-20s %-10s %-6s\n", "----------", "--------------------",
+                "----------", "------");
 
         for (uint32_t i = 0; i < windows->count; i++)
         {
             gf_window_info_t *win = &windows->items[i];
-            const char *state = win->is_minimized ? "Min" : (win->is_maximized ? "Max" : "Norm");
-            printf ("%-10lu %-20s %-10d %-6s\n", (unsigned long)win->id, win->name, win->workspace_id, state);
+            if (ws_filter != -1 && win->workspace_id != (uint32_t)ws_filter)
+                continue;
+            const char *state
+                = win->is_minimized ? "Min" : (win->is_maximized ? "Max" : "Norm");
+            printf ("%-10lu %-20s %-10d %-6s\n", (unsigned long)win->id, win->name,
+                    win->workspace_id, state);
         }
 
         gf_window_list_cleanup (windows);
@@ -123,9 +136,7 @@ main (int argc, char **argv)
         {
             printf ("%s", resp->message);
             if (resp->message[strlen (resp->message) - 1] != '\n')
-            {
                 printf ("\n");
-            }
         }
     }
 

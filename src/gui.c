@@ -8,16 +8,15 @@
 #include <gdk/x11/gdkx.h>
 #endif
 #ifdef _WIN32
-#include <windows.h>
 #include <gdk/gdk.h>
 #include <gdk/win32/gdkwin32.h>
+#include <windows.h>
 #define IDI_ICON1 101
 #endif
-#include <gtk/gtk.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include <gtk/gtk.h>
 #include <stdio.h>
 #include <string.h>
-
 
 typedef struct
 {
@@ -468,7 +467,7 @@ on_window_dropdown_changed (GtkDropDown *dropdown, GParamSpec *pspec, gpointer d
     {
         gf_workspace_info_t *ws = &workspaces->items[i];
 
-        if (ws->id == current_workspace)
+        if (ws->id == current_workspace || ws->is_locked || ws->available_space == 0)
             continue;
 
         char ws_id_str[16];
@@ -564,17 +563,21 @@ gf_refresh_workspaces (gf_gtk_app_widget_t *app) // Definition
     gtk_widget_add_css_class (ws_header, "table-header");
     gtk_grid_attach (GTK_GRID (grid), ws_header, 0, 0, 1, 1);
 
-    GtkWidget *count_header = gtk_label_new ("Window Count");
+    GtkWidget *windows_header = gtk_label_new ("Windows List");
+    gtk_widget_add_css_class (ws_header, "table-header");
+    gtk_grid_attach (GTK_GRID (grid), windows_header, 1, 0, 1, 1);
+
+    GtkWidget *count_header = gtk_label_new ("Total Window");
     gtk_widget_add_css_class (count_header, "table-header");
-    gtk_grid_attach (GTK_GRID (grid), count_header, 1, 0, 1, 1);
+    gtk_grid_attach (GTK_GRID (grid), count_header, 2, 0, 1, 1);
 
     GtkWidget *slots_header = gtk_label_new ("Available Slots");
     gtk_widget_add_css_class (slots_header, "table-header");
-    gtk_grid_attach (GTK_GRID (grid), slots_header, 2, 0, 1, 1);
+    gtk_grid_attach (GTK_GRID (grid), slots_header, 3, 0, 1, 1);
 
     GtkWidget *status_header = gtk_label_new ("Status");
     gtk_widget_add_css_class (status_header, "table-header");
-    gtk_grid_attach (GTK_GRID (grid), status_header, 3, 0, 1, 1);
+    gtk_grid_attach (GTK_GRID (grid), status_header, 4, 0, 1, 1);
 
     GtkWidget *sep = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
     gtk_grid_attach (GTK_GRID (grid), sep, 0, 1, 4, 1);
@@ -590,28 +593,78 @@ gf_refresh_workspaces (gf_gtk_app_widget_t *app) // Definition
         gtk_widget_add_css_class (ws_label, "table-cell");
         gtk_grid_attach (GTK_GRID (grid), ws_label, 0, row, 1, 1);
 
+        GString *windows_list = g_string_new ("");
+        int counter = 1;
+        for (uint32_t j = 0; j < windows->count; j++)
+        {
+            gf_window_info_t *win = &windows->items[j];
+            if (!win->is_valid || _is_window_itself (win))
+                continue;
+            if (win->workspace_id == ws->id)
+            {
+                if (windows_list->len > 0)
+                    g_string_append (windows_list, "\n");
+                g_string_append_printf (windows_list, "[%d] %s", counter, win->name);
+                counter++;
+            }
+        }
+
+        GtkWidget *windows_label = gtk_label_new (windows_list->str);
+
+        gtk_label_set_xalign (GTK_LABEL (windows_label), 0.0);
+        gtk_label_set_yalign (GTK_LABEL (windows_label), 0.0);
+        gtk_label_set_justify (GTK_LABEL (windows_label), GTK_JUSTIFY_LEFT);
+        gtk_label_set_selectable (GTK_LABEL (windows_label), TRUE);
+
+        gtk_widget_add_css_class (windows_label, "table-cell");
+
+        GtkWidget *scroll = gtk_scrolled_window_new ();
+        gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroll),
+                                        GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+        gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scroll), windows_label);
+
+        gtk_widget_add_css_class (scroll, "table-cell");
+
+        gtk_widget_set_vexpand (scroll, TRUE);
+        gtk_widget_set_hexpand (scroll, TRUE);
+
+        gtk_grid_attach (GTK_GRID (grid), scroll, 1, row, 1, 1);
+        g_string_free (windows_list, TRUE);
+
         char count_str[16];
         snprintf (count_str, sizeof (count_str), "%u", ws->window_count);
         GtkWidget *count_label = gtk_label_new (count_str);
         gtk_widget_add_css_class (count_label, "table-cell");
-        gtk_grid_attach (GTK_GRID (grid), count_label, 1, row, 1, 1);
+        gtk_grid_attach (GTK_GRID (grid), count_label, 2, row, 1, 1);
 
         char slots_str[16];
         snprintf (slots_str, sizeof (slots_str), "%d", ws->available_space);
         GtkWidget *slots_label = gtk_label_new (slots_str);
         gtk_widget_add_css_class (slots_label, "table-cell");
-        gtk_grid_attach (GTK_GRID (grid), slots_label, 2, row, 1, 1);
+        gtk_grid_attach (GTK_GRID (grid), slots_label, 3, row, 1, 1);
 
         const char *status_text = ws->is_locked ? "🔒 Locked" : "🔓 Unlocked";
         GtkWidget *status_label = gtk_label_new (status_text);
         gtk_widget_add_css_class (status_label, "table-cell");
-        gtk_grid_attach (GTK_GRID (grid), status_label, 3, row, 1, 1);
+        gtk_grid_attach (GTK_GRID (grid), status_label, 4, row, 1, 1);
 
         row++;
 
         gtk_string_list_append (new_ws_model, ws_id_str);
         gtk_string_list_append (new_target_ws_model, ws_id_str);
     }
+    GtkWidget *table_scroll = gtk_scrolled_window_new ();
+    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (table_scroll),
+                                    GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (table_scroll), grid);
+    gtk_widget_set_vexpand (table_scroll, TRUE);
+    gtk_widget_set_hexpand (table_scroll, TRUE);
+
+    if (old)
+        gtk_scrolled_window_get_child (GTK_SCROLLED_WINDOW (app->workspace_table));
+
+    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (app->workspace_table),
+                                   table_scroll);
 
     gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (app->workspace_table), grid);
 
@@ -814,21 +867,26 @@ on_window_realize (GtkWidget *widget, gpointer user_data)
         return;
 
 #ifdef _WIN32
-    HWND hwnd = GDK_SURFACE_HWND(surface);
-    if (hwnd) {
-        HICON hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1));
-        if (hIcon) {
-            SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-            SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-            g_debug("Windows icon set successfully");
-        } else {
-            g_warning("Failed to load icon resource");
+    HWND hwnd = GDK_SURFACE_HWND (surface);
+    if (hwnd)
+    {
+        HICON hIcon = LoadIcon (GetModuleHandle (NULL), MAKEINTRESOURCE (IDI_ICON1));
+        if (hIcon)
+        {
+            SendMessage (hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+            SendMessage (hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+            g_debug ("Windows icon set successfully");
+        }
+        else
+        {
+            g_warning ("Failed to load icon resource");
         }
     }
 #endif
 
 #ifdef __linux__
-    if (GDK_IS_X11_SURFACE (surface)) {
+    if (GDK_IS_X11_SURFACE (surface))
+    {
         gdk_x11_surface_set_skip_taskbar_hint (GDK_X11_SURFACE (surface), TRUE);
         gdk_x11_surface_set_skip_pager_hint (GDK_X11_SURFACE (surface), TRUE);
     }
@@ -860,19 +918,24 @@ gf_gtk_activate (GtkApplication *app, gpointer user_data)
     gtk_window_set_title (GTK_WINDOW (widgets->window), "GridFlux");
     gtk_window_set_default_size (GTK_WINDOW (widgets->window), 700, 500);
     gtk_window_set_resizable (GTK_WINDOW (widgets->window), TRUE);
-    
+
     // Set icon name for desktop integration
     gtk_window_set_icon_name (GTK_WINDOW (widgets->window), "gridflux");
 
     // Set window icon for GTK4
     GError *error = NULL;
-    GdkPixbuf *icon = gdk_pixbuf_new_from_file_at_scale ("icons/gridflux-48.png", 48, 48, FALSE, &error);
-    if (error) {
+    GdkPixbuf *icon = gdk_pixbuf_new_from_file_at_scale ("icons/gridflux-48.png", 48, 48,
+                                                         FALSE, &error);
+    if (error)
+    {
         g_warning ("Failed to load icon: %s", error->message);
         g_error_free (error);
-    } else {
+    }
+    else
+    {
         // For GTK4, we need to set the icon on the surface after realization
-        g_object_set_data_full (G_OBJECT (widgets->window), "window_icon", icon, g_object_unref);
+        g_object_set_data_full (G_OBJECT (widgets->window), "window_icon", icon,
+                                g_object_unref);
     }
 
     g_signal_connect (widgets->window, "realize", G_CALLBACK (on_window_realize), NULL);
