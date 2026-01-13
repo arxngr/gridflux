@@ -48,9 +48,7 @@ gf_error_code_t gf_window_manager_update_window_info (gf_window_manager_t *manag
                                                       gf_workspace_id_t workspace_id);
 void gf_window_manager_cleanup_invalid_data (gf_window_manager_t *manager);
 void gf_window_manager_print_stats (const gf_window_manager_t *manager);
-gf_error_code_t gf_window_manager_swap (gf_window_manager_t *manager,
-                                        const gf_window_info_t *src_copy,
-                                        const gf_window_info_t *dst_copy);
+
 void gf_window_manager_load_cfg (gf_window_manager_t *manager);
 void gf_window_manager_event (gf_window_manager_t *manager);
 static gf_error_code_t gf_window_manager_calculate_layout (gf_window_manager_t *m,
