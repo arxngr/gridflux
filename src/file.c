@@ -1,8 +1,7 @@
+#include "platform_compat.h" // Centralized platform-specific includes
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include "platform_compat.h"  // Centralized platform-specific includes
-
 
 int
 gf_copy_file (const char *src, const char *dst)

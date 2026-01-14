@@ -38,4 +38,4 @@ gridflux
 gridflux-cli
 gridflux-gui
 packages/
-scripts/binary_builder.bat
+GridFlux-*

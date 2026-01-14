@@ -10,6 +10,7 @@ typedef uint64_t gf_window_id_t;
 typedef int32_t gf_workspace_id_t;
 typedef int32_t gf_coordinate_t;
 typedef uint32_t gf_dimension_t;
+typedef uint32_t gf_color_t;
 
 // Platform-specific defines with proper guards
 #ifdef __linux__
@@ -43,7 +44,7 @@ typedef void *gf_display_t;
 // Constants
 #define GF_MAX_WINDOWS_PER_WORKSPACE 3
 #define GF_MAX_WORKSPACES 32
-#define GF_DEFAULT_PADDING 1
+#define GF_DEFAULT_PADDING 10
 #define GF_MIN_WINDOW_SIZE 10
 
 // Error codes
@@ -90,6 +91,17 @@ typedef struct
     time_t last_modified;
     char name[256];
 } gf_window_info_t;
+
+typedef struct
+{
+    gf_native_window_t target;  // The window we’re tracking
+    gf_native_window_t overlay; // The overlay border window
+    gf_color_t color;
+    int thickness;
+#if _WIN32
+    RECT last_rect;
+#endif
+} window_border_t;
 
 // Workspace information
 typedef struct

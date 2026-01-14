@@ -2,8 +2,8 @@
 #define GF_PLATFORM_WINDOWS_H
 
 #include "../platform.h"
-#include <windows.h>
 #include <stdbool.h>
+#include <windows.h>
 
 // Windows platform data
 typedef struct
@@ -12,6 +12,8 @@ typedef struct
     HANDLE shell_hook;
     HMONITOR monitor;
     int monitor_count;
+    window_border_t *borders[GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES];
+    int border_count;
 } gf_windows_platform_data_t;
 
 // Platform interface (Windows implementation)
@@ -51,5 +53,10 @@ gf_error_code_t gf_platform_unminimize_window (gf_display_t display,
                                                gf_native_window_t window);
 void gf_platform_get_window_name (gf_display_t display, gf_native_window_t win,
                                   char *buffer, size_t bufsize);
-bool gf_platform_window_minimized(gf_display_t display, gf_native_window_t window);
+bool gf_platform_window_minimized (gf_display_t display, gf_native_window_t window);
+void gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t window,
+                             gf_color_t color, int thickness);
+void gf_platform_update_borders (gf_platform_interface_t *platform);
+void gf_platform_cleanup_borders (gf_platform_interface_t *platform);
+
 #endif // GF_PLATFORM_WINDOWS_H
