@@ -11,8 +11,6 @@ Here are various layout arrangements for windows. The configurations showcase ho
 
 https://github.com/user-attachments/assets/f7800812-4ac9-4d3d-bac0-943632cb2f20
 
-https://github.com/user-attachments/assets/894e62fa-d906-4038-b67d-327dc322af66
-
 
 
 ## Platform Support
@@ -24,8 +22,7 @@ https://github.com/user-attachments/assets/894e62fa-d906-4038-b67d-327dc322af66
 
 ### Windows  
 - **Support**: Basic window management functionality
-- **Status**: Functional but requires additional work for stability parity with Linux
-- **Known Issues**: Some UWP applications may ignore window positioning commands
+- **Status**: Stable and fully tested
 
 ---
 
