@@ -58,5 +58,8 @@ void gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window
                              gf_color_t color, int thickness);
 void gf_platform_update_borders (gf_platform_interface_t *platform);
 void gf_platform_cleanup_borders (gf_platform_interface_t *platform);
-
+bool
+gf_platform_window_hidden(gf_display_t display, gf_native_window_t window);
+void
+gf_platform_remove_border(gf_platform_interface_t *platform, gf_native_window_t window);
 #endif // GF_PLATFORM_WINDOWS_H
