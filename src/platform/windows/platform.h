@@ -51,5 +51,5 @@ gf_error_code_t gf_platform_unminimize_window (gf_display_t display,
                                                gf_native_window_t window);
 void gf_platform_get_window_name (gf_display_t display, gf_native_window_t win,
                                   char *buffer, size_t bufsize);
-
+bool gf_platform_window_minimized(gf_display_t display, gf_native_window_t window);
 #endif // GF_PLATFORM_WINDOWS_H

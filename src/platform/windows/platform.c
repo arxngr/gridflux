@@ -172,6 +172,7 @@ gf_platform_create(void)
     platform->get_active_window = gf_platform_active_window;
     platform->get_screen_bounds = gf_platform_get_screen_bounds;
     platform->set_window_geometry = gf_platform_set_window_geometry;
+    platform->is_window_minimized = gf_platform_window_minimized;
     platform->platform_data = data;
 
     return platform;
@@ -302,8 +303,10 @@ gf_platform_get_window_geometry(gf_display_t display, gf_native_window_t window,
 }
 
 gf_error_code_t
-gf_platform_set_window_geometry(gf_display_t display, gf_native_window_t window,
-                                const gf_rect_t *geometry, gf_geometry_flags_t flags,
+gf_platform_set_window_geometry(gf_display_t display,
+                                gf_native_window_t window,
+                                const gf_rect_t *geometry,
+                                gf_geometry_flags_t flags,
                                 gf_config_t *cfg)
 {
     (void)display;
@@ -311,22 +314,54 @@ gf_platform_set_window_geometry(gf_display_t display, gf_native_window_t window,
     if (!geometry || !_validate_window(window))
         return GF_ERROR_INVALID_PARAMETER;
 
+    /* Skip minimized windows */
     if (IsIconic(window))
         return GF_SUCCESS;
 
+    /* Skip fullscreen / exclusive windows */
+    if (IsZoomed(window)) {
+        WINDOWPLACEMENT wp = { .length = sizeof(WINDOWPLACEMENT) };
+        if (GetWindowPlacement(window, &wp) &&
+            wp.showCmd == SW_SHOWMAXIMIZED) {
+            return GF_SUCCESS;
+        }
+    }
+
     gf_rect_t rect = *geometry;
 
+    /* Apply padding */
     if (flags & GF_GEOMETRY_APPLY_PADDING)
         gf_rect_apply_padding(&rect, cfg->default_padding);
 
-    if (IsZoomed(window))
-        ShowWindow(window, SW_RESTORE);
+    /* Validate geometry */
+    if (rect.width <= 0 || rect.height <= 0)
+        return GF_SUCCESS;
 
-    if (!MoveWindow(window, rect.x, rect.y, (int)rect.width, (int)rect.height, TRUE))
+    /* Restore BEFORE moving */
+    if (IsZoomed(window)) {
+        ShowWindow(window, SW_RESTORE);
+        Sleep(1); /* allow DWM to process */
+    }
+
+    /* Use SetWindowPos (more reliable than MoveWindow) */
+    BOOL ok = SetWindowPos(
+        window,
+        NULL,
+        rect.x,
+        rect.y,
+        (int)rect.width,
+        (int)rect.height,
+        SWP_NOZORDER |
+        SWP_NOACTIVATE |
+        SWP_ASYNCWINDOWPOS
+    );
+
+    if (!ok)
         return GF_ERROR_PLATFORM_ERROR;
 
     return GF_SUCCESS;
 }
+
 
 gf_error_code_t
 gf_platform_unmaximize_window(gf_display_t display, gf_native_window_t window)
@@ -513,4 +548,15 @@ gf_platform_get_window_name(gf_display_t display, gf_native_window_t window,
         buffer[len] = '\0';
     else
         buffer[0] = '\0';
+}
+
+bool
+gf_platform_window_minimized(gf_display_t display, gf_native_window_t window)
+{
+    (void)display;
+    
+    if (!_validate_window(window))
+        return false;
+    
+    return IsIconic((HWND)window);
 }

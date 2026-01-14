@@ -42,6 +42,7 @@ struct gf_platform_interface
 
     void (*window_name_info) (gf_display_t display, gf_native_window_t win, char *buffer,
                               size_t bufsize);
+    bool (*is_window_minimized) (gf_display_t display, gf_native_window_t window);
 
     void *platform_data;
 };

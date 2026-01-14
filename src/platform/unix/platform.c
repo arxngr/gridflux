@@ -157,6 +157,7 @@ gf_platform_create (void)
     platform->is_window_excluded = gf_platform_is_window_excluded;
     platform->is_window_drag = gf_platform_is_window_drag;
     platform->get_active_window = gf_platform_active_window;
+    platform->is_window_minimized = gf_platform_is_window_minimized;
     platform->platform_data = data;
 
     gf_desktop_env_t env = gf_detect_desktop_env ();
@@ -1119,4 +1120,20 @@ gf_platform_noop_get_screen_bounds (gf_display_t display, gf_rect_t *bounds)
         memset (bounds, 0, sizeof (*bounds));
 
     return GF_SUCCESS;
+}
+
+bool
+gf_platform_is_window_minimized (gf_display_t display, gf_native_window_t window)
+{
+    if (!display || window == None)
+        return false;
+
+    if (!gf_platform_is_window_valid (display, window))
+        return false;
+
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    if (!atoms)
+        return false;
+
+    return gf_platform_window_has_state (display, window, atoms->net_wm_state_hidden);
 }

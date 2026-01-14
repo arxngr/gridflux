@@ -83,5 +83,6 @@ gf_error_code_t gf_platform_send_client_message (Display *display, Window window
                                                  Atom message_type, long *data,
                                                  int count);
 bool gf_platform_window_has_state (Display *display, Window window, Atom state);
+bool gf_platform_is_window_minimized (gf_display_t display, gf_native_window_t window);
 
 #endif // GF_PLATFORM_LINUX_H
