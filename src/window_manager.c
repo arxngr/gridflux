@@ -233,7 +233,7 @@ _window_manager_handle_new_window (gf_window_manager_t *m, gf_window_info_t *new
     GF_LOG_INFO ("New window %lu is now focused in workspace %u", new_window->id,
                  workspace_id);
 
-#ifdef _WIN32
+#if defined(_WIN32)
     m->platform->add_border (m->platform, new_window->native_handle, RGB (42, 157, 244),
                              4);
 #endif
@@ -1031,8 +1031,9 @@ gf_window_manager_watch (gf_window_manager_t *m)
                 // Handle the new window: focus it and minimize others in workspace
                 _window_manager_handle_new_window (m, &platform_windows[i], assigned_ws);
             }
-#ifdef _WIN32
-            m->platform->update_border (m->platform);
+#if defined(_WIN32)
+
+                m->platform->update_border (m->platform);
 #endif
         }
 
