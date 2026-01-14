@@ -2,8 +2,8 @@
 #define GF_PLATFORM_LINUX_BACKEND_H
 
 #include "../../config.h"
-#include "../../types.h"
 #include "../../platform/platform.h"
+#include "../../types.h"
 #include <X11/Xlib.h>
 #include <stdbool.h>
 

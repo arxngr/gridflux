@@ -1,14 +1,13 @@
+#include "../../../file.h"
 #include "../../../logger.h"
 #include "../../../types.h"
-#include "../../../file.h"
 #include "../backend.h"
 #include "../platform.h"
 
+#include "platform_compat.h" // Centralized platform-specific includes
 #include <dbus/dbus.h>
 #include <stdlib.h>
 #include <string.h>
-#include "platform_compat.h"  // Centralized platform-specific includes
-
 
 static int
 gf_kwin_dbus_call (DBusConnection *conn, const char *method, const char *arg1,

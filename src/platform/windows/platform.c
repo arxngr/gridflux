@@ -3,13 +3,13 @@
 #include "../../logger.h"
 #include "../../memory.h"
 #include "../../types.h"
-#include <windows.h>
-#include <shellapi.h>
 #include <dwmapi.h>
+#include <shellapi.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
+#include <windows.h>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -21,99 +21,99 @@
 #define MAX_TITLE_LENGTH 256
 #define MAX_CLASS_NAME_LENGTH 256
 
+static window_border_t *borders[GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES] = { 0 };
+static int border_count = 0;
+
 static bool
-_validate_window(HWND hwnd)
+_validate_window (HWND hwnd)
 {
-    return hwnd && IsWindow(hwnd);
+    return hwnd && IsWindow (hwnd);
 }
 
 static bool
-_is_fullscreen_window(HWND hwnd)
+_is_fullscreen_window (HWND hwnd)
 {
-    if (!_validate_window(hwnd) || !IsWindowVisible(hwnd))
+    if (!_validate_window (hwnd) || !IsWindowVisible (hwnd))
         return false;
 
-    if (GetWindow(hwnd, GW_OWNER))
+    if (GetWindow (hwnd, GW_OWNER))
         return false;
 
     RECT win, screen;
-    GetWindowRect(hwnd, &win);
+    GetWindowRect (hwnd, &win);
 
-    HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { .cbSize = sizeof(mi) };
-    GetMonitorInfo(mon, &mi);
+    HMONITOR mon = MonitorFromWindow (hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { .cbSize = sizeof (mi) };
+    GetMonitorInfo (mon, &mi);
     screen = mi.rcMonitor;
 
-    return (win.left   <= screen.left  &&
-            win.top    <= screen.top   &&
-            win.right  >= screen.right &&
-            win.bottom >= screen.bottom);
+    return (win.left <= screen.left && win.top <= screen.top && win.right >= screen.right
+            && win.bottom >= screen.bottom);
 }
 
 static bool
-_is_cloaked_window(HWND hwnd)
+_is_cloaked_window (HWND hwnd)
 {
     DWORD cloaked = 0;
-    HRESULT hr = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-    return SUCCEEDED(hr) && cloaked;
+    HRESULT hr = DwmGetWindowAttribute (hwnd, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
+    return SUCCEEDED (hr) && cloaked;
 }
 
 static bool
-_is_app_window(HWND hwnd)
+_is_app_window (HWND hwnd)
 {
-    if (!_validate_window(hwnd))
+    if (!_validate_window (hwnd))
         return false;
 
-    bool minimized = IsIconic(hwnd);
-    if (!IsWindowVisible(hwnd) && !minimized)
+    bool minimized = IsIconic (hwnd);
+    if (!IsWindowVisible (hwnd) && !minimized)
         return false;
 
-    if (_is_cloaked_window(hwnd))
+    if (_is_cloaked_window (hwnd))
         return false;
 
-    if (GetParent(hwnd) != NULL || hwnd == GetShellWindow())
+    if (GetParent (hwnd) != NULL || hwnd == GetShellWindow ())
         return false;
 
     char title[MAX_TITLE_LENGTH];
-    return GetWindowTextA(hwnd, title, sizeof(title)) > 0;
+    return GetWindowTextA (hwnd, title, sizeof (title)) > 0;
 }
 
 static bool
-_is_excluded_class(const char *class_name, const char *title)
+_is_excluded_class (const char *class_name, const char *title)
 {
-    static const char *excluded_classes[] = {
-        "Shell_TrayWnd",
-        "TrayNotifyWnd",
-        "NotifyIconOverflowWindow",
-        "Windows.UI.Core.CoreWindow",
-        "Xaml_Windowed_Popup",
-        "TopLevelWindowForOverflowXamlIsland"
-    };
+    static const char *excluded_classes[] = { "Shell_TrayWnd",
+                                              "TrayNotifyWnd",
+                                              "NotifyIconOverflowWindow",
+                                              "Windows.UI.Core.CoreWindow",
+                                              "Xaml_Windowed_Popup",
+                                              "TopLevelWindowForOverflowXamlIsland" };
 
-    for (size_t i = 0; i < sizeof(excluded_classes) / sizeof(excluded_classes[0]); i++) {
-        if (strcmp(class_name, excluded_classes[i]) == 0)
+    for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
+    {
+        if (strcmp (class_name, excluded_classes[i]) == 0)
             return true;
     }
 
-    if (strstr(class_name, "Xaml") || strstr(class_name, "Overflow"))
+    if (strstr (class_name, "Xaml") || strstr (class_name, "Overflow"))
         return true;
 
-    if (strcmp(class_name, "ApplicationFrameWindow") == 0 && title[0] == '\0')
+    if (strcmp (class_name, "ApplicationFrameWindow") == 0 && title[0] == '\0')
         return true;
 
     return false;
 }
 
 static bool
-_is_excluded_style(HWND hwnd)
+_is_excluded_style (HWND hwnd)
 {
-    LONG exstyle = GetWindowLongA(hwnd, GWL_EXSTYLE);
+    LONG exstyle = GetWindowLongA (hwnd, GWL_EXSTYLE);
 
     if (exstyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE))
         return true;
 
     char title[MAX_TITLE_LENGTH];
-    gf_platform_get_window_name(NULL, hwnd, title, sizeof(title));
+    gf_platform_get_window_name (NULL, hwnd, title, sizeof (title));
 
     if ((exstyle & WS_EX_TOPMOST) && title[0] == '\0')
         return true;
@@ -122,37 +122,206 @@ _is_excluded_style(HWND hwnd)
 }
 
 static void
-_get_taskbar_dimensions(int *left, int *right, int *top, int *bottom)
+_get_taskbar_dimensions (int *left, int *right, int *top, int *bottom)
 {
     *left = *right = *top = *bottom = 0;
 
-    APPBARDATA abd = { .cbSize = sizeof(abd) };
-    if (!SHAppBarMessage(ABM_GETTASKBARPOS, &abd))
+    APPBARDATA abd = { .cbSize = sizeof (abd) };
+    if (!SHAppBarMessage (ABM_GETTASKBARPOS, &abd))
         return;
 
-    switch (abd.uEdge) {
-        case ABE_LEFT:   *left   = abd.rc.right - abd.rc.left; break;
-        case ABE_RIGHT:  *right  = abd.rc.right - abd.rc.left; break;
-        case ABE_TOP:    *top    = abd.rc.bottom - abd.rc.top; break;
-        case ABE_BOTTOM: *bottom = abd.rc.bottom - abd.rc.top; break;
+    switch (abd.uEdge)
+    {
+    case ABE_LEFT:
+        *left = abd.rc.right - abd.rc.left;
+        break;
+    case ABE_RIGHT:
+        *right = abd.rc.right - abd.rc.left;
+        break;
+    case ABE_TOP:
+        *top = abd.rc.bottom - abd.rc.top;
+        break;
+    case ABE_BOTTOM:
+        *bottom = abd.rc.bottom - abd.rc.top;
+        break;
+    }
+}
+
+static HWND
+_create_border_overlay (HWND target)
+{
+    RECT rect;
+    if (!GetWindowRect (target, &rect))
+        return NULL;
+
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+
+    HWND overlay = CreateWindowExA (WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
+                                    "STATIC", NULL, WS_POPUP, rect.left, rect.top, width,
+                                    height, NULL, NULL, GetModuleHandle (NULL), NULL);
+    if (!overlay)
+        return NULL;
+
+    ShowWindow (overlay, SW_SHOW);
+    return overlay;
+}
+
+static void
+_update_border (window_border_t *border)
+{
+    if (!border)
+        return;
+
+    if (!border->target || !border->overlay)
+        return;
+
+    if (!IsWindow (border->target) || !IsWindow (border->overlay))
+        return;
+
+    RECT rect;
+    if (!GetWindowRect (border->target, &rect))
+        return;
+
+    // Skip if unchanged
+    if (memcmp (&rect, &border->last_rect, sizeof (RECT)) == 0)
+        return;
+
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+
+    if (width <= 0 || height <= 0)
+        return;
+
+    HDC hdcScreen = GetDC (NULL);
+    if (!hdcScreen)
+        return;
+
+    HDC hdcMem = CreateCompatibleDC (hdcScreen);
+    if (!hdcMem)
+    {
+        ReleaseDC (NULL, hdcScreen);
+        return;
+    }
+
+    HBITMAP hBmp = CreateCompatibleBitmap (hdcScreen, width, height);
+    if (!hBmp)
+    {
+        DeleteDC (hdcMem);
+        ReleaseDC (NULL, hdcScreen);
+        return;
+    }
+
+    HGDIOBJ oldBmp = SelectObject (hdcMem, hBmp);
+
+    // Fill transparent
+    HBRUSH hTransparent = CreateSolidBrush (RGB (0, 0, 0));
+    FillRect (hdcMem, &(RECT){ 0, 0, width, height }, hTransparent);
+    DeleteObject (hTransparent);
+
+    // Draw border
+    HPEN hPen = CreatePen (PS_SOLID, border->thickness, border->color);
+    HGDIOBJ oldPen = SelectObject (hdcMem, hPen);
+    HGDIOBJ oldBrush = SelectObject (hdcMem, GetStockObject (NULL_BRUSH));
+
+    Rectangle (hdcMem, 0, 0, width, height);
+
+    SelectObject (hdcMem, oldBrush);
+    SelectObject (hdcMem, oldPen);
+    DeleteObject (hPen);
+
+    BLENDFUNCTION blend = { 0 };
+    blend.BlendOp = AC_SRC_OVER;
+    blend.SourceConstantAlpha = 255;
+    blend.AlphaFormat = AC_SRC_ALPHA;
+
+    POINT ptZero = { 0, 0 };
+    SIZE size = { width, height };
+    POINT ptDest = { rect.left, rect.top };
+
+    UpdateLayeredWindow (border->overlay, hdcScreen, &ptDest, &size, hdcMem, &ptZero, 0,
+                         &blend, ULW_ALPHA);
+
+    border->last_rect = rect;
+
+    SelectObject (hdcMem, oldBmp);
+    DeleteObject (hBmp);
+    DeleteDC (hdcMem);
+    ReleaseDC (NULL, hdcScreen);
+}
+
+void
+gf_platform_cleanup_borders (gf_platform_interface_t *platform)
+{
+    if (!platform)
+        return;
+
+    gf_windows_platform_data_t *data
+        = (gf_windows_platform_data_t *)platform->platform_data;
+    if (!data)
+        return;
+
+    for (int i = 0; i < data->border_count;)
+    {
+        window_border_t *b = data->borders[i];
+
+        // Sanity check
+        if (!b || (uintptr_t)b < 0x1000)
+        {
+            // Shift remaining
+            for (int j = i; j < data->border_count - 1; j++)
+                data->borders[j] = data->borders[j + 1];
+            data->border_count--;
+            continue;
+        }
+
+        bool should_remove = false;
+
+        if (!b->target || !IsWindow (b->target))
+        {
+            should_remove = true;
+        }
+        else if (!b->overlay || !IsWindow (b->overlay))
+        {
+            should_remove = true;
+        }
+
+        if (should_remove)
+        {
+            if (b->overlay && IsWindow (b->overlay))
+            {
+                DestroyWindow (b->overlay);
+            }
+            free (b);
+
+            // Shift remaining
+            for (int j = i; j < data->border_count - 1; j++)
+                data->borders[j] = data->borders[j + 1];
+            data->border_count--;
+        }
+        else
+        {
+            i++;
+        }
     }
 }
 
 gf_platform_interface_t *
-gf_platform_create(void)
+gf_platform_create (void)
 {
-    gf_platform_interface_t *platform = gf_malloc(sizeof(gf_platform_interface_t));
+    gf_platform_interface_t *platform = gf_malloc (sizeof (gf_platform_interface_t));
     if (!platform)
         return NULL;
 
-    gf_windows_platform_data_t *data = gf_malloc(sizeof(gf_windows_platform_data_t));
-    if (!data) {
-        gf_free(platform);
+    gf_windows_platform_data_t *data = gf_malloc (sizeof (gf_windows_platform_data_t));
+    if (!data)
+    {
+        gf_free (platform);
         return NULL;
     }
 
-    memset(platform, 0, sizeof(gf_platform_interface_t));
-    memset(data, 0, sizeof(gf_windows_platform_data_t));
+    memset (platform, 0, sizeof (gf_platform_interface_t));
+    memset (data, 0, sizeof (gf_windows_platform_data_t));
 
     // Assign function pointers
     platform->init = gf_platform_init;
@@ -173,53 +342,72 @@ gf_platform_create(void)
     platform->get_screen_bounds = gf_platform_get_screen_bounds;
     platform->set_window_geometry = gf_platform_set_window_geometry;
     platform->is_window_minimized = gf_platform_window_minimized;
+    platform->add_border = gf_platform_add_border;
+    platform->update_border = gf_platform_update_borders;
+    platform->cleanup_borders = gf_platform_cleanup_borders;
     platform->platform_data = data;
 
     return platform;
 }
 
 void
-gf_platform_destroy(gf_platform_interface_t *platform)
+gf_platform_destroy (gf_platform_interface_t *platform)
 {
     if (!platform)
         return;
 
-    gf_free(platform->platform_data);
-    gf_free(platform);
+    gf_free (platform->platform_data);
+    gf_free (platform);
 }
 
 gf_error_code_t
-gf_platform_init(gf_platform_interface_t *platform, gf_display_t *display)
+gf_platform_init (gf_platform_interface_t *platform, gf_display_t *display)
 {
-    GF_LOG_INFO("Initialize Windows platform...");
-    
+    GF_LOG_INFO ("Initialize Windows platform...");
+
     if (!display)
         return GF_ERROR_INVALID_PARAMETER;
 
     *display = NULL;
 
-    gf_windows_platform_data_t *data = (gf_windows_platform_data_t *)platform->platform_data;
-    data->monitor_count = GetSystemMetrics(SM_CMONITORS);
+    gf_windows_platform_data_t *data
+        = (gf_windows_platform_data_t *)platform->platform_data;
+    data->monitor_count = GetSystemMetrics (SM_CMONITORS);
 
-    GF_LOG_INFO("Platform initialized successfully (monitors: %d)", data->monitor_count);
+    GF_LOG_INFO ("Platform initialized successfully (monitors: %d)", data->monitor_count);
     return GF_SUCCESS;
 }
 
 void
-gf_platform_cleanup(gf_display_t display, gf_platform_interface_t *platform)
+gf_platform_cleanup (gf_display_t display, gf_platform_interface_t *platform)
 {
     (void)display;
 
     if (!platform || !platform->platform_data)
         return;
 
-    GF_LOG_INFO("Platform cleaned up");
-    gf_free(platform->platform_data);
+    gf_windows_platform_data_t *data
+        = (gf_windows_platform_data_t *)platform->platform_data;
+
+    for (int i = 0; i < data->border_count; i++)
+    {
+        if (data->borders[i])
+        {
+            if (data->borders[i]->overlay && IsWindow (data->borders[i]->overlay))
+            {
+                DestroyWindow (data->borders[i]->overlay);
+            }
+            free (data->borders[i]);
+        }
+    }
+    data->border_count = 0;
+
+    GF_LOG_INFO ("Platform cleaned up");
 }
 
 gf_error_code_t
-gf_platform_get_windows(gf_display_t display, gf_workspace_id_t *workspace_id,
-                        gf_window_info_t **windows, uint32_t *count)
+gf_platform_get_windows (gf_display_t display, gf_workspace_id_t *workspace_id,
+                         gf_window_info_t **windows, uint32_t *count)
 {
     (void)display;
     (void)workspace_id;
@@ -227,17 +415,20 @@ gf_platform_get_windows(gf_display_t display, gf_workspace_id_t *workspace_id,
     if (!windows || !count)
         return GF_ERROR_INVALID_PARAMETER;
 
-    gf_window_info_t *window_list = gf_malloc(MAX_WINDOWS * sizeof(gf_window_info_t));
+    gf_window_info_t *window_list = gf_malloc (MAX_WINDOWS * sizeof (gf_window_info_t));
     if (!window_list)
         return GF_ERROR_MEMORY_ALLOCATION;
 
     uint32_t found_count = 0;
-    HWND hwnd = GetTopWindow(NULL);
+    HWND hwnd = GetTopWindow (NULL);
 
-    while (hwnd && found_count < MAX_WINDOWS) {
-        if (_is_app_window(hwnd)) {
+    while (hwnd && found_count < MAX_WINDOWS)
+    {
+        if (_is_app_window (hwnd))
+        {
             RECT rect;
-            if (GetWindowRect(hwnd, &rect)) {
+            if (GetWindowRect (hwnd, &rect))
+            {
                 window_list[found_count] = (gf_window_info_t){
                     .id = (gf_window_id_t)hwnd,
                     .native_handle = hwnd,
@@ -255,24 +446,27 @@ gf_platform_get_windows(gf_display_t display, gf_workspace_id_t *workspace_id,
                     .last_modified = time(NULL),
                 };
 
-                gf_platform_get_window_name(display, hwnd, window_list[found_count].name,
-                                           sizeof(window_list[found_count].name));
+                gf_platform_get_window_name (display, hwnd, window_list[found_count].name,
+                                             sizeof (window_list[found_count].name));
                 found_count++;
             }
         }
-        hwnd = GetNextWindow(hwnd, GW_HWNDNEXT);
+        hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);
     }
 
-    if (found_count == 0) {
-        gf_free(window_list);
+    if (found_count == 0)
+    {
+        gf_free (window_list);
         *windows = NULL;
         *count = 0;
         return GF_SUCCESS;
     }
 
-    gf_window_info_t *resized = gf_realloc(window_list, found_count * sizeof(gf_window_info_t));
-    if (!resized) {
-        gf_free(window_list);
+    gf_window_info_t *resized
+        = gf_realloc (window_list, found_count * sizeof (gf_window_info_t));
+    if (!resized)
+    {
+        gf_free (window_list);
         return GF_ERROR_MEMORY_ALLOCATION;
     }
 
@@ -282,16 +476,16 @@ gf_platform_get_windows(gf_display_t display, gf_workspace_id_t *workspace_id,
 }
 
 gf_error_code_t
-gf_platform_get_window_geometry(gf_display_t display, gf_native_window_t window,
-                                gf_rect_t *geometry)
+gf_platform_get_window_geometry (gf_display_t display, gf_native_window_t window,
+                                 gf_rect_t *geometry)
 {
     (void)display;
 
-    if (!geometry || !_validate_window(window))
+    if (!geometry || !_validate_window (window))
         return GF_ERROR_INVALID_PARAMETER;
 
     RECT rect;
-    if (!GetWindowRect(window, &rect))
+    if (!GetWindowRect (window, &rect))
         return GF_ERROR_PLATFORM_ERROR;
 
     geometry->x = rect.left;
@@ -303,26 +497,25 @@ gf_platform_get_window_geometry(gf_display_t display, gf_native_window_t window,
 }
 
 gf_error_code_t
-gf_platform_set_window_geometry(gf_display_t display,
-                                gf_native_window_t window,
-                                const gf_rect_t *geometry,
-                                gf_geometry_flags_t flags,
-                                gf_config_t *cfg)
+gf_platform_set_window_geometry (gf_display_t display, gf_native_window_t window,
+                                 const gf_rect_t *geometry, gf_geometry_flags_t flags,
+                                 gf_config_t *cfg)
 {
     (void)display;
 
-    if (!geometry || !_validate_window(window))
+    if (!geometry || !_validate_window (window))
         return GF_ERROR_INVALID_PARAMETER;
 
     /* Skip minimized windows */
-    if (IsIconic(window))
+    if (IsIconic (window))
         return GF_SUCCESS;
 
     /* Skip fullscreen / exclusive windows */
-    if (IsZoomed(window)) {
-        WINDOWPLACEMENT wp = { .length = sizeof(WINDOWPLACEMENT) };
-        if (GetWindowPlacement(window, &wp) &&
-            wp.showCmd == SW_SHOWMAXIMIZED) {
+    if (IsZoomed (window))
+    {
+        WINDOWPLACEMENT wp = { .length = sizeof (WINDOWPLACEMENT) };
+        if (GetWindowPlacement (window, &wp) && wp.showCmd == SW_SHOWMAXIMIZED)
+        {
             return GF_SUCCESS;
         }
     }
@@ -331,30 +524,23 @@ gf_platform_set_window_geometry(gf_display_t display,
 
     /* Apply padding */
     if (flags & GF_GEOMETRY_APPLY_PADDING)
-        gf_rect_apply_padding(&rect, cfg->default_padding);
+        gf_rect_apply_padding (&rect, cfg->default_padding);
 
     /* Validate geometry */
     if (rect.width <= 0 || rect.height <= 0)
         return GF_SUCCESS;
 
     /* Restore BEFORE moving */
-    if (IsZoomed(window)) {
-        ShowWindow(window, SW_RESTORE);
-        Sleep(1); /* allow DWM to process */
+    if (IsZoomed (window))
+    {
+        ShowWindow (window, SW_RESTORE);
+        Sleep (1); /* allow DWM to process */
     }
 
     /* Use SetWindowPos (more reliable than MoveWindow) */
-    BOOL ok = SetWindowPos(
-        window,
-        NULL,
-        rect.x,
-        rect.y,
-        (int)rect.width,
-        (int)rect.height,
-        SWP_NOZORDER |
-        SWP_NOACTIVATE |
-        SWP_ASYNCWINDOWPOS
-    );
+    BOOL ok
+        = SetWindowPos (window, NULL, rect.x, rect.y, (int)rect.width, (int)rect.height,
+                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
 
     if (!ok)
         return GF_ERROR_PLATFORM_ERROR;
@@ -362,91 +548,89 @@ gf_platform_set_window_geometry(gf_display_t display,
     return GF_SUCCESS;
 }
 
-
 gf_error_code_t
-gf_platform_unmaximize_window(gf_display_t display, gf_native_window_t window)
+gf_platform_unmaximize_window (gf_display_t display, gf_native_window_t window)
 {
     (void)display;
 
-    if (!_validate_window(window))
+    if (!_validate_window (window))
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (!IsZoomed(window))
+    if (!IsZoomed (window))
         return GF_SUCCESS;
 
-    if (ShowWindow(window, SW_RESTORE) == 0)
+    if (ShowWindow (window, SW_RESTORE) == 0)
         return GF_ERROR_PLATFORM_ERROR;
 
     return GF_SUCCESS;
 }
 
 gf_workspace_id_t
-gf_platform_get_current_workspace(gf_display_t display)
+gf_platform_get_current_workspace (gf_display_t display)
 {
     (void)display;
     return 0;
 }
 
 uint32_t
-gf_platform_get_workspace_count(gf_display_t display)
+gf_platform_get_workspace_count (gf_display_t display)
 {
     (void)display;
     return 1;
 }
 
 gf_error_code_t
-gf_platform_create_workspace(gf_display_t display)
+gf_platform_create_workspace (gf_display_t display)
 {
     (void)display;
-    GF_LOG_WARN("Cannot create workspace on Windows - use Windows+Ctrl+D instead");
+    GF_LOG_WARN ("Cannot create workspace on Windows - use Windows+Ctrl+D instead");
     return GF_ERROR_PLATFORM_ERROR;
 }
 
 bool
-gf_platform_is_window_valid(gf_display_t display, gf_native_window_t window)
+gf_platform_is_window_valid (gf_display_t display, gf_native_window_t window)
 {
     (void)display;
-    return _validate_window(window);
+    return _validate_window (window);
 }
 
 bool
-gf_platform_is_window_excluded(gf_display_t display, gf_native_window_t window)
+gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
 {
     (void)display;
 
     HWND hwnd = (HWND)window;
 
-    if (!_validate_window(hwnd))
+    if (!_validate_window (hwnd))
         return true;
 
-    if (GetWindow(hwnd, GW_OWNER) != NULL)
+    if (GetWindow (hwnd, GW_OWNER) != NULL)
         return true;
 
-    if (_is_excluded_style(hwnd))
+    if (_is_excluded_style (hwnd))
         return true;
 
-    if (_is_fullscreen_window(hwnd))
+    if (_is_fullscreen_window (hwnd))
         return true;
 
-    if (_is_cloaked_window(hwnd))
+    if (_is_cloaked_window (hwnd))
         return true;
 
     char title[MAX_TITLE_LENGTH];
-    gf_platform_get_window_name(display, hwnd, title, sizeof(title));
+    gf_platform_get_window_name (display, hwnd, title, sizeof (title));
 
-    static const char *excluded_titles[] = {
-        "GridFlux",
-        "DWM Notification Window"
-    };
+    static const char *excluded_titles[] = { "GridFlux", "DWM Notification Window" };
 
-    for (size_t i = 0; i < sizeof(excluded_titles) / sizeof(excluded_titles[0]); i++) {
-        if (strcmp(title, excluded_titles[i]) == 0)
+    for (size_t i = 0; i < sizeof (excluded_titles) / sizeof (excluded_titles[0]); i++)
+    {
+        if (strcmp (title, excluded_titles[i]) == 0)
             return true;
     }
 
     char class_name[MAX_CLASS_NAME_LENGTH];
-    if (GetClassNameA(hwnd, class_name, sizeof(class_name))) {
-        if (_is_excluded_class(class_name, title))
+    if (GetClassNameA (hwnd, class_name, sizeof (class_name)))
+    {
+        if (_is_excluded_class (class_name, title))
             return true;
     }
 
@@ -454,31 +638,31 @@ gf_platform_is_window_excluded(gf_display_t display, gf_native_window_t window)
 }
 
 gf_error_code_t
-gf_platform_is_window_drag(gf_display_t display, gf_native_window_t window,
-                           gf_rect_t *geometry)
+gf_platform_is_window_drag (gf_display_t display, gf_native_window_t window,
+                            gf_rect_t *geometry)
 {
     (void)display;
     (void)window;
 
-    memset(geometry, 0, sizeof(*geometry));
+    memset (geometry, 0, sizeof (*geometry));
     return GF_SUCCESS;
 }
 
 gf_error_code_t
-gf_platform_get_screen_bounds(gf_display_t display, gf_rect_t *bounds)
+gf_platform_get_screen_bounds (gf_display_t display, gf_rect_t *bounds)
 {
     (void)display;
 
     if (!bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
-    int x = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    int x = GetSystemMetrics (SM_XVIRTUALSCREEN);
+    int y = GetSystemMetrics (SM_YVIRTUALSCREEN);
+    int width = GetSystemMetrics (SM_CXVIRTUALSCREEN);
+    int height = GetSystemMetrics (SM_CYVIRTUALSCREEN);
 
     int panel_left, panel_right, panel_top, panel_bottom;
-    _get_taskbar_dimensions(&panel_left, &panel_right, &panel_top, &panel_bottom);
+    _get_taskbar_dimensions (&panel_left, &panel_right, &panel_top, &panel_bottom);
 
     bounds->x = x + panel_left;
     bounds->y = y + panel_top;
@@ -489,49 +673,49 @@ gf_platform_get_screen_bounds(gf_display_t display, gf_rect_t *bounds)
 }
 
 gf_window_id_t
-gf_platform_active_window(gf_display_t display)
+gf_platform_active_window (gf_display_t display)
 {
     (void)display;
 
-    HWND hwnd = GetForegroundWindow();
-    if (_validate_window(hwnd) && _is_app_window(hwnd))
+    HWND hwnd = GetForegroundWindow ();
+    if (_validate_window (hwnd) && _is_app_window (hwnd))
         return (gf_window_id_t)hwnd;
 
     return 0;
 }
 
 gf_error_code_t
-gf_platform_minimize_window(gf_display_t display, gf_native_window_t window)
+gf_platform_minimize_window (gf_display_t display, gf_native_window_t window)
 {
     (void)display;
 
-    if (!_validate_window(window))
+    if (!_validate_window (window))
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (ShowWindow(window, SW_MINIMIZE) == 0)
+    if (ShowWindow (window, SW_MINIMIZE) == 0)
         return GF_ERROR_PLATFORM_ERROR;
 
     return GF_SUCCESS;
 }
 
 gf_error_code_t
-gf_platform_unminimize_window(gf_display_t display, gf_native_window_t window)
+gf_platform_unminimize_window (gf_display_t display, gf_native_window_t window)
 {
     (void)display;
 
-    if (!_validate_window(window))
+    if (!_validate_window (window))
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (ShowWindow(window, SW_RESTORE) == 0)
+    if (ShowWindow (window, SW_RESTORE) == 0)
         return GF_ERROR_PLATFORM_ERROR;
 
-    SetForegroundWindow(window);
+    SetForegroundWindow (window);
     return GF_SUCCESS;
 }
 
 void
-gf_platform_get_window_name(gf_display_t display, gf_native_window_t window,
-                            char *buffer, size_t bufsize)
+gf_platform_get_window_name (gf_display_t display, gf_native_window_t window,
+                             char *buffer, size_t bufsize)
 {
     (void)display;
 
@@ -540,10 +724,10 @@ gf_platform_get_window_name(gf_display_t display, gf_native_window_t window,
 
     buffer[0] = '\0';
 
-    if (!_validate_window(window))
+    if (!_validate_window (window))
         return;
 
-    int len = GetWindowTextA(window, buffer, (int)bufsize - 1);
+    int len = GetWindowTextA (window, buffer, (int)bufsize - 1);
     if (len > 0)
         buffer[len] = '\0';
     else
@@ -551,12 +735,84 @@ gf_platform_get_window_name(gf_display_t display, gf_native_window_t window,
 }
 
 bool
-gf_platform_window_minimized(gf_display_t display, gf_native_window_t window)
+gf_platform_window_minimized (gf_display_t display, gf_native_window_t window)
 {
     (void)display;
-    
-    if (!_validate_window(window))
+
+    if (!_validate_window (window))
         return false;
-    
-    return IsIconic((HWND)window);
+
+    return IsIconic ((HWND)window);
+}
+
+void
+gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t window,
+                        gf_color_t color, int thickness)
+{
+    if (!platform || !platform->platform_data || !window)
+        return;
+
+    gf_windows_platform_data_t *data
+        = (gf_windows_platform_data_t *)platform->platform_data;
+
+    // Check if already exists
+    for (int i = 0; i < data->border_count; i++)
+    {
+        if (data->borders[i] && data->borders[i]->target == window)
+        {
+            GF_LOG_DEBUG ("Border already exists for window %p", window);
+            return;
+        }
+    }
+
+    RECT rect;
+    if (!GetWindowRect (window, &rect))
+    {
+        GF_LOG_WARN ("Failed to get window rect for border");
+        return;
+    }
+
+    HWND overlay = _create_border_overlay (window);
+    if (!overlay)
+    {
+        GF_LOG_WARN ("Failed to create border overlay");
+        return;
+    }
+
+    window_border_t *b = malloc (sizeof (window_border_t));
+    if (!b)
+    {
+        DestroyWindow (overlay);
+        GF_LOG_ERROR ("Failed to allocate border structure");
+        return;
+    }
+
+    b->target = window;
+    b->overlay = overlay;
+    b->color = color;
+    b->thickness = thickness;
+    b->last_rect = rect;
+
+    data->borders[data->border_count++] = b;
+
+    GF_LOG_INFO ("Added border for window %p (color=0x%08X, thickness=%d, count=%d)",
+                 window, color, thickness, data->border_count);
+
+    _update_border (b);
+}
+
+void
+gf_platform_update_borders (gf_platform_interface_t *platform)
+{
+    if (!platform || !platform->platform_data)
+        return;
+
+    gf_windows_platform_data_t *data
+        = (gf_windows_platform_data_t *)platform->platform_data;
+
+    // Update all borders
+    for (int i = 0; i < data->border_count; i++)
+    {
+        _update_border (data->borders[i]);
+    }
 }

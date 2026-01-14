@@ -1,9 +1,9 @@
 #include "config.h"
 #include "layout.h"
 #include "logger.h"
-#include "window_manager.h"
-#include "platform/platform.h"
 #include "memory.h"
+#include "platform/platform.h"
+#include "window_manager.h"
 #ifdef __linux__
 #include "platform/unix/platform.h"
 #endif
