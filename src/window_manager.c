@@ -120,6 +120,12 @@ _unminimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list
         {
             continue;
         }
+        if (platform->is_window_hidden && 
+            platform->is_window_hidden(display, win->native_handle))
+        {
+            GF_LOG_DEBUG("Skipping hidden window %lu (closed to tray)", win->id);
+            continue;
+        }
 
         platform->unminimize_window (display, win->native_handle);
         win->is_minimized = false;
@@ -233,10 +239,9 @@ _window_manager_handle_new_window (gf_window_manager_t *m, gf_window_info_t *new
     GF_LOG_INFO ("New window %lu is now focused in workspace %u", new_window->id,
                  workspace_id);
 
-#if defined(_WIN32)
-    m->platform->add_border (m->platform, new_window->native_handle, RGB (42, 157, 244),
+    if (m->platform->add_border)
+        m->platform->add_border (m->platform, new_window->native_handle, RGB (42, 157, 244),
                              4);
-#endif
 }
 
 static void
@@ -473,7 +478,16 @@ gf_window_manager_cleanup_invalid_data (gf_window_manager_t *m)
         bool excluded = wm_is_excluded (m, win->native_handle);
         bool invalid = !wm_is_valid (m, win->native_handle);
 
-        if (excluded || invalid)
+         bool hidden = false;
+        if (m->platform->is_window_hidden)
+        {
+            hidden = m->platform->is_window_hidden(m->display, win->native_handle);
+            if (m->platform->remove_border && hidden) {
+                m->platform->remove_border(m->platform, win->native_handle);
+            }
+        }
+
+        if (excluded || invalid || hidden)
         {
             gf_window_list_remove (windows, win->id);
             removed_windows++;
@@ -733,6 +747,7 @@ gf_window_manager_arrange_workspace (gf_window_manager_t *m)
         {
             continue;
         }
+
 
         // Filter out minimized windows for layout calculation
         gf_window_info_t *non_minimized_windows = NULL;
@@ -1031,10 +1046,8 @@ gf_window_manager_watch (gf_window_manager_t *m)
                 // Handle the new window: focus it and minimize others in workspace
                 _window_manager_handle_new_window (m, &platform_windows[i], assigned_ws);
             }
-#if defined(_WIN32)
-
+            if (m->platform->update_border)
                 m->platform->update_border (m->platform);
-#endif
         }
 
         gf_free (platform_windows);

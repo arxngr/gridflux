@@ -87,7 +87,10 @@ _is_excluded_class (const char *class_name, const char *title)
                                               "NotifyIconOverflowWindow",
                                               "Windows.UI.Core.CoreWindow",
                                               "Xaml_Windowed_Popup",
-                                              "TopLevelWindowForOverflowXamlIsland" };
+                                              "TopLevelWindowForOverflowXamlIsland",
+                                               "Windows.Internal.Shell.NotificationCenter",
+                                                "NativeHWNDHost",
+                                                "Windows.UI.Composition.DesktopWindowContentBridge" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
     {
@@ -103,6 +106,34 @@ _is_excluded_class (const char *class_name, const char *title)
 
     return false;
 }
+
+static bool
+_is_notification_center(HWND hwnd)
+{
+    char class_name[MAX_CLASS_NAME_LENGTH];
+    if (!GetClassNameA(hwnd, class_name, sizeof(class_name)))
+        return false;
+    
+    if (strstr(class_name, "Windows.Internal.Shell"))
+        return true;
+    
+    if (strstr(class_name, "NotificationCenter"))
+        return true;
+    
+    if (strcmp(class_name, "Windows.UI.Core.CoreWindow") == 0)
+        return true;
+    
+    LONG exstyle = GetWindowLongA(hwnd, GWL_EXSTYLE);
+    if (exstyle & WS_EX_NOACTIVATE) {
+        char title[MAX_TITLE_LENGTH];
+        GetWindowTextA(hwnd, title, sizeof(title));
+        if (title[0] == '\0' || strstr(title, "otification"))
+            return true;
+    }
+    
+    return false;
+}
+
 
 static bool
 _is_excluded_style (HWND hwnd)
@@ -345,6 +376,8 @@ gf_platform_create (void)
     platform->add_border = gf_platform_add_border;
     platform->update_border = gf_platform_update_borders;
     platform->cleanup_borders = gf_platform_cleanup_borders;
+    platform->is_window_hidden = gf_platform_window_hidden;
+    platform->remove_border = gf_platform_remove_border;
     platform->platform_data = data;
 
     return platform;
@@ -615,6 +648,9 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
 
     if (_is_cloaked_window (hwnd))
         return true;
+    
+    if (_is_notification_center(hwnd))
+        return true;
 
     char title[MAX_TITLE_LENGTH];
     gf_platform_get_window_name (display, hwnd, title, sizeof (title));
@@ -814,5 +850,53 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
     for (int i = 0; i < data->border_count; i++)
     {
         _update_border (data->borders[i]);
+    }
+}
+
+bool
+gf_platform_window_hidden(gf_display_t display, gf_native_window_t window)
+{
+    (void)display;
+    
+    if (!_validate_window(window))
+        return false;
+    
+    // Window is hidden if it's not visible AND not minimized to taskbar
+    // This catches windows that are closed to system tray
+    return !IsWindowVisible((HWND)window) && !IsIconic((HWND)window);
+}
+
+void
+gf_platform_remove_border(gf_platform_interface_t *platform, gf_native_window_t window)
+{
+    if (!platform || !platform->platform_data || !window)
+        return;
+
+    gf_windows_platform_data_t *data
+        = (gf_windows_platform_data_t *)platform->platform_data;
+    
+    for (int i = 0; i < data->border_count; i++)
+    {
+        if (data->borders[i] && data->borders[i]->target == window)
+        {
+            window_border_t *b = data->borders[i];
+            
+            // Destroy overlay window
+            if (b->overlay && IsWindow(b->overlay))
+            {
+                DestroyWindow(b->overlay);
+            }
+            
+            free(b);
+            
+            // Shift remaining borders
+            for (int j = i; j < data->border_count - 1; j++)
+                data->borders[j] = data->borders[j + 1];
+            
+            data->border_count--;
+            
+            GF_LOG_DEBUG("Removed border for window %p", window);
+            return;
+        }
     }
 }

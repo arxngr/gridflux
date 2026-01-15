@@ -49,6 +49,8 @@ struct gf_platform_interface
                         gf_color_t color, int thickness);
     void (*update_border) (gf_platform_interface_t *platform);
     void (*cleanup_borders) (gf_platform_interface_t *platform);
+    bool (*is_window_hidden) (gf_display_t display, gf_native_window_t window);
+    void (*remove_border) (gf_platform_interface_t *platform, gf_native_window_t window);
 
     void *platform_data;
 };
