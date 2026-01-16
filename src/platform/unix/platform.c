@@ -456,6 +456,7 @@ gf_platform_get_frame_extents (Display *dpy, Window win, int *left, int *right, 
 static Window
 _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thickness)
 {
+    // Get target geometry
     XWindowAttributes attrs;
     if (!XGetWindowAttributes (dpy, target, &attrs))
         return None;
@@ -464,6 +465,7 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     gf_platform_get_frame_extents (dpy, target, &left_ext, &right_ext, &top_ext,
                                    &bottom_ext);
 
+    // Calculate overlay geometry (OUTSIDE the frame)
     // We need absolute coordinates for the overlay since it's override_redirect and child
     // of root
     Window root = DefaultRootWindow (dpy);
@@ -471,6 +473,7 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     Window child;
     XTranslateCoordinates (dpy, target, root, 0, 0, &abs_x, &abs_y, &child);
 
+    // Frame position (Top-Left of the window frame)
     int frame_x = abs_x - left_ext;
     int frame_y = abs_y - top_ext;
     int frame_w = attrs.width + left_ext + right_ext;
@@ -481,6 +484,7 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     GF_LOG_INFO ("Border Create: Frame X%d Y%d W%d H%d", frame_x, frame_y, frame_w,
                  frame_h);
 
+    // Overlay position (Outside the frame by thickness)
     int x = frame_x - thickness;
     int y = frame_y - thickness;
     int w = frame_w + 2 * thickness;
