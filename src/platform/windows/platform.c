@@ -43,16 +43,41 @@ _is_fullscreen_window (HWND hwnd)
     if (GetWindow (hwnd, GW_OWNER))
         return false;
 
+    LONG style = GetWindowLong (hwnd, GWL_STYLE);
+
     RECT win, screen;
-    GetWindowRect (hwnd, &win);
+    // Use GetWindowRect for screen occupancy check as it's more reliable
+    if (!GetWindowRect (hwnd, &win))
+        return false;
 
     HMONITOR mon = MonitorFromWindow (hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { .cbSize = sizeof (mi) };
     GetMonitorInfo (mon, &mi);
     screen = mi.rcMonitor;
 
-    return (win.left <= screen.left && win.top <= screen.top && win.right >= screen.right
-            && win.bottom >= screen.bottom);
+    // Tolerance of 10 pixels for DPI scaling/rounding
+    int t = 10;
+    bool covers_screen
+        = (win.left <= screen.left + t && win.top <= screen.top + t
+           && win.right >= screen.right - t && win.bottom >= screen.bottom - t);
+
+    if (covers_screen)
+    {
+        // Many games use WS_POPUP (no borders/title bar)
+        if (style & WS_POPUP)
+            return true;
+
+        // Also check if it lacks a caption (standard for borderless fullscreen)
+        if (!(style & WS_CAPTION))
+            return true;
+
+        // Final fallback: if it strictly covers the whole screen
+        if (win.left <= screen.left && win.top <= screen.top && win.right >= screen.right
+            && win.bottom >= screen.bottom)
+            return true;
+    }
+
+    return false;
 }
 
 static bool
@@ -318,9 +343,29 @@ _update_border (gf_border_t *border)
     UpdateLayeredWindow (border->overlay, hdcScreen, &ptDest, &size, hdcMem, &ptZero, 0,
                          &blend, ULW_ALPHA);
 
-    // Also update window pos to ensure z-order (topmost)
-    SetWindowPos (border->overlay, HWND_TOPMOST, rect.left, rect.top, width, height,
-                  SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+    // Visibility and Z-order logic
+    if (IsIconic (border->target))
+    {
+        ShowWindow (border->overlay, SW_HIDE);
+    }
+    else
+    {
+        ShowWindow (border->overlay, SW_SHOWNA);
+
+        HWND foreground = GetForegroundWindow ();
+        if (foreground == border->target)
+        {
+            // Only be TOPMOST if we are the active window
+            SetWindowPos (border->overlay, HWND_TOPMOST, rect.left, rect.top, width,
+                          height, SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+        }
+        else
+        {
+            // Follow the target window in Z-order
+            SetWindowPos (border->overlay, border->target, rect.left, rect.top, width,
+                          height, SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+        }
+    }
 
     border->last_rect = rect;
 
@@ -407,6 +452,13 @@ gf_platform_cleanup_borders (gf_platform_interface_t *platform)
     }
 }
 
+bool
+gf_platform_is_fullscreen (gf_display_t display, gf_native_window_t window)
+{
+    (void)display;
+    return _is_fullscreen_window ((HWND)window);
+}
+
 gf_platform_interface_t *
 gf_platform_create (void)
 {
@@ -443,6 +495,7 @@ gf_platform_create (void)
     platform->get_screen_bounds = gf_platform_get_screen_bounds;
     platform->set_window_geometry = gf_platform_set_window_geometry;
     platform->is_window_minimized = gf_platform_window_minimized;
+    platform->is_fullscreen = gf_platform_is_fullscreen;
     platform->add_border = gf_platform_add_border;
     platform->update_border = gf_platform_update_borders;
     platform->cleanup_borders = gf_platform_cleanup_borders;
@@ -747,6 +800,9 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
         return true;
 
     if (_is_cloaked_window (hwnd))
+        return true;
+
+    if (IsZoomed (hwnd))
         return true;
 
     if (_is_notification_center (hwnd))

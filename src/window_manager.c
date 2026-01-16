@@ -1035,6 +1035,23 @@ gf_window_manager_watch (gf_window_manager_t *m)
         i++;
     }
 
+    /* Game Focus Mode: Minimize other windows if a strictly fullscreen app/game is
+     * focused */
+    gf_window_id_t active_win_id = m->platform->get_active_window (m->display);
+    if (active_win_id != 0
+        && m->platform->is_fullscreen (m->display, (gf_native_window_t)active_win_id))
+    {
+        for (uint32_t i = 0; i < windows->count; i++)
+        {
+            if (!windows->items[i].is_minimized)
+            {
+                m->platform->minimize_window (m->display,
+                                              windows->items[i].native_handle);
+                windows->items[i].is_minimized = true;
+            }
+        }
+    }
+
     for (uint32_t ws_id = 0; ws_id < workspaces->count; ws_id++)
     {
         gf_window_info_t *platform_windows = NULL;

@@ -161,7 +161,7 @@ gf_platform_create (void)
     platform->is_window_drag = gf_platform_is_window_drag;
     platform->get_active_window = gf_platform_active_window;
     platform->is_window_minimized = gf_platform_is_window_minimized;
-    platform->is_window_minimized = gf_platform_is_window_minimized;
+    platform->is_fullscreen = gf_platform_is_fullscreen;
 
     platform->add_border = gf_platform_add_border;
     platform->update_border = gf_platform_update_borders;
@@ -742,8 +742,17 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
             b->last_rect.height = frame_h;
         }
 
-        // Raise the border to ensure it stays on top
-        XRaiseWindow (dpy, b->overlay);
+        // Only raise the border if its target is the active window
+        if (gf_platform_active_window (dpy) == b->target)
+        {
+            XRaiseWindow (dpy, b->overlay);
+        }
+        else
+        {
+            // Try to keep it just above the target window
+            Window windows[2] = { b->target, b->overlay };
+            XRestackWindows (dpy, windows, 2);
+        }
 
         i++;
     }
@@ -1043,11 +1052,17 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
     if (_is_screenshot_app (display, window))
         return true;
 
-    /* Exclude fullscreen NORMAL windows (games) */
-    if (_window_has_type (display, window,
-                          gf_platform_atoms_get_global ()->net_wm_window_type_normal)
-        && gf_platform_window_has_state (
-            display, window, gf_platform_atoms_get_global ()->net_wm_state_fullscreen))
+    /* Exclude fullscreen OR maximized NORMAL windows */
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    bool is_fullscreen
+        = gf_platform_window_has_state (display, window, atoms->net_wm_state_fullscreen);
+    bool is_maximized = gf_platform_window_has_state (display, window,
+                                                      atoms->net_wm_state_maximized_horz)
+                        && gf_platform_window_has_state (
+                            display, window, atoms->net_wm_state_maximized_vert);
+
+    if (_window_has_type (display, window, atoms->net_wm_window_type_normal)
+        && (is_fullscreen || is_maximized))
     {
         return true;
     }
@@ -1059,6 +1074,14 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
         return true;
 
     return false;
+}
+
+bool
+gf_platform_is_fullscreen (gf_display_t display, gf_native_window_t window)
+{
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    return gf_platform_window_has_state (display, (Window)window,
+                                         atoms->net_wm_state_fullscreen);
 }
 
 gf_error_code_t
