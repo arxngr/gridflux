@@ -1043,12 +1043,9 @@ gf_window_manager_watch (gf_window_manager_t *m)
     {
         for (uint32_t i = 0; i < windows->count; i++)
         {
-            if (!windows->items[i].is_minimized)
-            {
                 m->platform->minimize_window (m->display,
                                               windows->items[i].native_handle);
                 windows->items[i].is_minimized = true;
-            }
         }
     }
 
