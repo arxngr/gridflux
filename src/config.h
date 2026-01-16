@@ -18,6 +18,7 @@ struct gf_config
     uint32_t max_workspaces;
     uint32_t default_padding;
     uint32_t min_window_size;
+    uint32_t border_color;
     time_t last_modified;
     uint32_t locked_workspaces[GF_MAX_LOCKED_WORKSPACES];
     uint32_t locked_workspaces_count;

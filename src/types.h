@@ -41,6 +41,9 @@ typedef void *gf_display_t;
 #endif
 #endif
 
+// Callbacks
+typedef void (*gf_window_destroy_callback_t) (gf_native_window_t window, void *user_data);
+
 // Constants
 #define GF_MAX_WINDOWS_PER_WORKSPACE 3
 #define GF_MAX_WORKSPACES 32

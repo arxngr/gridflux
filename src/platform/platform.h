@@ -48,6 +48,11 @@ struct gf_platform_interface
     void (*add_border) (gf_platform_interface_t *platform, gf_native_window_t window,
                         gf_color_t color, int thickness);
     void (*update_border) (gf_platform_interface_t *platform);
+    void (*set_border_color) (struct gf_platform_interface *platform, gf_color_t color);
+
+    // Event hooks
+    void (*start_event_hook) (struct gf_platform_interface *platform,
+                              gf_window_destroy_callback_t callback, void *user_data);
     void (*cleanup_borders) (gf_platform_interface_t *platform);
     bool (*is_window_hidden) (gf_display_t display, gf_native_window_t window);
     void (*remove_border) (gf_platform_interface_t *platform, gf_native_window_t window);

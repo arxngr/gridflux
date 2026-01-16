@@ -713,6 +713,8 @@ _on_config_save_clicked (GtkButton *btn, gpointer data)
         = g_object_get_data (G_OBJECT (config_window), "default_padding_spin");
     GtkWidget *min_window_size_spin
         = g_object_get_data (G_OBJECT (config_window), "min_window_size_spin");
+    GtkWidget *border_color_btn
+        = g_object_get_data (G_OBJECT (config_window), "border_color_btn");
 
     config.max_windows_per_workspace
         = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (max_windows_spin));
@@ -722,6 +724,18 @@ _on_config_save_clicked (GtkButton *btn, gpointer data)
         = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (default_padding_spin));
     config.min_window_size
         = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (min_window_size_spin));
+
+    // Get color from picker
+    GdkRGBA rgba;
+    gtk_color_chooser_get_rgba (GTK_COLOR_CHOOSER (border_color_btn), &rgba);
+
+    // Convert RGBA to 0x00BBGGRR
+    uint8_t r = (uint8_t)(rgba.red * 255.0);
+    uint8_t g = (uint8_t)(rgba.green * 255.0);
+    uint8_t b = (uint8_t)(rgba.blue * 255.0);
+
+    // Windows COLORREF is 0x00bbggrr
+    config.border_color = ((uint32_t)b << 16) | ((uint32_t)g << 8) | (uint32_t)r;
 
     gf_config_save_config (config_path, &config);
     _show_alert (GTK_WINDOW (config_window), "Configuration saved successfully!");
@@ -742,6 +756,32 @@ _create_config_spin_row (GtkWidget *form, GtkWidget *config_window,
     gtk_widget_set_hexpand (spin, TRUE);
     g_object_set_data (G_OBJECT (config_window), data_key, spin);
     gtk_box_append (GTK_BOX (form), spin);
+}
+
+// Helper: Create config color picker row
+static void
+_create_config_color_row (GtkWidget *form, GtkWidget *config_window,
+                          const char *label_text, const char *data_key,
+                          uint32_t color_ref)
+{
+    GtkWidget *label = gtk_label_new (label_text);
+    gtk_widget_set_halign (label, GTK_ALIGN_START);
+    gtk_box_append (GTK_BOX (form), label);
+
+    GtkWidget *btn = gtk_color_button_new ();
+
+    // Convert 0x00BBGGRR to GdkRGBA
+    GdkRGBA rgba;
+    rgba.red = (float)((color_ref & 0xFF)) / 255.0f;
+    rgba.green = (float)((color_ref >> 8) & 0xFF) / 255.0f;
+    rgba.blue = (float)((color_ref >> 16) & 0xFF) / 255.0f;
+    rgba.alpha = 1.0f;
+
+    gtk_color_chooser_set_rgba (GTK_COLOR_CHOOSER (btn), &rgba);
+
+    gtk_widget_set_hexpand (btn, TRUE);
+    g_object_set_data (G_OBJECT (config_window), data_key, btn);
+    gtk_box_append (GTK_BOX (form), btn);
 }
 
 static void
@@ -778,7 +818,8 @@ _on_config_button_clicked (GtkButton *btn, gpointer data)
         config = (gf_config_t){ .max_windows_per_workspace = 4,
                                 .max_workspaces = 10,
                                 .default_padding = 10,
-                                .min_window_size = 100 };
+                                .min_window_size = 100,
+                                .border_color = 0x00F49D2A };
     }
 
     GtkWidget *form = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
@@ -796,6 +837,9 @@ _on_config_button_clicked (GtkButton *btn, gpointer data)
     _create_config_spin_row (form, config_window,
                              "Min Window Size:", "min_window_size_spin", 50, 500, 10,
                              config.min_window_size);
+    _create_config_color_row (form, config_window,
+                              "Active Window Border Color:", "border_color_btn",
+                              config.border_color);
 
     GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append (GTK_BOX (main), button_box);

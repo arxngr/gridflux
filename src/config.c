@@ -20,6 +20,7 @@ static const gf_config_t DEFAULT_CONFIG
         .max_workspaces = GF_MAX_WORKSPACES,
         .default_padding = GF_DEFAULT_PADDING,
         .min_window_size = GF_MIN_WINDOW_SIZE,
+        .border_color = 0x00F49D2A,
         .locked_workspaces_count = 0 };
 
 const char *
@@ -145,6 +146,8 @@ gf_config_save_config (const char *filename, const gf_config_t *cfg)
                             json_object_new_int (cfg->default_padding));
     json_object_object_add (json, "min_window_size",
                             json_object_new_int (cfg->min_window_size));
+    json_object_object_add (json, "border_color",
+                            json_object_new_int64 (cfg->border_color));
 
     struct json_object *arr = json_object_new_array ();
     for (uint32_t i = 0; i < cfg->locked_workspaces_count; i++)
@@ -169,6 +172,7 @@ gf_config_has_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
             || old_cfg->max_workspaces != new_cfg->max_workspaces
             || old_cfg->default_padding != new_cfg->default_padding
             || old_cfg->min_window_size != new_cfg->min_window_size
+            || old_cfg->border_color != new_cfg->border_color
             || old_cfg->locked_workspaces_count != new_cfg->locked_workspaces_count);
 }
 
@@ -221,6 +225,9 @@ load_or_create_config (const char *filename)
 
     set_if_missing_int (json, "min_window_size", &cfg.min_window_size,
                         DEFAULT_CONFIG.min_window_size, &changed);
+
+    set_if_missing_int (json, "border_color", &cfg.border_color,
+                        DEFAULT_CONFIG.border_color, &changed);
 
     struct json_object *arr_obj = NULL;
     if (json_object_object_get_ex (json, "locked_workspaces", &arr_obj)
