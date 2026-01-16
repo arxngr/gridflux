@@ -922,7 +922,7 @@ gf_platform_remove_border (gf_platform_interface_t *platform, gf_native_window_t
                 DestroyWindow (b->overlay);
             }
 
-            free (b);
+            gf_free (b);
 
             // Shift remaining borders
             for (int j = i; j < data->border_count - 1; j++)
