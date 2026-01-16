@@ -14,8 +14,10 @@
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
     <UIRef Id="WixUI_InstallDir" />
 
-    <WixVariable Id="WixUILicenseRtf" Value="LICENSE" />
+    <WixVariable Id="WixUILicenseRtf" Value="LICENSE.rtf" />
     <Icon Id="GridFluxIcon.ico" SourceFile="icons\gridflux.ico" />
+    <Property Id="ARPPRODUCTICON" Value="GridFluxIcon.ico" />
+
     <Feature Id="MainFeature" Title="GridFlux" Level="1">
       <ComponentGroupRef Id="GridFluxCore" />
       <ComponentGroupRef Id="Shortcuts" />
