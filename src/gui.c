@@ -734,8 +734,8 @@ _on_config_save_clicked (GtkButton *btn, gpointer data)
     uint8_t g = (uint8_t)(rgba.green * 255.0);
     uint8_t b = (uint8_t)(rgba.blue * 255.0);
 
-    // Windows COLORREF is 0x00bbggrr
-    config.border_color = ((uint32_t)b << 16) | ((uint32_t)g << 8) | (uint32_t)r;
+    // Use standard 0x00RRGGBB format
+    config.border_color = ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
 
     gf_config_save_config (config_path, &config);
     _show_alert (GTK_WINDOW (config_window), "Configuration saved successfully!");
@@ -770,11 +770,11 @@ _create_config_color_row (GtkWidget *form, GtkWidget *config_window,
 
     GtkWidget *btn = gtk_color_button_new ();
 
-    // Convert 0x00BBGGRR to GdkRGBA
+    // Convert 0x00RRGGBB to GdkRGBA
     GdkRGBA rgba;
-    rgba.red = (float)((color_ref & 0xFF)) / 255.0f;
+    rgba.red = (float)((color_ref >> 16) & 0xFF) / 255.0f;
     rgba.green = (float)((color_ref >> 8) & 0xFF) / 255.0f;
-    rgba.blue = (float)((color_ref >> 16) & 0xFF) / 255.0f;
+    rgba.blue = (float)(color_ref & 0xFF) / 255.0f;
     rgba.alpha = 1.0f;
 
     gtk_color_chooser_set_rgba (GTK_COLOR_CHOOSER (btn), &rgba);

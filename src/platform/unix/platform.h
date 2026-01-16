@@ -6,17 +6,21 @@
 #include <X11/Xlib.h>
 #include <stdbool.h>
 
+// Border structure
 // Linux platform data
 typedef struct
 {
     gf_platform_atoms_t atoms;
     int screen;
     Window root_window;
+    Display *display;
     bool use_kwin_backend;
 #ifdef GF_KWIN_SUPPORT
     void *kwin_dbus_conn; // DBusConnection*
     char *kwin_script_name;
 #endif
+    gf_border_t **borders;
+    int border_count;
 } gf_linux_platform_data_t;
 
 // Platform interface (Linux implementation)
@@ -84,5 +88,12 @@ gf_error_code_t gf_platform_send_client_message (Display *display, Window window
                                                  int count);
 bool gf_platform_window_has_state (Display *display, Window window, Atom state);
 bool gf_platform_is_window_minimized (gf_display_t display, gf_native_window_t window);
+void gf_platform_update_borders (gf_platform_interface_t *platform);
+void gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t window,
+                             gf_color_t color, int thickness);
+void gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t color);
+void gf_platform_cleanup_borders (gf_platform_interface_t *platform);
+void gf_platform_remove_border (gf_platform_interface_t *platform,
+                                gf_native_window_t window);
 
 #endif // GF_PLATFORM_LINUX_H

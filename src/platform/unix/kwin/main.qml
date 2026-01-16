@@ -5,7 +5,7 @@ import "tiler.js" as Tiling
 Item {
     id: root
     
-    property int defaultPadding: 5
+    property int defaultPadding:7 
     
     Timer {
         id: retileTimer

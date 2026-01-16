@@ -65,6 +65,7 @@ if(UNIX AND NOT APPLE)
 
     set(PLATFORM_LIBRARIES
         ${X11_LIBRARIES}
+        Xext
         m
         ${JSONC_LIBRARIES}
     )
