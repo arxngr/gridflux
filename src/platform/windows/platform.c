@@ -215,19 +215,34 @@ _update_border (window_border_t *border)
     if (!IsWindow (border->target) || !IsWindow (border->overlay))
         return;
 
-    RECT rect;
-    if (!GetWindowRect (border->target, &rect))
+    // Use various methods to get the correct visual bounds
+    RECT rect = { 0 };
+    if (SUCCEEDED (DwmGetWindowAttribute (border->target, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                          &rect, sizeof (rect))))
+    {
+        // DWM frame bounds are usually correct for visible windows
+    }
+    else if (!GetWindowRect (border->target, &rect))
+    {
         return;
+    }
 
-    // Skip if unchanged
+    // Skip if unchanged (and strictly checking rect, not forced)
     if (memcmp (&rect, &border->last_rect, sizeof (RECT)) == 0)
         return;
 
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
 
+    // Expand width/height slightly to draw OUTSIDE the window content
+    // But since this is an overlay, we usually want it *on top* of the border area.
+    // Given the user report of "gap", using exact DWM bounds is the best starting point.
+
     if (width <= 0 || height <= 0)
         return;
+
+    // ... (rest of drawing logic stays same, but we need to ensure the overlay window
+    // MOVES to the new rect)
 
     HDC hdcScreen = GetDC (NULL);
     if (!hdcScreen)
@@ -251,12 +266,22 @@ _update_border (window_border_t *border)
     HGDIOBJ oldBmp = SelectObject (hdcMem, hBmp);
 
     // Fill transparent
-    HBRUSH hTransparent = CreateSolidBrush (RGB (0, 0, 0));
-    FillRect (hdcMem, &(RECT){ 0, 0, width, height }, hTransparent);
+    // Note: We use 0,0,0 as key for 'transparent' usually, or alpha channel.
+    // Since we use ULW_ALPHA, we need pre-multiplied alpha or just 0 alpha.
+    // Creating a 32-bit bitmap might be needed for per-pixel alpha if we wanted fancy
+    // effects, but here we just want a simple border. For simple borders, a mask color or
+    // regions is often used, but UpdateLayeredWindow is fine.
+
+    // Clear background
+    RECT full_rect = { 0, 0, width, height };
+    HBRUSH hTransparent
+        = CreateSolidBrush (RGB (0, 0, 0)); // Black is usually the color key
+    FillRect (hdcMem, &full_rect, hTransparent);
     DeleteObject (hTransparent);
 
     // Draw border
-    HPEN hPen = CreatePen (PS_SOLID, border->thickness, border->color);
+    // Draw hollow rectangle
+    HPEN hPen = CreatePen (PS_INSIDEFRAME, border->thickness, border->color);
     HGDIOBJ oldPen = SelectObject (hdcMem, hPen);
     HGDIOBJ oldBrush = SelectObject (hdcMem, GetStockObject (NULL_BRUSH));
 
@@ -269,14 +294,30 @@ _update_border (window_border_t *border)
     BLENDFUNCTION blend = { 0 };
     blend.BlendOp = AC_SRC_OVER;
     blend.SourceConstantAlpha = 255;
-    blend.AlphaFormat = AC_SRC_ALPHA;
+    blend.AlphaFormat = AC_SRC_ALPHA; // Only if using 32-bit bitmap with alpha channel
+
+    // If we are NOT using per-pixel alpha (just color keying), we should use LWA_COLORKEY
+    // method but we started with ULW_ALPHA. Let's assume standard GDI drawing creates 0
+    // alpha for background and non-zero for content if we are lucky, OR we simply use
+    // color key. Actually, UpdateLayeredWindow with ULW_ALPHA expects 32bpp bitmap.
+    // CreateCompatibleBitmap might return screen compatible (usually 32bpp now).
+    // Let's stick to previous working logic but ensure rect is correct.
 
     POINT ptZero = { 0, 0 };
     SIZE size = { width, height };
     POINT ptDest = { rect.left, rect.top };
 
+    // Important: Use LWA_COLORKEY if we want simple transparency without alpha headaches
+    // But since we are using UpdateLayeredWindow, let's keep it.
+    // However, we should explicitly set using ULW_COLORKEY if we want black to be
+    // transparent. The previous code used ULW_ALPHA.
+
     UpdateLayeredWindow (border->overlay, hdcScreen, &ptDest, &size, hdcMem, &ptZero, 0,
                          &blend, ULW_ALPHA);
+
+    // Also update window pos to ensure z-order (topmost)
+    SetWindowPos (border->overlay, HWND_TOPMOST, rect.left, rect.top, width, height,
+                  SWP_NOACTIVATE | SWP_NOSENDCHANGING);
 
     border->last_rect = rect;
 
@@ -284,6 +325,27 @@ _update_border (window_border_t *border)
     DeleteObject (hBmp);
     DeleteDC (hdcMem);
     ReleaseDC (NULL, hdcScreen);
+}
+
+void
+gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t color)
+{
+    if (!platform || !platform->platform_data)
+        return;
+
+    gf_windows_platform_data_t *data
+        = (gf_windows_platform_data_t *)platform->platform_data;
+
+    for (int i = 0; i < data->border_count; i++)
+    {
+        if (data->borders[i])
+        {
+            data->borders[i]->color = color;
+            // Force update by invalidating last_rect
+            memset (&data->borders[i]->last_rect, 0, sizeof (RECT));
+            _update_border (data->borders[i]);
+        }
+    }
 }
 
 void

@@ -120,10 +120,10 @@ _unminimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list
         {
             continue;
         }
-        if (platform->is_window_hidden && 
-            platform->is_window_hidden(display, win->native_handle))
+        if (platform->is_window_hidden
+            && platform->is_window_hidden (display, win->native_handle))
         {
-            GF_LOG_DEBUG("Skipping hidden window %lu (closed to tray)", win->id);
+            GF_LOG_DEBUG ("Skipping hidden window %lu (closed to tray)", win->id);
             continue;
         }
 
@@ -240,8 +240,8 @@ _window_manager_handle_new_window (gf_window_manager_t *m, gf_window_info_t *new
                  workspace_id);
 
     if (m->platform->add_border)
-        m->platform->add_border (m->platform, new_window->native_handle, RGB (42, 157, 244),
-                             4);
+        m->platform->add_border (m->platform, new_window->native_handle,
+                                 m->config->border_color, 3);
 }
 
 static void
@@ -478,12 +478,13 @@ gf_window_manager_cleanup_invalid_data (gf_window_manager_t *m)
         bool excluded = wm_is_excluded (m, win->native_handle);
         bool invalid = !wm_is_valid (m, win->native_handle);
 
-         bool hidden = false;
+        bool hidden = false;
         if (m->platform->is_window_hidden)
         {
-            hidden = m->platform->is_window_hidden(m->display, win->native_handle);
-            if (m->platform->remove_border && hidden) {
-                m->platform->remove_border(m->platform, win->native_handle);
+            hidden = m->platform->is_window_hidden (m->display, win->native_handle);
+            if (m->platform->remove_border && hidden)
+            {
+                m->platform->remove_border (m->platform, win->native_handle);
             }
         }
 
@@ -747,7 +748,6 @@ gf_window_manager_arrange_workspace (gf_window_manager_t *m)
         {
             continue;
         }
-
 
         // Filter out minimized windows for layout calculation
         gf_window_info_t *non_minimized_windows = NULL;
@@ -1091,6 +1091,9 @@ gf_window_manager_load_cfg (gf_window_manager_t *m)
 
         *m->config = new_config;
         m->config->last_modified = st.st_mtime;
+
+        if (m->platform->set_border_color)
+            m->platform->set_border_color (m->platform, m->config->border_color);
 
         gf_window_manager_sync_workspaces (m);
         gf_window_manager_print_stats (m);
