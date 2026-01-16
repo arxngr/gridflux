@@ -239,7 +239,7 @@ _window_manager_handle_new_window (gf_window_manager_t *m, gf_window_info_t *new
     GF_LOG_INFO ("New window %lu is now focused in workspace %u", new_window->id,
                  workspace_id);
 
-    if (m->platform->add_border)
+    if (m->platform->add_border && !wm_is_excluded (m, new_window->native_handle))
         m->platform->add_border (m->platform, new_window->native_handle,
                                  m->config->border_color, 3);
 }
@@ -433,7 +433,11 @@ gf_window_manager_update_window_info (gf_window_manager_t *m, gf_native_window_t
     gf_window_id_t id = (gf_window_id_t)window;
 
     if (wm_is_excluded (m, window))
+    {
+        if (m->platform->remove_border)
+            m->platform->remove_border (m->platform, window);
         return GF_SUCCESS;
+    }
 
     gf_rect_t geom;
     if (platform->get_window_geometry (display, window, &geom) != GF_SUCCESS)
@@ -491,6 +495,7 @@ gf_window_manager_cleanup_invalid_data (gf_window_manager_t *m)
         if (excluded || invalid || hidden)
         {
             gf_window_list_remove (windows, win->id);
+            m->platform->remove_border (m->platform, win->native_handle);
             removed_windows++;
             continue;
         }
@@ -1009,6 +1014,27 @@ gf_window_manager_watch (gf_window_manager_t *m)
 
     gf_window_manager_sync_workspaces (m);
 
+    /* Frequent cleanup of invalid/excluded/hidden windows to ensure borders are removed
+     * immediately */
+    for (uint32_t i = 0; i < windows->count;)
+    {
+        gf_window_info_t *win = &windows->items[i];
+        bool excluded = wm_is_excluded (m, win->native_handle);
+        bool invalid = !wm_is_valid (m, win->native_handle);
+        bool hidden = false;
+        if (m->platform->is_window_hidden)
+            hidden = m->platform->is_window_hidden (m->display, win->native_handle);
+
+        if (excluded || invalid || hidden)
+        {
+            if (m->platform->remove_border)
+                m->platform->remove_border (m->platform, win->native_handle);
+            gf_window_list_remove (windows, win->id);
+            continue;
+        }
+        i++;
+    }
+
     for (uint32_t ws_id = 0; ws_id < workspaces->count; ws_id++)
     {
         gf_window_info_t *platform_windows = NULL;
@@ -1045,9 +1071,10 @@ gf_window_manager_watch (gf_window_manager_t *m)
                 // Handle the new window: focus it and minimize others in workspace
                 _window_manager_handle_new_window (m, &platform_windows[i], assigned_ws);
             }
-            if (m->platform->update_border) 
-                m->platform->update_border (m->platform);
         }
+
+        if (m->platform->update_border)
+            m->platform->update_border (m->platform);
 
         gf_free (platform_windows);
     }
