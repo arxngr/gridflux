@@ -11,6 +11,10 @@
 #include <string.h>
 #include <windows.h>
 
+#ifndef SWP_NOSENDCHANGING
+#define SWP_NOSENDCHANGING 0x0400
+#endif
+
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -82,15 +86,16 @@ _is_app_window (HWND hwnd)
 static bool
 _is_excluded_class (const char *class_name, const char *title)
 {
-    static const char *excluded_classes[] = { "Shell_TrayWnd",
-                                              "TrayNotifyWnd",
-                                              "NotifyIconOverflowWindow",
-                                              "Windows.UI.Core.CoreWindow",
-                                              "Xaml_Windowed_Popup",
-                                              "TopLevelWindowForOverflowXamlIsland",
-                                               "Windows.Internal.Shell.NotificationCenter",
-                                                "NativeHWNDHost",
-                                                "Windows.UI.Composition.DesktopWindowContentBridge" };
+    static const char *excluded_classes[]
+        = { "Shell_TrayWnd",
+            "TrayNotifyWnd",
+            "NotifyIconOverflowWindow",
+            "Windows.UI.Core.CoreWindow",
+            "Xaml_Windowed_Popup",
+            "TopLevelWindowForOverflowXamlIsland",
+            "Windows.Internal.Shell.NotificationCenter",
+            "NativeHWNDHost",
+            "Windows.UI.Composition.DesktopWindowContentBridge" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
     {
@@ -108,32 +113,32 @@ _is_excluded_class (const char *class_name, const char *title)
 }
 
 static bool
-_is_notification_center(HWND hwnd)
+_is_notification_center (HWND hwnd)
 {
     char class_name[MAX_CLASS_NAME_LENGTH];
-    if (!GetClassNameA(hwnd, class_name, sizeof(class_name)))
+    if (!GetClassNameA (hwnd, class_name, sizeof (class_name)))
         return false;
-    
-    if (strstr(class_name, "Windows.Internal.Shell"))
+
+    if (strstr (class_name, "Windows.Internal.Shell"))
         return true;
-    
-    if (strstr(class_name, "NotificationCenter"))
+
+    if (strstr (class_name, "NotificationCenter"))
         return true;
-    
-    if (strcmp(class_name, "Windows.UI.Core.CoreWindow") == 0)
+
+    if (strcmp (class_name, "Windows.UI.Core.CoreWindow") == 0)
         return true;
-    
-    LONG exstyle = GetWindowLongA(hwnd, GWL_EXSTYLE);
-    if (exstyle & WS_EX_NOACTIVATE) {
+
+    LONG exstyle = GetWindowLongA (hwnd, GWL_EXSTYLE);
+    if (exstyle & WS_EX_NOACTIVATE)
+    {
         char title[MAX_TITLE_LENGTH];
-        GetWindowTextA(hwnd, title, sizeof(title));
-        if (title[0] == '\0' || strstr(title, "otification"))
+        GetWindowTextA (hwnd, title, sizeof (title));
+        if (title[0] == '\0' || strstr (title, "otification"))
             return true;
     }
-    
+
     return false;
 }
-
 
 static bool
 _is_excluded_style (HWND hwnd)
@@ -543,7 +548,7 @@ gf_platform_set_window_geometry (gf_display_t display, gf_native_window_t window
     if (IsIconic (window))
         return GF_SUCCESS;
 
-    /* Skip fullscreen / exclusive windows */
+    /* Skip fullscreen / maximized windows */
     if (IsZoomed (window))
     {
         WINDOWPLACEMENT wp = { .length = sizeof (WINDOWPLACEMENT) };
@@ -563,20 +568,50 @@ gf_platform_set_window_geometry (gf_display_t display, gf_native_window_t window
     if (rect.width <= 0 || rect.height <= 0)
         return GF_SUCCESS;
 
-    /* Restore BEFORE moving */
+    /* Restore BEFORE moving if currently maximized */
     if (IsZoomed (window))
     {
         ShowWindow (window, SW_RESTORE);
-        Sleep (1); /* allow DWM to process */
+        Sleep (50);
     }
 
-    /* Use SetWindowPos (more reliable than MoveWindow) */
-    BOOL ok
-        = SetWindowPos (window, NULL, rect.x, rect.y, (int)rect.width, (int)rect.height,
-                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+    /*
+     * Compute the offset between GetWindowRect (includes invisible borders/shadows)
+     * and DwmGetWindowAttribute DWMWA_EXTENDED_FRAME_BOUNDS (visible portion only).
+     */
+    RECT dwm_rect = { 0 };
+    RECT win_rect = { 0 };
+    int shadow_left = 0, shadow_top = 0, shadow_right = 0, shadow_bottom = 0;
 
-    if (!ok)
+    if (GetWindowRect (window, &win_rect)
+        && SUCCEEDED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                             &dwm_rect, sizeof (dwm_rect))))
+    {
+        shadow_left = win_rect.left - dwm_rect.left;
+        shadow_top = win_rect.top - dwm_rect.top;
+        shadow_right = win_rect.right - dwm_rect.right;
+        shadow_bottom = win_rect.bottom - dwm_rect.bottom;
+    }
+
+    /* Apply shadow offsets to target geometry */
+    int final_x = rect.x + shadow_left;
+    int final_y = rect.y + shadow_top;
+    int final_w = (int)rect.width + shadow_right - shadow_left;
+    int final_h = (int)rect.height + shadow_bottom - shadow_top;
+
+    /*
+     * Use SetWindowPos with SWP_NOSENDCHANGING (0x0400) to bypass minimum size
+     * constraints. This is crucial for apps like Steam that enforce a large minimum size.
+     */
+    UINT swp_flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED
+                     | SWP_NOSENDCHANGING | SWP_NOCOPYBITS;
+
+    if (!SetWindowPos (window, NULL, final_x, final_y, final_w, final_h, swp_flags))
+    {
+        GF_LOG_ERROR ("SetWindowPos failed for window %p (error: %lu)", (void *)window,
+                      GetLastError ());
         return GF_ERROR_PLATFORM_ERROR;
+    }
 
     return GF_SUCCESS;
 }
@@ -648,8 +683,8 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
 
     if (_is_cloaked_window (hwnd))
         return true;
-    
-    if (_is_notification_center(hwnd))
+
+    if (_is_notification_center (hwnd))
         return true;
 
     char title[MAX_TITLE_LENGTH];
@@ -854,48 +889,48 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
 }
 
 bool
-gf_platform_window_hidden(gf_display_t display, gf_native_window_t window)
+gf_platform_window_hidden (gf_display_t display, gf_native_window_t window)
 {
     (void)display;
-    
-    if (!_validate_window(window))
+
+    if (!_validate_window (window))
         return false;
-    
+
     // Window is hidden if it's not visible AND not minimized to taskbar
     // This catches windows that are closed to system tray
-    return !IsWindowVisible((HWND)window) && !IsIconic((HWND)window);
+    return !IsWindowVisible ((HWND)window) && !IsIconic ((HWND)window);
 }
 
 void
-gf_platform_remove_border(gf_platform_interface_t *platform, gf_native_window_t window)
+gf_platform_remove_border (gf_platform_interface_t *platform, gf_native_window_t window)
 {
     if (!platform || !platform->platform_data || !window)
         return;
 
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
-    
+
     for (int i = 0; i < data->border_count; i++)
     {
         if (data->borders[i] && data->borders[i]->target == window)
         {
             window_border_t *b = data->borders[i];
-            
+
             // Destroy overlay window
-            if (b->overlay && IsWindow(b->overlay))
+            if (b->overlay && IsWindow (b->overlay))
             {
-                DestroyWindow(b->overlay);
+                DestroyWindow (b->overlay);
             }
-            
-            free(b);
-            
+
+            free (b);
+
             // Shift remaining borders
             for (int j = i; j < data->border_count - 1; j++)
                 data->borders[j] = data->borders[j + 1];
-            
+
             data->border_count--;
-            
-            GF_LOG_DEBUG("Removed border for window %p", window);
+
+            GF_LOG_DEBUG ("Removed border for window %p", window);
             return;
         }
     }

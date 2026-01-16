@@ -135,7 +135,7 @@ _run_client_command (const char *command)
 static void
 _show_alert (GtkWindow *parent, const char *message)
 {
-    GtkAlertDialog *dialog = gtk_alert_dialog_new (NULL);
+    GtkAlertDialog *dialog = gtk_alert_dialog_new ("");
     gtk_alert_dialog_set_message (dialog, message);
     gtk_alert_dialog_show (dialog, parent);
 }
