@@ -282,7 +282,8 @@ _update_border (gf_border_t *border)
     // Draw border
     // Draw hollow rectangle
     // Convert RGB (0xRRGGBB) to Windows BGR (0x00BBGGRR)
-    COLORREF gdi_color = ((border->color & 0xFF) << 16) | (border->color & 0x00FF00) | ((border->color & 0xFF0000) >> 16);
+    COLORREF gdi_color = ((border->color & 0xFF) << 16) | (border->color & 0x00FF00)
+                         | ((border->color & 0xFF0000) >> 16);
     HPEN hPen = CreatePen (PS_INSIDEFRAME, border->thickness, gdi_color);
     HGDIOBJ oldPen = SelectObject (hdcMem, hPen);
     HGDIOBJ oldBrush = SelectObject (hdcMem, GetStockObject (NULL_BRUSH));
