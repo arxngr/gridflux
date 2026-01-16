@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/f7800812-4ac9-4d3d-bac0-943632cb2f20
 ### Windows Download
 
 You can download the latest Windows installer (MSI) from the [GitHub Releases](https://github.com/arxngr/gridflux/releases) page.
-- [Latest Windows Installer (x64)](https://github.com/arxngr/gridflux/releases/latest/download/gridflux-x64.msi)
+- [Latest Windows Installer (x64)](https://github.com/arxngr/gridflux/releases/tag/0.1.0-beta/gridflux-x64.msi)
 
 ### Dependencies
 
