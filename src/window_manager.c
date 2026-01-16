@@ -526,7 +526,6 @@ gf_window_manager_cleanup_invalid_data (gf_window_manager_t *m)
 
         i++;
     }
-    m->platform->cleanup_borders (m->platform);
 }
 
 static void
@@ -1046,7 +1045,7 @@ gf_window_manager_watch (gf_window_manager_t *m)
                 // Handle the new window: focus it and minimize others in workspace
                 _window_manager_handle_new_window (m, &platform_windows[i], assigned_ws);
             }
-            if (m->platform->update_border)
+            if (m->platform->update_border) 
                 m->platform->update_border (m->platform);
         }
 

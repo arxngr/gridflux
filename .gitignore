@@ -6,6 +6,7 @@ compile_commands.json
 *.swo
 .vs
 
+scripts/binary_builder.bat
 # Compiled object files
 *.o
 *.obj

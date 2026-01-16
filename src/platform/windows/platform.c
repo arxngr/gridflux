@@ -25,7 +25,7 @@
 #define MAX_TITLE_LENGTH 256
 #define MAX_CLASS_NAME_LENGTH 256
 
-static window_border_t *borders[GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES] = { 0 };
+static gf_border_t *borders[GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES] = { 0 };
 static int border_count = 0;
 
 static bool
@@ -204,7 +204,7 @@ _create_border_overlay (HWND target)
 }
 
 static void
-_update_border (window_border_t *border)
+_update_border (gf_border_t *border)
 {
     if (!border)
         return;
@@ -281,7 +281,9 @@ _update_border (window_border_t *border)
 
     // Draw border
     // Draw hollow rectangle
-    HPEN hPen = CreatePen (PS_INSIDEFRAME, border->thickness, border->color);
+    // Convert RGB (0xRRGGBB) to Windows BGR (0x00BBGGRR)
+    COLORREF gdi_color = ((border->color & 0xFF) << 16) | (border->color & 0x00FF00) | ((border->color & 0xFF0000) >> 16);
+    HPEN hPen = CreatePen (PS_INSIDEFRAME, border->thickness, gdi_color);
     HGDIOBJ oldPen = SelectObject (hdcMem, hPen);
     HGDIOBJ oldBrush = SelectObject (hdcMem, GetStockObject (NULL_BRUSH));
 
@@ -361,7 +363,7 @@ gf_platform_cleanup_borders (gf_platform_interface_t *platform)
 
     for (int i = 0; i < data->border_count;)
     {
-        window_border_t *b = data->borders[i];
+        gf_border_t *b = data->borders[i];
 
         // Sanity check
         if (!b || (uintptr_t)b < 0x1000)
@@ -912,7 +914,7 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
         return;
     }
 
-    window_border_t *b = malloc (sizeof (window_border_t));
+    gf_border_t *b = malloc (sizeof (gf_border_t));
     if (!b)
     {
         DestroyWindow (overlay);
@@ -976,7 +978,7 @@ gf_platform_remove_border (gf_platform_interface_t *platform, gf_native_window_t
     {
         if (data->borders[i] && data->borders[i]->target == window)
         {
-            window_border_t *b = data->borders[i];
+            gf_border_t *b = data->borders[i];
 
             // Destroy overlay window
             if (b->overlay && IsWindow (b->overlay))

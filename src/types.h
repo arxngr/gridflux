@@ -101,10 +101,12 @@ typedef struct
     gf_native_window_t overlay; // The overlay border window
     gf_color_t color;
     int thickness;
-#if _WIN32
+#if defined(_WIN32)
     RECT last_rect;
+#elif defined(__linux__)
+    gf_rect_t last_rect;
 #endif
-} window_border_t;
+} gf_border_t;
 
 // Workspace information
 typedef struct

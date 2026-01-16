@@ -12,7 +12,7 @@ typedef struct
     HANDLE shell_hook;
     HMONITOR monitor;
     int monitor_count;
-    window_border_t *borders[GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES];
+    gf_border_t *borders[GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES];
     int border_count;
 } gf_windows_platform_data_t;
 
