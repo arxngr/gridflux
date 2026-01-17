@@ -411,12 +411,14 @@ gf_platform_window_has_state (Display *display, Window window, Atom state)
 
 gf_error_code_t
 gf_platform_get_frame_extents (Display *dpy, Window win, int *left, int *right, int *top,
-                               int *bottom)
+                               int *bottom, bool *is_csd)
 {
     if (!dpy || !left || !right || !top || !bottom)
         return GF_ERROR_INVALID_PARAMETER;
 
     *left = *right = *top = *bottom = 0;
+    if (is_csd)
+        *is_csd = false;
 
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
 
@@ -442,6 +444,9 @@ gf_platform_get_frame_extents (Display *dpy, Window win, int *left, int *right, 
             *top = ext[2];
             *bottom = ext[3];
 
+            if (is_csd)
+                *is_csd = (candidates[i] == atoms->gtk_frame_extents);
+
             XFree (data);
             return GF_SUCCESS;
         }
@@ -459,25 +464,55 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     // Get target geometry
     XWindowAttributes attrs;
     if (!XGetWindowAttributes (dpy, target, &attrs))
+    {
+        GF_LOG_ERROR ("Failed to get window attributes for target %lu", (unsigned long)target);
         return None;
+    }
 
     int left_ext = 0, right_ext = 0, top_ext = 0, bottom_ext = 0;
+    bool is_csd = false;
     gf_platform_get_frame_extents (dpy, target, &left_ext, &right_ext, &top_ext,
-                                   &bottom_ext);
+                                   &bottom_ext, &is_csd);
 
-    // Calculate overlay geometry (OUTSIDE the frame)
+    // Calculate overlay geometry
     // We need absolute coordinates for the overlay since it's override_redirect and child
     // of root
     Window root = DefaultRootWindow (dpy);
     int abs_x, abs_y;
     Window child;
-    XTranslateCoordinates (dpy, target, root, 0, 0, &abs_x, &abs_y, &child);
+    if (!XTranslateCoordinates (dpy, target, root, 0, 0, &abs_x, &abs_y, &child))
+    {
+        GF_LOG_ERROR ("Failed to translate coordinates for window %lu", (unsigned long)target);
+        return None;
+    }
 
-    // Frame position (Top-Left of the window frame)
-    int frame_x = abs_x - left_ext;
-    int frame_y = abs_y - top_ext;
-    int frame_w = attrs.width + left_ext + right_ext;
-    int frame_h = attrs.height + top_ext + bottom_ext;
+    // Frame position
+    int frame_x, frame_y, frame_w, frame_h;
+
+    if (is_csd)
+    {
+        // For CSD, visible frame is INSIDE the window geometry (shadows are part of window)
+        frame_x = abs_x + left_ext;
+        frame_y = abs_y + top_ext;
+        frame_w = attrs.width - left_ext - right_ext;
+        frame_h = attrs.height - top_ext - bottom_ext;
+    }
+    else
+    {
+        // For WM decorations, visible frame is OUTSIDE the window geometry
+        frame_x = abs_x - left_ext;
+        frame_y = abs_y - top_ext;
+        frame_w = attrs.width + left_ext + right_ext;
+        frame_h = attrs.height + top_ext + bottom_ext;
+    }
+
+    // Validate geometry
+    if (frame_w <= 0 || frame_h <= 0 || thickness < 0)
+    {
+        GF_LOG_ERROR ("Invalid geometry for border overlay: frame_w=%d, frame_h=%d, thickness=%d", 
+                      frame_w, frame_h, thickness);
+        return None;
+    }
 
     GF_LOG_INFO ("Border Create: Target %lu, Extents L%d R%d T%d B%d", target, left_ext,
                  right_ext, top_ext, bottom_ext);
@@ -490,36 +525,72 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     int w = frame_w + 2 * thickness;
     int h = frame_h + 2 * thickness;
 
+    // Validate final dimensions
+    if (w <= 0 || h <= 0)
+    {
+        GF_LOG_ERROR ("Invalid overlay dimensions: w=%d, h=%d", w, h);
+        return None;
+    }
+
+    // Get root window attributes to match visual/depth
+    XWindowAttributes root_attrs;
+    if (!XGetWindowAttributes (dpy, root, &root_attrs))
+    {
+        GF_LOG_ERROR ("Failed to get root window attributes");
+        return None;
+    }
+
     XSetWindowAttributes swa;
     swa.override_redirect = True;
     // Map ARGB to RGB for background pixel
     swa.background_pixel = color & 0x00FFFFFF;
     swa.border_pixel = 0;
     swa.save_under = True;
+    swa.colormap = root_attrs.colormap;
+    swa.background_pixmap = None;
+    swa.bit_gravity = NorthWestGravity;
 
     Window overlay = XCreateWindow (
-        dpy, root, x, y, w, h, 0, CopyFromParent, InputOutput, CopyFromParent,
-        CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWSaveUnder, &swa);
+        dpy, root, x, y, w, h, 0, root_attrs.depth, InputOutput, root_attrs.visual,
+        CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWSaveUnder | CWColormap, &swa);
+
+    if (!overlay)
+    {
+        GF_LOG_ERROR ("Failed to create border overlay window");
+        return None;
+    }
 
     // Shape the window: Cut out the middle (The Frame Size)
-    // The hole is exactly the frame size, starting at (thickness, thickness)
-    XRectangle rects[1];
-    if (w > 2 * thickness && h > 2 * thickness)
+    // This is optional - if it fails, we still have a working border overlay
+    int shape_event_base, shape_error_base;
+    bool shape_supported = XShapeQueryExtension (dpy, &shape_event_base, &shape_error_base);
+    
+    if (shape_supported && w > 2 * thickness && h > 2 * thickness)
     {
+        XRectangle rects[1];
         rects[0].x = thickness;
         rects[0].y = thickness;
         rects[0].width = frame_w;
         rects[0].height = frame_h;
 
         // Set bounding shape: Rectangle of window MINUS the hole
-        // First set to default (full window) then subtract
         XShapeCombineMask (dpy, overlay, ShapeBounding, 0, 0, None, ShapeSet);
         XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, rects, 1,
                                  ShapeSubtract, Unsorted);
-    }
 
-    // Make input pass-through (Set Input shape to empty)
-    XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+        // Make input pass-through (Set Input shape to empty)
+        XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+        
+        GF_LOG_DEBUG ("Shape operations completed successfully");
+    }
+    else if (!shape_supported)
+    {
+        GF_LOG_WARN ("Shape extension not supported, using solid border");
+    }
+    else
+    {
+        GF_LOG_WARN ("Window too small for shape cutout, using solid border");
+    }
 
     XMapWindow (dpy, overlay);
     return overlay;
@@ -538,12 +609,34 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
 
     if (data->border_count >= GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES)
     {
+        GF_LOG_WARN ("Border limit reached, cannot add more borders");
         return;
+    }
+
+    // Check if border already exists for this window
+    for (int i = 0; i < data->border_count; i++)
+    {
+        if (data->borders[i] && data->borders[i]->target == (Window)window)
+        {
+            GF_LOG_INFO ("Border already exists for window %lu, updating color", (unsigned long)window);
+            // Update existing border color
+            gf_border_t *border = data->borders[i];
+            border->color = color;
+            if (border->overlay)
+            {
+                XSetWindowBackground (data->display, border->overlay, color & 0x00FFFFFF);
+                XClearWindow (data->display, border->overlay);
+            }
+            return;
+        }
     }
 
     Window overlay = _create_border_overlay (data->display, window, color, thickness);
     if (!overlay)
+    {
+        GF_LOG_WARN ("Failed to create border overlay for window %lu", (unsigned long)window);
         return;
+    }
 
     gf_border_t *border = gf_malloc (sizeof (gf_border_t));
     if (!border)
@@ -569,13 +662,24 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
 
         // Store Frame Geometry as last_rect
         int left_ext = 0, right_ext = 0, top_ext = 0, bottom_ext = 0;
+        bool is_csd = false;
         gf_platform_get_frame_extents (data->display, (Window)window, &left_ext,
-                                       &right_ext, &top_ext, &bottom_ext);
+                                       &right_ext, &top_ext, &bottom_ext, &is_csd);
 
-        border->last_rect.x = abs_x - left_ext;
-        border->last_rect.y = abs_y - top_ext;
-        border->last_rect.width = attrs.width + left_ext + right_ext;
-        border->last_rect.height = attrs.height + top_ext + bottom_ext;
+        if (is_csd)
+        {
+            border->last_rect.x = abs_x + left_ext;
+            border->last_rect.y = abs_y + top_ext;
+            border->last_rect.width = attrs.width - left_ext - right_ext;
+            border->last_rect.height = attrs.height - top_ext - bottom_ext;
+        }
+        else
+        {
+            border->last_rect.x = abs_x - left_ext;
+            border->last_rect.y = abs_y - top_ext;
+            border->last_rect.width = attrs.width + left_ext + right_ext;
+            border->last_rect.height = attrs.height + top_ext + bottom_ext;
+        }
     }
 
     data->borders[data->border_count++] = border;
@@ -641,6 +745,7 @@ gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t colo
 
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
 
+    // Update existing borders
     for (int i = 0; i < data->border_count; i++)
     {
         gf_border_t *b = data->borders[i];
@@ -651,6 +756,8 @@ gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t colo
             XClearWindow (data->display, b->overlay);
         }
     }
+    
+    XFlush (data->display);
 }
 
 void
@@ -689,7 +796,8 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
         }
 
         // If window is unmapped (minimized or on another workspace)
-        if (attrs.map_state == IsUnmapped)
+        // Note: In GNOME, minimized windows may be mapped but have _NET_WM_STATE_HIDDEN
+        if (attrs.map_state == IsUnmapped || gf_platform_is_window_minimized (dpy, b->target))
         {
             XUnmapWindow (dpy, b->overlay);
             i++;
@@ -700,8 +808,9 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
         XMapWindow (dpy, b->overlay);
 
         int left_ext = 0, right_ext = 0, top_ext = 0, bottom_ext = 0;
+        bool is_csd = false;
         gf_platform_get_frame_extents (dpy, b->target, &left_ext, &right_ext, &top_ext,
-                                       &bottom_ext);
+                                       &bottom_ext, &is_csd);
 
         int abs_x, abs_y;
         Window child;
@@ -711,10 +820,22 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
             continue;
         }
 
-        int frame_x = abs_x - left_ext;
-        int frame_y = abs_y - top_ext;
-        int frame_w = attrs.width + left_ext + right_ext;
-        int frame_h = attrs.height + top_ext + bottom_ext;
+        int frame_x, frame_y, frame_w, frame_h;
+
+        if (is_csd)
+        {
+            frame_x = abs_x + left_ext;
+            frame_y = abs_y + top_ext;
+            frame_w = attrs.width - left_ext - right_ext;
+            frame_h = attrs.height - top_ext - bottom_ext;
+        }
+        else
+        {
+            frame_x = abs_x - left_ext;
+            frame_y = abs_y - top_ext;
+            frame_w = attrs.width + left_ext + right_ext;
+            frame_h = attrs.height + top_ext + bottom_ext;
+        }
 
         if (frame_x != b->last_rect.x || frame_y != b->last_rect.y
             || frame_w != b->last_rect.width || frame_h != b->last_rect.height)
@@ -725,7 +846,20 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
             int w = frame_w + 2 * thickness;
             int h = frame_h + 2 * thickness;
 
-            XMoveResizeWindow (dpy, b->overlay, x, y, w, h);
+            // Validate geometry before configuring window
+            // Use X11 protocol constants instead of magic numbers
+            if (w > 0 && h > 0 && 
+                x >= SHRT_MIN && y >= SHRT_MIN && 
+                x <= SHRT_MAX && y <= SHRT_MAX && 
+                w <= USHRT_MAX && h <= USHRT_MAX)
+            {
+                XMoveResizeWindow (dpy, b->overlay, x, y, w, h);
+            }
+            else
+            {
+                GF_LOG_WARN ("Skipping border update due to invalid geometry: x=%d, y=%d, w=%d, h=%d", x, y, w, h);
+                continue;
+            }
 
             if (w > 2 * thickness && h > 2 * thickness)
             {
@@ -1461,10 +1595,7 @@ static gf_error_code_t
 gf_platform_noop_get_screen_bounds (gf_display_t display, gf_rect_t *bounds)
 {
     (void)display;
-
-    if (bounds)
-        memset (bounds, 0, sizeof (*bounds));
-
+    (void)bounds;
     return GF_SUCCESS;
 }
 

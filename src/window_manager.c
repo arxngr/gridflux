@@ -239,9 +239,12 @@ _window_manager_handle_new_window (gf_window_manager_t *m, gf_window_info_t *new
     GF_LOG_INFO ("New window %lu is now focused in workspace %u", new_window->id,
                  workspace_id);
 
-    if (m->platform->add_border && !wm_is_excluded (m, new_window->native_handle))
+    if (m->config->enable_borders && m->platform->add_border
+        && !wm_is_excluded (m, new_window->native_handle))
+    {
         m->platform->add_border (m->platform, new_window->native_handle,
                                  m->config->border_color, 3);
+    }
 }
 
 static void
@@ -1043,9 +1046,8 @@ gf_window_manager_watch (gf_window_manager_t *m)
     {
         for (uint32_t i = 0; i < windows->count; i++)
         {
-                m->platform->minimize_window (m->display,
-                                              windows->items[i].native_handle);
-                windows->items[i].is_minimized = true;
+            m->platform->minimize_window (m->display, windows->items[i].native_handle);
+            windows->items[i].is_minimized = true;
         }
     }
 
@@ -1087,7 +1089,7 @@ gf_window_manager_watch (gf_window_manager_t *m)
             }
         }
 
-        if (m->platform->update_border)
+        if (m->config->enable_borders && m->platform->update_border)
             m->platform->update_border (m->platform);
 
         gf_free (platform_windows);
@@ -1134,6 +1136,82 @@ gf_window_manager_load_cfg (gf_window_manager_t *m)
 
         if (m->platform->set_border_color)
             m->platform->set_border_color (m->platform, m->config->border_color);
+
+        if (old_config.enable_borders != new_config.enable_borders)
+        {
+            if (!new_config.enable_borders)
+            {
+                GF_LOG_INFO ("Borders disabled, cleaning up...");
+                if (m->platform->cleanup_borders)
+                    m->platform->cleanup_borders (m->platform);
+            }
+            else
+            {
+                GF_LOG_INFO ("Borders enabled, adding to all valid windows...");
+                
+                // Get all windows from all workspaces to ensure we don't miss any
+                for (gf_workspace_id_t workspace = 0; workspace < GF_MAX_WORKSPACES; workspace++)
+                {
+                    gf_window_info_t *workspace_windows = NULL;
+                    uint32_t count = 0;
+                    
+                    if (m->platform->get_windows (m->display, &workspace, &workspace_windows, &count) != GF_SUCCESS)
+                    {
+                        GF_LOG_DEBUG ("Failed to get windows for workspace %d", workspace);
+                        continue;
+                    }
+                        
+                    GF_LOG_DEBUG ("Processing workspace %d with %d windows", workspace, count);
+                    
+                    for (uint32_t i = 0; i < count; i++)
+                    {
+                        gf_window_info_t *win = &workspace_windows[i];
+                        
+                        // Check if window is valid and not excluded
+                        if (win->is_valid && !win->is_minimized
+                            && !wm_is_excluded (m, win->native_handle))
+                        {
+                            GF_LOG_DEBUG ("Adding border to window %lu in workspace %d", 
+                                         (unsigned long)win->id, workspace);
+                            
+                            if (m->platform->add_border)
+                                m->platform->add_border (m->platform, win->native_handle,
+                                                         m->config->border_color, 3);
+                        }
+                        else
+                        {
+                            GF_LOG_DEBUG ("Skipping window %lu (valid=%d, minimized=%d, excluded=%d)", 
+                                         (unsigned long)win->id, win->is_valid, win->is_minimized,
+                                         wm_is_excluded (m, win->native_handle));
+                        }
+                    }
+                    
+                    // Free the window list for this workspace
+                    if (workspace_windows)
+                        gf_free (workspace_windows);
+                }
+                
+                // Also check the current workspace windows list as a fallback
+                gf_window_list_t *current_windows = wm_windows (m);
+                GF_LOG_DEBUG ("Current workspace has %d additional windows", current_windows->count);
+                for (uint32_t i = 0; i < current_windows->count; i++)
+                {
+                    gf_window_info_t *win = &current_windows->items[i];
+                    
+                    if (win->is_valid && !win->is_minimized
+                        && !wm_is_excluded (m, win->native_handle))
+                    {
+                        // Check if border already exists to avoid duplicates
+                        bool has_border = false;
+                        // This check will be handled by add_border function now
+                        
+                        if (m->platform->add_border)
+                            m->platform->add_border (m->platform, win->native_handle,
+                                                     m->config->border_color, 3);
+                    }
+                }
+            }
+        }
 
         gf_window_manager_sync_workspaces (m);
         gf_window_manager_print_stats (m);

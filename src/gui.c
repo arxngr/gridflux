@@ -715,6 +715,8 @@ _on_config_save_clicked (GtkButton *btn, gpointer data)
         = g_object_get_data (G_OBJECT (config_window), "min_window_size_spin");
     GtkWidget *border_color_btn
         = g_object_get_data (G_OBJECT (config_window), "border_color_btn");
+    GtkWidget *enable_borders_check
+        = g_object_get_data (G_OBJECT (config_window), "enable_borders_check");
 
     config.max_windows_per_workspace
         = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (max_windows_spin));
@@ -736,6 +738,9 @@ _on_config_save_clicked (GtkButton *btn, gpointer data)
 
     // Use standard 0x00RRGGBB format
     config.border_color = ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+
+    config.enable_borders
+        = gtk_check_button_get_active (GTK_CHECK_BUTTON (enable_borders_check));
 
     gf_config_save_config (config_path, &config);
     _show_alert (GTK_WINDOW (config_window), "Configuration saved successfully!");
@@ -782,6 +787,17 @@ _create_config_color_row (GtkWidget *form, GtkWidget *config_window,
     gtk_widget_set_hexpand (btn, TRUE);
     g_object_set_data (G_OBJECT (config_window), data_key, btn);
     gtk_box_append (GTK_BOX (form), btn);
+}
+
+// Helper: Create config toggle row
+static void
+_create_config_toggle_row (GtkWidget *form, GtkWidget *config_window,
+                           const char *label_text, const char *data_key, bool value)
+{
+    GtkWidget *check = gtk_check_button_new_with_label (label_text);
+    gtk_check_button_set_active (GTK_CHECK_BUTTON (check), value);
+    g_object_set_data (G_OBJECT (config_window), data_key, check);
+    gtk_box_append (GTK_BOX (form), check);
 }
 
 static void
@@ -840,6 +856,8 @@ _on_config_button_clicked (GtkButton *btn, gpointer data)
     _create_config_color_row (form, config_window,
                               "Active Window Border Color:", "border_color_btn",
                               config.border_color);
+    _create_config_toggle_row (form, config_window, "Enable Window Borders",
+                               "enable_borders_check", config.enable_borders);
 
     GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append (GTK_BOX (main), button_box);
