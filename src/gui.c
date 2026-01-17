@@ -856,9 +856,11 @@ _on_config_button_clicked (GtkButton *btn, gpointer data)
     _create_config_color_row (form, config_window,
                               "Active Window Border Color:", "border_color_btn",
                               config.border_color);
-    _create_config_toggle_row (form, config_window, "Enable Window Borders",
+        
+    #ifdef _linux_
+                              _create_config_toggle_row (form, config_window, "Enable Window Borders",
                                "enable_borders_check", config.enable_borders);
-
+    #endif
     GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append (GTK_BOX (main), button_box);
 

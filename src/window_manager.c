@@ -1176,7 +1176,7 @@ gf_window_manager_load_cfg (gf_window_manager_t *m)
                             
                             if (m->platform->add_border)
                                 m->platform->add_border (m->platform, win->native_handle,
-                                                         m->config->border_color, 3);
+                                                         m->config->border_color, 5);
                         }
                         else
                         {
