@@ -272,6 +272,50 @@ gf_cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *us
     memcpy (response->message, &resp, sizeof (resp));
 }
 
+static void
+gf_cmd_border (const char *args, gf_ipc_response_t *response, void *user_data)
+{
+    gf_window_manager_t *m = (gf_window_manager_t *)user_data;
+    gf_command_response_t resp;
+    resp.type = 0;
+
+    const char *config_path = gf_config_get_path ();
+    if (!config_path)
+    {
+        resp.type = 1;
+        snprintf (resp.message, sizeof (resp.message), "Failed to get config path");
+        memcpy (response->message, &resp, sizeof (resp));
+        return;
+    }
+
+    gf_config_t cfg = load_or_create_config (config_path);
+
+    if (strcmp (args, "on") == 0)
+    {
+        cfg.enable_borders = true;
+    }
+    else if (strcmp (args, "off") == 0)
+    {
+        cfg.enable_borders = false;
+    }
+    else if (strcmp (args, "toggle") == 0 || !*args)
+    {
+        cfg.enable_borders = !cfg.enable_borders;
+    }
+    else
+    {
+        resp.type = 1;
+        snprintf (resp.message, sizeof (resp.message), "Usage: border [on|off|toggle]");
+        memcpy (response->message, &resp, sizeof (resp));
+        return;
+    }
+
+    gf_config_save_config (config_path, &cfg);
+    snprintf (resp.message, sizeof (resp.message), "Borders %s",
+              cfg.enable_borders ? "enabled" : "disabled");
+    memcpy (response->message, &resp, sizeof (resp));
+}
+
 void
 gf_handle_client_message (const char *message, gf_ipc_response_t *response,
                           void *user_data)
@@ -320,6 +364,10 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     else if (strcmp (command, "unlock") == 0)
     {
         gf_cmd_unlock_workspace (args, response, user_data);
+    }
+    else if (strcmp (command, "border") == 0)
+    {
+        gf_cmd_border (args, response, user_data);
     }
     else
     {

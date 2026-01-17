@@ -15,6 +15,7 @@ print_usage (const char *prog)
     printf ("  move <WINDOW_ID> <WORKSPACE_ID> Move window to workspace\n");
     printf ("  lock <WORKSPACE_ID>             Lock workspace (prevent new windows)\n");
     printf ("  unlock <WORKSPACE_ID>           Unlock workspace\n");
+    printf ("  border <on|off|toggle>          Enable/disable window borders\n");
     printf ("\nExamples:\n");
     printf ("  %s query windows              # List all windows\n", prog);
     printf ("  %s query windows workspace 1  # List windows in workspace 1\n", prog);
@@ -22,6 +23,7 @@ print_usage (const char *prog)
     printf ("  %s move 12345 2               # Move window 12345 to workspace 2\n", prog);
     printf ("  %s lock 3                     # Lock workspace 3\n", prog);
     printf ("  %s unlock 3                   # Unlock workspace 3\n", prog);
+    printf ("  %s border toggle              # Toggle borders\n", prog);
 }
 
 int

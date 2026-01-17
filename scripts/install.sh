@@ -7,6 +7,9 @@ KWIN_QML_FILE="main.qml"
 KWIN_INSTALL_DIR="/usr/share/gridflux"
 SERVICE_FILE="$HOME/.config/systemd/user/gridflux.service"
 
+GNOME_EXT_UUID="gridflux@gridflux.dev"
+GNOME_EXT_DIR="$HOME/.local/share/gnome-shell/extensions/$GNOME_EXT_UUID"
+
 echo "=== GridFlux Installation Started ==="
 
 detect_desktop() {
@@ -109,6 +112,25 @@ install_kwin_script() {
     qdbus org.kde.KWin /Scripting \
         org.kde.kwin.Scripting.start || true
     echo "KWin script loaded"
+}
+
+install_gnome_extension() {
+    echo "Installing GNOME Shell extension..."
+    mkdir -p "$GNOME_EXT_DIR"
+    
+    # Copy extension files
+    cp src/platform/unix/mutter/extension.js "$GNOME_EXT_DIR/"
+    cp src/platform/unix/mutter/metadata.json "$GNOME_EXT_DIR/"
+    
+    echo "✓ GNOME extension files installed to $GNOME_EXT_DIR"
+    
+    if command -v gnome-extensions >/dev/null 2>&1; then
+        echo "Enabling GNOME extension..."
+        gnome-extensions enable "$GNOME_EXT_UUID" 2>/dev/null || true
+        echo "✓ GNOME extension enabled"
+    else
+        echo "⚠ gnome-extensions tool not found — please enable '$GNOME_EXT_UUID' manually"
+    fi
 }
 
 install_systemd_service() {
@@ -265,7 +287,8 @@ if [[ $IS_KDE -eq 1 ]]; then
     install_kwin_script
     install_systemd_service
 elif [[ $IS_GNOME -eq 1 ]]; then
-    echo "GNOME detected — no KWin integration"
+    echo "GNOME detected — installing GNOME Shell extension"
+    install_gnome_extension
     install_systemd_service
 else
     echo "Unknown desktop — manual start required"

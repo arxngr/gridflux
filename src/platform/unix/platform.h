@@ -78,7 +78,8 @@ gf_error_code_t gf_platform_set_window_geometry (gf_display_t display,
                                                  gf_config_t *cfg);
 
 gf_error_code_t gf_platform_get_frame_extents (Display *dpy, Window win, int *left,
-                                               int *right, int *top, int *bottom);
+                                               int *right, int *top, int *bottom,
+                                               bool *is_csd);
 gf_error_code_t gf_platform_get_window_property (Display *display, Window window,
                                                  Atom property, Atom type,
                                                  unsigned char **data,
