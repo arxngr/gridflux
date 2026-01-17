@@ -95,5 +95,6 @@ void gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t
 void gf_platform_cleanup_borders (gf_platform_interface_t *platform);
 void gf_platform_remove_border (gf_platform_interface_t *platform,
                                 gf_native_window_t window);
+bool gf_platform_is_fullscreen (gf_display_t display, gf_native_window_t window);
 
 #endif // GF_PLATFORM_LINUX_H
