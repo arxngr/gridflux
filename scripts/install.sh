@@ -40,7 +40,7 @@ check_display_server() {
 detect_desktop() {
     DESKTOP="${XDG_CURRENT_DESKTOP:-Unknown}"
     echo "Detected DE: $DESKTOP"
-    [[ "$DESKTOP" == *"KDE"* || "$KDE_FULL_SESSION" == "true" ]] && IS_KDE=1 || IS_KDE=0
+    [[ "$DESKTOP" == *"KDE"* || "${KDE_FULL_SESSION:-}" == "true" ]] && IS_KDE=1 || IS_KDE=0
     [[ "$DESKTOP" == *"GNOME"* ]] && IS_GNOME=1 || IS_GNOME=0
 }
 
@@ -346,7 +346,7 @@ create_default_config() {
 {
   "max_windows_per_workspace": 10,
   "max_workspaces": 10,
-  "default_padding": 10,
+  "default_padding": 5,
   "min_window_size": 100
 }
 EOF
