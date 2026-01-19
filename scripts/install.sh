@@ -27,7 +27,7 @@ echo "=== GridFlux Installation Started ==="
 
 # Check if running on X11 or Wayland
 check_display_server() {
-    if [ -z "$DISPLAY" ] && [ -z "$WAYLAND_DISPLAY" ]; then
+    if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
         log_error "No display server detected (X11 or Wayland required)"
         exit 1
     fi
@@ -155,13 +155,23 @@ install_kwin_script() {
     # Verify source files exist
     local files_ok=true
     [ -f "src/platform/unix/kwin/$KWIN_QML_FILE" ] || {
-        log_error "main.qml not found"
+        log_error "main.qml not found at src/platform/unix/kwin/$KWIN_QML_FILE"
         files_ok=false
     }
-    [ -f "src/platform/unix/kwin/code/tiler.js" ] || {
-        log_error "tiler.js not found"
+
+    # tiler.js should be in kwin/ root, not in code/ subdirectory
+    if [ -f "src/platform/unix/kwin/tiler.js" ]; then
+        : # File is in correct location
+    elif [ -f "src/platform/unix/kwin/code/tiler.js" ]; then
+        log_warn "Moving tiler.js from code/ subdirectory to kwin/ root..."
+        mv "src/platform/unix/kwin/code/tiler.js" "src/platform/unix/kwin/tiler.js"
+        rmdir "src/platform/unix/kwin/code" 2>/dev/null || true
+        log_info "tiler.js moved successfully"
+    else
+        log_error "tiler.js not found at src/platform/unix/kwin/tiler.js or src/platform/unix/kwin/code/tiler.js"
         files_ok=false
-    }
+    fi
+
     [ -f "src/platform/unix/kwin/metadata.json" ] || {
         log_error "metadata.json not found"
         files_ok=false
@@ -174,7 +184,7 @@ install_kwin_script() {
     # Create and install files
     sudo mkdir -p "$KWIN_INSTALL_DIR/contents/ui"
     sudo cp "src/platform/unix/kwin/$KWIN_QML_FILE" "$KWIN_INSTALL_DIR/contents/ui/main.qml"
-    sudo cp "src/platform/unix/kwin/code/tiler.js" "$KWIN_INSTALL_DIR/contents/ui/tiler.js"
+    sudo cp "src/platform/unix/kwin/tiler.js" "$KWIN_INSTALL_DIR/contents/ui/tiler.js"
     sudo cp "src/platform/unix/kwin/metadata.json" "$KWIN_INSTALL_DIR/metadata.json"
 
     # Set permissions
@@ -336,7 +346,7 @@ create_default_config() {
 {
   "max_windows_per_workspace": 10,
   "max_workspaces": 10,
-  "default_padding": 5,
+  "default_padding": 10,
   "min_window_size": 100
 }
 EOF
