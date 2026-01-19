@@ -4,8 +4,8 @@ set -e
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="$HOME/.config/gridflux"
 KWIN_SCRIPT_NAME="gridflux-tiler"
-KWIN_QML_FILE="kwin_tiler.qml"
-KWIN_INSTALL_DIR="/usr/share/gridflux"
+KWIN_INSTALL_DIR="/usr/share/kwin/scripts/$KWIN_SCRIPT_NAME"
+OLD_KWIN_INSTALL_DIR="/usr/share/gridflux"
 SERVICE_FILE="$HOME/.config/systemd/user/gridflux.service"
 GNOME_EXT_UUID="gridflux@gridflux.dev"
 GNOME_EXT_DIR="$HOME/.local/share/gnome-shell/extensions/$GNOME_EXT_UUID"
@@ -79,13 +79,21 @@ fi
 
 if command -v qdbus >/dev/null 2>&1; then
     echo "→ Removing KWin script..."
+    # Unload the script first
     qdbus org.kde.KWin /Scripting \
         org.kde.kwin.Scripting.unloadScript \
         "$KWIN_SCRIPT_NAME" 2>/dev/null || true
-
-    if [ -f "$KWIN_INSTALL_DIR/$KWIN_QML_FILE" ]; then
-        sudo rm -f "$KWIN_INSTALL_DIR/$KWIN_QML_FILE"
-        echo "  ✓ KWin script removed"
+    
+    # Remove the script directory
+    if [ -d "$KWIN_INSTALL_DIR" ]; then
+        sudo rm -rf "$KWIN_INSTALL_DIR"
+        echo "  ✓ KWin script removed from $KWIN_INSTALL_DIR"
+    fi
+    
+    # Also remove old installation location if it exists
+    if [ -f "$OLD_KWIN_INSTALL_DIR/$KWIN_QML_FILE" ]; then
+        sudo rm -f "$OLD_KWIN_INSTALL_DIR/$KWIN_QML_FILE"
+        echo "  ✓ Old KWin script file removed"
     fi
 fi
 

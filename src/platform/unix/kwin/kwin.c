@@ -19,69 +19,110 @@ gf_kwin_dbus_call (DBusConnection *conn, const char *method, const char *arg1,
     DBusMessageIter args;
     int result = -1;
 
+    if (!conn || !method)
+    {
+        GF_LOG_ERROR ("[kwin] Invalid arguments to dbus call");
+        return -1;
+    }
+
     dbus_error_init (&error);
 
     msg = dbus_message_new_method_call (KWIN_DBUS_SERVICE, KWIN_DBUS_OBJECT_PATH,
                                         KWIN_DBUS_INTERFACE, method);
     if (!msg)
     {
-        GF_LOG_ERROR ("[kwin] failed to create D-Bus message: %s", method);
+        GF_LOG_ERROR ("[kwin] Failed to create D-Bus message for method: %s", method);
         return -1;
     }
 
     dbus_message_iter_init_append (msg, &args);
-
     if (arg1)
-        dbus_message_iter_append_basic (&args, DBUS_TYPE_STRING, &arg1);
+    {
+        if (!dbus_message_iter_append_basic (&args, DBUS_TYPE_STRING, &arg1))
+        {
+            GF_LOG_ERROR ("[kwin] Failed to append arg1 to message");
+            goto out;
+        }
+    }
     if (arg2)
-        dbus_message_iter_append_basic (&args, DBUS_TYPE_STRING, &arg2);
+    {
+        if (!dbus_message_iter_append_basic (&args, DBUS_TYPE_STRING, &arg2))
+        {
+            GF_LOG_ERROR ("[kwin] Failed to append arg2 to message");
+            goto out;
+        }
+    }
 
     reply = dbus_connection_send_with_reply_and_block (conn, msg, KWIN_DBUS_TIMEOUT_MS,
                                                        &error);
 
     if (dbus_error_is_set (&error))
     {
-        GF_LOG_ERROR ("[kwin] D-Bus error (%s): %s", method, error.message);
+        GF_LOG_ERROR ("[kwin] D-Bus error calling '%s': %s", method, error.message);
         dbus_error_free (&error);
         goto out;
     }
 
-    if (reply && dbus_message_iter_init (reply, &args))
+    if (!reply)
     {
-        int arg_type = dbus_message_iter_get_arg_type (&args);
-        if (arg_type == DBUS_TYPE_INT32)
-        {
-            dbus_message_iter_get_basic (&args, &result);
-            GF_LOG_INFO ("[kwin] D-Bus call '%s' returned: %d", method, result);
-        }
-        else if (arg_type == DBUS_TYPE_BOOLEAN)
-        {
-            dbus_bool_t bool_result;
-            dbus_message_iter_get_basic (&args, &bool_result);
-            result = bool_result ? 1 : 0;
-            GF_LOG_INFO ("[kwin] D-Bus call '%s' returned (bool): %d", method, result);
-        }
-        else
-        {
-            GF_LOG_ERROR ("[kwin] D-Bus call '%s' failed - unexpected type: %c", method,
-                          arg_type);
-        }
+        GF_LOG_WARN ("[kwin] Method '%s' returned no reply (void method)", method);
+        result = 0;
+        goto out;
     }
-    else if (reply)
+
+    if (dbus_message_get_type (reply) == DBUS_MESSAGE_TYPE_ERROR)
     {
-        GF_LOG_ERROR (
-            "[kwin] D-Bus call '%s' failed - could not initialize reply iterator",
-            method);
+        const char *error_msg = dbus_message_get_error_name (reply);
+        GF_LOG_ERROR ("[kwin] Method '%s' returned error: %s", method, error_msg);
+        goto out;
+    }
+
+    if (!dbus_message_iter_init (reply, &args))
+    {
+        GF_LOG_DEBUG ("[kwin] Method '%s' returned void (no arguments)", method);
+        result = 0;
+        goto out;
+    }
+
+    int arg_type = dbus_message_iter_get_arg_type (&args);
+
+    if (arg_type == DBUS_TYPE_INT32)
+    {
+        dbus_message_iter_get_basic (&args, &result);
+        GF_LOG_INFO ("[kwin] Method '%s' returned int32: %d", method, result);
+    }
+    else if (arg_type == DBUS_TYPE_BOOLEAN)
+    {
+        dbus_bool_t bool_result;
+        dbus_message_iter_get_basic (&args, &bool_result);
+        result = bool_result ? 1 : 0;
+        GF_LOG_INFO ("[kwin] Method '%s' returned boolean: %s", method,
+                     bool_result ? "true" : "false");
+    }
+    else if (arg_type == DBUS_TYPE_STRING)
+    {
+        char *str_result;
+        dbus_message_iter_get_basic (&args, &str_result);
+        GF_LOG_INFO ("[kwin] Method '%s' returned string: %s", method, str_result);
+        result = 0;
+    }
+    else if (arg_type == DBUS_TYPE_INVALID)
+    {
+        GF_LOG_WARN ("[kwin] Method '%s' returned empty message", method);
+        result = 0;
     }
     else
     {
-        GF_LOG_ERROR ("[kwin] D-Bus call '%s' failed - no reply received", method);
+        GF_LOG_WARN ("[kwin] Method '%s' returned unexpected type: %c (0x%02x)", method,
+                     arg_type, arg_type);
+        result = 0;
     }
 
 out:
     if (reply)
         dbus_message_unref (reply);
-    dbus_message_unref (msg);
+    if (msg)
+        dbus_message_unref (msg);
 
     return result;
 }
