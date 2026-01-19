@@ -848,19 +848,13 @@ _on_config_button_clicked (GtkButton *btn, gpointer data)
                              "Max Workspaces:", "max_workspaces_spin", 1, 50, 1,
                              config.max_workspaces);
     _create_config_spin_row (form, config_window,
-                             "Default Padding:", "default_padding_spin", 0, 50, 1,
-                             config.default_padding);
-    _create_config_spin_row (form, config_window,
                              "Min Window Size:", "min_window_size_spin", 50, 500, 10,
                              config.min_window_size);
     _create_config_color_row (form, config_window,
                               "Active Window Border Color:", "border_color_btn",
                               config.border_color);
-        
-    #ifdef _linux_
-                              _create_config_toggle_row (form, config_window, "Enable Window Borders",
+    _create_config_toggle_row (form, config_window, "Enable Window Borders",
                                "enable_borders_check", config.enable_borders);
-    #endif
     GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append (GTK_BOX (main), button_box);
 

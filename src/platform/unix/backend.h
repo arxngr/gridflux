@@ -43,7 +43,9 @@ typedef struct
 } gf_kwin_platform_data_t;
 
 static const char *const KWIN_SCRIPT_SEARCH_PATHS[]
-    = { "/usr/local/share/kwin/scripts/gridflux/contents/ui/main.qml",
+    = { "/usr/local/share/kwin/scripts/gridflux-tiler/contents/ui/main.qml",
+        "/usr/share/kwin/scripts/gridflux-tiler/contents/ui/main.qml",
+        "/usr/local/share/kwin/scripts/gridflux/contents/ui/main.qml",
         "/usr/share/kwin/scripts/gridflux/contents/ui/main.qml",
         "/usr/local/share/gridflux/contents/ui/main.qml",
         "/usr/share/gridflux/contents/ui/main.qml",
