@@ -1,6 +1,6 @@
 {
   "max_windows_per_workspace": 10,
   "max_workspaces": 10,
-  "default_padding": 5,
+  "default_padding": 10,
   "min_window_size": 100
 }
