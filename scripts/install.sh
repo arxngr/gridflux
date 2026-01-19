@@ -87,52 +87,6 @@ build_and_install() {
     fi
 }
 
-unload_kwin_script() {
-    echo "Checking for existing KWin script..."
-    local script_id=$(qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadedScripts 2>/dev/null | grep -i "$KWIN_SCRIPT_NAME" || true)
-    if [ -n "$script_id" ]; then
-        echo "Unloading existing KWin script..."
-        qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "$KWIN_SCRIPT_NAME" 2>/dev/null || true
-        echo "✓ Existing KWin script unloaded"
-    fi
-}
-
-install_kwin_script() {
-    echo "Installing KWin script..."
-    unload_kwin_script
-    sudo install -Dm644 \
-        "src/platform/unix/kwin/$KWIN_QML_FILE" \
-        "$KWIN_INSTALL_DIR/$KWIN_QML_FILE"
-    echo "✓ KWin script installed to $KWIN_INSTALL_DIR"
-    echo "Registering script with KWin via D-Bus..."
-    qdbus org.kde.KWin /Scripting \
-        org.kde.kwin.Scripting.loadDeclarativeScript \
-        "$KWIN_INSTALL_DIR/$KWIN_QML_FILE" \
-        "$KWIN_SCRIPT_NAME" || true
-    qdbus org.kde.KWin /Scripting \
-        org.kde.kwin.Scripting.start || true
-    echo "KWin script loaded"
-}
-
-install_gnome_extension() {
-    echo "Installing GNOME Shell extension..."
-    mkdir -p "$GNOME_EXT_DIR"
-    
-    # Copy extension files
-    cp src/platform/unix/mutter/extension.js "$GNOME_EXT_DIR/"
-    cp src/platform/unix/mutter/metadata.json "$GNOME_EXT_DIR/"
-    
-    echo "✓ GNOME extension files installed to $GNOME_EXT_DIR"
-    
-    if command -v gnome-extensions >/dev/null 2>&1; then
-        echo "Enabling GNOME extension..."
-        gnome-extensions enable "$GNOME_EXT_UUID" 2>/dev/null || true
-        echo "✓ GNOME extension enabled"
-    else
-        echo "⚠ gnome-extensions tool not found — please enable '$GNOME_EXT_UUID' manually"
-    fi
-}
-
 install_systemd_service() {
     local SERVICE_DIR="$HOME/.config/systemd/user"
     echo "Installing systemd user service..."
@@ -202,41 +156,41 @@ EOF
 
 install_icons() {
     echo "Installing GridFlux icons..."
-    
+
     # Create icon directories
     ICON_DIR="$HOME/.local/share/icons/hicolor"
     mkdir -p "$ICON_DIR/16x16/apps"
     mkdir -p "$ICON_DIR/32x32/apps"
     mkdir -p "$ICON_DIR/48x48/apps"
-    
+
     # Copy icons (using absolute path from script location)
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-    
+
     if [ -f "$PROJECT_ROOT/icons/gridflux-16.png" ]; then
         cp "$PROJECT_ROOT/icons/gridflux-16.png" "$ICON_DIR/16x16/apps/gridflux.png"
         echo "✓ 16x16 icon installed"
     fi
-    
+
     if [ -f "$PROJECT_ROOT/icons/gridflux-32.png" ]; then
         cp "$PROJECT_ROOT/icons/gridflux-32.png" "$ICON_DIR/32x32/apps/gridflux.png"
         echo "✓ 32x32 icon installed"
     fi
-    
+
     if [ -f "$PROJECT_ROOT/icons/gridflux-48.png" ]; then
         cp "$PROJECT_ROOT/icons/gridflux-48.png" "$ICON_DIR/48x48/apps/gridflux.png"
         echo "✓ 48x48 icon installed"
     fi
-    
+
     # Update desktop entry to use our icon
     if [ -f "$HOME/.local/share/applications/gridflux-gui.desktop" ]; then
         sed -i 's|Icon=applications-system|Icon=gridflux|g' "$HOME/.local/share/applications/gridflux-gui.desktop"
         echo "✓ Desktop entry updated with custom icon"
     fi
-    
+
     # Create desktop shortcut
     if [ -d "$HOME/Desktop" ]; then
-        cat > "$HOME/Desktop/GridFlux.desktop" << EOF
+        cat >"$HOME/Desktop/GridFlux.desktop" <<EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -252,12 +206,12 @@ EOF
         chmod +x "$HOME/Desktop/GridFlux.desktop"
         echo "✓ Desktop shortcut created at $HOME/Desktop/GridFlux.desktop"
     fi
-    
+
     # Update icon cache
     if command -v gtk-update-icon-cache >/dev/null 2>&1; then
         gtk-update-icon-cache -f -t "$ICON_DIR" 2>/dev/null || true
     fi
-    
+
     echo "✓ Icons installation complete"
 }
 
@@ -284,11 +238,9 @@ install_icons
 
 if [[ $IS_KDE -eq 1 ]]; then
     echo "KDE detected — installing KWin integration"
-    install_kwin_script
     install_systemd_service
 elif [[ $IS_GNOME -eq 1 ]]; then
     echo "GNOME detected — installing GNOME Shell extension"
-    install_gnome_extension
     install_systemd_service
 else
     echo "Unknown desktop — manual start required"

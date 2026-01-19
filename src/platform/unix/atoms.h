@@ -8,6 +8,7 @@
 typedef struct
 {
     Atom net_active_window;
+    Atom net_workarea;
     Atom wm_class;
     Atom wm_state;
     Atom wm_change_state;

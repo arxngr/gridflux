@@ -66,6 +66,8 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
     atoms->net_wm_window_type_desktop
         = XInternAtom (display, "_NET_WM_WINDOW_TYPE_DESKTOP", False);
 
+    atoms->net_workarea = XInternAtom (display, "_NET_WORKAREA", False);
+
     atoms->net_frame_extents = XInternAtom (display, "_NET_FRAME_EXTENTS", False);
     atoms->gtk_frame_extents = XInternAtom (display, "_GTK_FRAME_EXTENTS", False);
     atoms->qt_frame_extents = XInternAtom (display, "_QT_FRAME_EXTENTS", False);

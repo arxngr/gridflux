@@ -162,6 +162,8 @@ gf_platform_create (void)
     platform->get_active_window = gf_platform_active_window;
     platform->is_window_minimized = gf_platform_is_window_minimized;
     platform->is_fullscreen = gf_platform_is_fullscreen;
+    platform->get_screen_bounds = gf_platform_get_screen_bounds;
+    platform->set_window_geometry = gf_platform_set_window_geometry;
 
     platform->add_border = gf_platform_add_border;
     platform->update_border = gf_platform_update_borders;
@@ -170,37 +172,6 @@ gf_platform_create (void)
     platform->remove_border = gf_platform_remove_border;
 
     platform->platform_data = data;
-
-    gf_desktop_env_t env = gf_detect_desktop_env ();
-    switch (env)
-    {
-    case GF_DE_GNOME:
-        GF_LOG_INFO ("Using GNOME Extensions backend for tilling");
-        platform->get_screen_bounds = gf_platform_noop_get_screen_bounds;
-        platform->set_window_geometry = gf_platform_noop_set_window_geometry;
-        break;
-
-    default:
-        platform->get_screen_bounds = gf_platform_get_screen_bounds;
-        platform->set_window_geometry = gf_platform_set_window_geometry;
-        break;
-    }
-
-    gf_backend_type_t backend = gf_detect_backend ();
-    data->use_kwin_backend = false;
-
-#ifdef GF_KWIN_SUPPORT
-    if (backend == GF_BACKEND_KWIN_QML)
-    {
-        GF_LOG_INFO ("Using KWin QML backend for tiling");
-        data->use_kwin_backend = true;
-
-        platform->get_screen_bounds = gf_platform_noop_get_screen_bounds;
-        platform->set_window_geometry = gf_platform_noop_set_window_geometry;
-
-        return platform;
-    }
-#endif
 
     return platform;
 }
@@ -256,14 +227,6 @@ gf_platform_init (gf_platform_interface_t *platform, gf_display_t *display)
     }
     data->border_count = 0;
 
-#ifdef GF_KWIN_SUPPORT
-    // If KWin backend, also initialize D-Bus and load script
-    if (data->use_kwin_backend)
-    {
-        return gf_kwin_platform_init (platform);
-    }
-#endif
-
     GF_LOG_INFO ("Platform initialized successfully");
     return GF_SUCCESS;
 }
@@ -283,15 +246,6 @@ gf_platform_cleanup (gf_display_t display, gf_platform_interface_t *platform)
 
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
 
-#ifdef GF_KWIN_SUPPORT
-    if (data->use_kwin_backend)
-    {
-        gf_kwin_platform_cleanup (platform);
-        /* Give KWin time to release X resources */
-        usleep (100 * 1000); // 100ms
-    }
-#endif
-
     if (display)
     {
         XSetIOErrorHandler (platform_io_error_handler);
@@ -307,6 +261,43 @@ gf_platform_cleanup (gf_display_t display, gf_platform_interface_t *platform)
     }
 
     gf_free (data);
+}
+
+gf_error_code_t
+gf_platform_send_client_message (Display *display, Window window, Atom message_type,
+                                 long *data, int count)
+{
+    if (!display)
+    {
+        GF_LOG_ERROR ("XSendEvent failed: display is NULL");
+        return GF_ERROR_INVALID_PARAMETER;
+    }
+    if (message_type == None)
+    {
+        GF_LOG_ERROR ("XSendEvent failed: message_type is None");
+        return GF_ERROR_INVALID_PARAMETER;
+    }
+
+    XClientMessageEvent event = { 0 };
+    event.type = ClientMessage;
+    event.window = window;
+    event.message_type = message_type;
+    event.format = 32;
+    for (int i = 0; i < count && i < 5; i++)
+        event.data.l[i] = data[i];
+
+    Status ok = XSendEvent (display, DefaultRootWindow (display), False,
+                            SubstructureRedirectMask | SubstructureNotifyMask,
+                            (XEvent *)&event);
+    if (ok == 0)
+    {
+        GF_LOG_ERROR ("XSendEvent rejected by WM (atom=%lu, target=%lu)", message_type,
+                      window);
+        return GF_ERROR_PLATFORM_ERROR;
+    }
+
+    XFlush (display);
+    return GF_SUCCESS;
 }
 
 gf_error_code_t
@@ -336,43 +327,23 @@ gf_platform_get_window_property (Display *display, Window window, Atom property,
     return GF_SUCCESS;
 }
 
+/* Alternative: More aggressive size hint removal */
 gf_error_code_t
-gf_platform_send_client_message (Display *display, Window window, Atom message_type,
-                                 long *data, int count)
+gf_platform_remove_size_constraints (Display *dpy, Window win)
 {
-    if (!display)
-    {
-        GF_LOG_ERROR ("XSendEvent failed: display is NULL");
-        return GF_ERROR_INVALID_PARAMETER;
-    }
+    XSizeHints *hints = XAllocSizeHints ();
+    if (!hints)
+        return GF_ERROR_MEMORY_ALLOCATION;
 
-    if (message_type == None)
-    {
-        GF_LOG_ERROR ("XSendEvent failed: message_type is None");
-        return GF_ERROR_INVALID_PARAMETER;
-    }
+    hints->flags = 0;
+    hints->min_width = 1;
+    hints->min_height = 1;
+    hints->max_width = INT_MAX;
+    hints->max_height = INT_MAX;
 
-    XClientMessageEvent event = { 0 };
-    event.type = ClientMessage;
-    event.window = window;
-    event.message_type = message_type;
-    event.format = 32;
+    XSetWMNormalHints (dpy, win, hints);
+    XFree (hints);
 
-    for (int i = 0; i < count && i < 5; i++)
-        event.data.l[i] = data[i];
-
-    Status ok = XSendEvent (display, DefaultRootWindow (display), False,
-                            SubstructureRedirectMask | SubstructureNotifyMask,
-                            (XEvent *)&event);
-
-    if (ok == 0)
-    {
-        GF_LOG_ERROR ("XSendEvent rejected by WM (atom=%lu, target=%lu)", message_type,
-                      window);
-        return GF_ERROR_PLATFORM_ERROR;
-    }
-
-    XFlush (display);
     return GF_SUCCESS;
 }
 
@@ -465,7 +436,8 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     XWindowAttributes attrs;
     if (!XGetWindowAttributes (dpy, target, &attrs))
     {
-        GF_LOG_ERROR ("Failed to get window attributes for target %lu", (unsigned long)target);
+        GF_LOG_ERROR ("Failed to get window attributes for target %lu",
+                      (unsigned long)target);
         return None;
     }
 
@@ -482,7 +454,8 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     Window child;
     if (!XTranslateCoordinates (dpy, target, root, 0, 0, &abs_x, &abs_y, &child))
     {
-        GF_LOG_ERROR ("Failed to translate coordinates for window %lu", (unsigned long)target);
+        GF_LOG_ERROR ("Failed to translate coordinates for window %lu",
+                      (unsigned long)target);
         return None;
     }
 
@@ -491,7 +464,8 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
 
     if (is_csd)
     {
-        // For CSD, visible frame is INSIDE the window geometry (shadows are part of window)
+        // For CSD, visible frame is INSIDE the window geometry (shadows are part of
+        // window)
         frame_x = abs_x + left_ext;
         frame_y = abs_y + top_ext;
         frame_w = attrs.width - left_ext - right_ext;
@@ -509,8 +483,9 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     // Validate geometry
     if (frame_w <= 0 || frame_h <= 0 || thickness < 0)
     {
-        GF_LOG_ERROR ("Invalid geometry for border overlay: frame_w=%d, frame_h=%d, thickness=%d", 
-                      frame_w, frame_h, thickness);
+        GF_LOG_ERROR (
+            "Invalid geometry for border overlay: frame_w=%d, frame_h=%d, thickness=%d",
+            frame_w, frame_h, thickness);
         return None;
     }
 
@@ -552,7 +527,8 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
 
     Window overlay = XCreateWindow (
         dpy, root, x, y, w, h, 0, root_attrs.depth, InputOutput, root_attrs.visual,
-        CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWSaveUnder | CWColormap, &swa);
+        CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWSaveUnder | CWColormap,
+        &swa);
 
     if (!overlay)
     {
@@ -563,8 +539,9 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     // Shape the window: Cut out the middle (The Frame Size)
     // This is optional - if it fails, we still have a working border overlay
     int shape_event_base, shape_error_base;
-    bool shape_supported = XShapeQueryExtension (dpy, &shape_event_base, &shape_error_base);
-    
+    bool shape_supported
+        = XShapeQueryExtension (dpy, &shape_event_base, &shape_error_base);
+
     if (shape_supported && w > 2 * thickness && h > 2 * thickness)
     {
         XRectangle rects[1];
@@ -579,8 +556,9 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
                                  ShapeSubtract, Unsorted);
 
         // Make input pass-through (Set Input shape to empty)
-        XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
-        
+        XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet,
+                                 Unsorted);
+
         GF_LOG_DEBUG ("Shape operations completed successfully");
     }
     else if (!shape_supported)
@@ -618,7 +596,8 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
     {
         if (data->borders[i] && data->borders[i]->target == (Window)window)
         {
-            GF_LOG_INFO ("Border already exists for window %lu, updating color", (unsigned long)window);
+            GF_LOG_INFO ("Border already exists for window %lu, updating color",
+                         (unsigned long)window);
             // Update existing border color
             gf_border_t *border = data->borders[i];
             border->color = color;
@@ -634,7 +613,8 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
     Window overlay = _create_border_overlay (data->display, window, color, thickness);
     if (!overlay)
     {
-        GF_LOG_WARN ("Failed to create border overlay for window %lu", (unsigned long)window);
+        GF_LOG_WARN ("Failed to create border overlay for window %lu",
+                     (unsigned long)window);
         return;
     }
 
@@ -756,7 +736,7 @@ gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t colo
             XClearWindow (data->display, b->overlay);
         }
     }
-    
+
     XFlush (data->display);
 }
 
@@ -797,7 +777,8 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
 
         // If window is unmapped (minimized or on another workspace)
         // Note: In GNOME, minimized windows may be mapped but have _NET_WM_STATE_HIDDEN
-        if (attrs.map_state == IsUnmapped || gf_platform_is_window_minimized (dpy, b->target))
+        if (attrs.map_state == IsUnmapped
+            || gf_platform_is_window_minimized (dpy, b->target))
         {
             XUnmapWindow (dpy, b->overlay);
             i++;
@@ -848,16 +829,16 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
 
             // Validate geometry before configuring window
             // Use X11 protocol constants instead of magic numbers
-            if (w > 0 && h > 0 && 
-                x >= SHRT_MIN && y >= SHRT_MIN && 
-                x <= SHRT_MAX && y <= SHRT_MAX && 
-                w <= USHRT_MAX && h <= USHRT_MAX)
+            if (w > 0 && h > 0 && x >= SHRT_MIN && y >= SHRT_MIN && x <= SHRT_MAX
+                && y <= SHRT_MAX && w <= USHRT_MAX && h <= USHRT_MAX)
             {
                 XMoveResizeWindow (dpy, b->overlay, x, y, w, h);
             }
             else
             {
-                GF_LOG_WARN ("Skipping border update due to invalid geometry: x=%d, y=%d, w=%d, h=%d", x, y, w, h);
+                GF_LOG_WARN ("Skipping border update due to invalid geometry: x=%d, "
+                             "y=%d, w=%d, h=%d",
+                             x, y, w, h);
                 continue;
             }
 
@@ -1379,38 +1360,6 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
     return GF_SUCCESS;
 }
 
-gf_error_code_t
-gf_platform_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
-                                 const gf_rect_t *geometry, gf_geometry_flags_t flags,
-                                 gf_config_t *cfg)
-{
-    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
-
-    if (!dpy || !geometry)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    gf_rect_t rect = *geometry;
-
-    if (flags & GF_GEOMETRY_APPLY_PADDING)
-        gf_rect_apply_padding (&rect, cfg->default_padding);
-
-    long data[5];
-
-    data[0] = NorthWestGravity | // gravity = NorthWestGravity
-              (1 << 8) |         // set x
-              (1 << 9) |         // set y
-              (1 << 10) |        // set width
-              (1 << 11);         // set height
-
-    data[1] = rect.x;
-    data[2] = rect.y;
-    data[3] = rect.width;
-    data[4] = rect.height;
-
-    return gf_platform_send_client_message (dpy, win, atoms->net_moveresize_window, data,
-                                            5);
-}
-
 static Window
 gf_platform_get_focused_window (Display *dpy)
 {
@@ -1501,16 +1450,6 @@ gf_platform_unminimize_window (gf_display_t display, Window window)
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     if (!atoms)
         return GF_ERROR_PLATFORM_ERROR;
-
-    gf_desktop_env_t env = gf_detect_desktop_env ();
-
-    if (env == GF_DE_KDE)
-    {
-        XMapWindow (display, window);
-        XRaiseWindow (display, window);
-        XFlush (display);
-        return GF_SUCCESS;
-    }
 
     if (atoms->net_wm_state != None && atoms->net_wm_state_hidden != None)
     {
@@ -1613,4 +1552,48 @@ gf_platform_is_window_minimized (gf_display_t display, gf_native_window_t window
         return false;
 
     return gf_platform_window_has_state (display, window, atoms->net_wm_state_hidden);
+}
+
+gf_error_code_t
+gf_platform_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
+                                 const gf_rect_t *geometry, gf_geometry_flags_t flags,
+                                 gf_config_t *cfg)
+{
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    if (!dpy || !geometry)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    gf_rect_t rect = *geometry;
+    if (flags & GF_GEOMETRY_APPLY_PADDING)
+        gf_rect_apply_padding (&rect, cfg->default_padding);
+
+    if (rect.width <= 0 || rect.height <= 0)
+        return GF_SUCCESS;
+
+    if (gf_platform_remove_size_constraints (dpy, win) != GF_SUCCESS)
+    {
+        GF_LOG_WARN ("Failed to remove size constraints, continuing anyway");
+    }
+
+    long data[5];
+    data[0] = NorthWestGravity | (1 << 8) | /* set x */
+              (1 << 9) |                    /* set y */
+              (1 << 10) |                   /* set width */
+              (1 << 11);                    /* set height */
+    data[1] = rect.x;
+    data[2] = rect.y;
+    data[3] = rect.width;
+    data[4] = rect.height;
+
+    gf_error_code_t err = gf_platform_send_client_message (
+        dpy, win, atoms->net_moveresize_window, data, 5);
+    if (err == GF_SUCCESS)
+        return GF_SUCCESS;
+
+    /* Fallback to direct XMoveResizeWindow */
+    GF_LOG_WARN ("_NET_MOVERESIZE_WINDOW failed, trying XMoveResizeWindow");
+    XMoveResizeWindow (dpy, win, rect.x, rect.y, rect.width, rect.height);
+    XSync (dpy, False);
+
+    return GF_SUCCESS;
 }

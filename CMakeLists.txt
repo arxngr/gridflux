@@ -75,17 +75,6 @@ if(UNIX AND NOT APPLE)
         ${JSONC_INCLUDE_DIRS}
     )
 
-    if(DBUS_FOUND)
-        file(GLOB_RECURSE KWIN_SOURCES CONFIGURE_DEPENDS
-            "${CMAKE_SOURCE_DIR}/src/platform/unix/kwin/*.c"
-        )
-        list(APPEND PLATFORM_SOURCES ${KWIN_SOURCES})
-        add_definitions(-DGF_KWIN_SUPPORT)
-
-        list(APPEND PLATFORM_LIBRARIES ${DBUS_LIBRARIES})
-        list(APPEND PLATFORM_INCLUDES ${DBUS_INCLUDE_DIRS})
-    endif()
-
     # DEB/RPM packaging
     set(CPACK_GENERATOR "DEB;RPM")
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "GridFlux Project <0x4rd1@gmail.com>")
