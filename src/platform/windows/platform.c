@@ -113,26 +113,27 @@ _is_excluded_class (const char *class_name, const char *title)
 {
     static const char *excluded_classes[]
         = { "Shell_TrayWnd",
+            "Shell_SecondaryTrayWnd",
             "TrayNotifyWnd",
             "NotifyIconOverflowWindow",
             "Windows.UI.Core.CoreWindow",
             "Xaml_Windowed_Popup",
+            "Progman",
+            "WorkerW",
             "TopLevelWindowForOverflowXamlIsland",
             "Windows.Internal.Shell.NotificationCenter",
             "NativeHWNDHost",
-            "Windows.UI.Composition.DesktopWindowContentBridge" };
+            "Windows.UI.Composition.DesktopWindowContentBridge",
+            "Xaml",
+            "Overflow",
+            "ApplicationFrameWindow"
+        };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
     {
         if (strcmp (class_name, excluded_classes[i]) == 0)
             return true;
     }
-
-    if (strstr (class_name, "Xaml") || strstr (class_name, "Overflow"))
-        return true;
-
-    if (strcmp (class_name, "ApplicationFrameWindow") == 0 && title[0] == '\0')
-        return true;
 
     return false;
 }
@@ -158,7 +159,7 @@ _is_notification_center (HWND hwnd)
     {
         char title[MAX_TITLE_LENGTH];
         GetWindowTextA (hwnd, title, sizeof (title));
-        if (title[0] == '\0' || strstr (title, "otification"))
+        if (title[0] == '\0' || strstr (title, "Notification"))
             return true;
     }
 
@@ -229,150 +230,121 @@ _create_border_overlay (HWND target)
 }
 
 static void
-_update_border (gf_border_t *border)
+_update_border(gf_border_t *border)
 {
-    if (!border)
+    if (!border || !border->target || !border->overlay)
         return;
 
-    if (!border->target || !border->overlay)
+    if (!IsWindow(border->target) || !IsWindow(border->overlay))
         return;
 
-    if (!IsWindow (border->target) || !IsWindow (border->overlay))
-        return;
-
-    // Use various methods to get the correct visual bounds
-    RECT rect = { 0 };
-    if (SUCCEEDED (DwmGetWindowAttribute (border->target, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                          &rect, sizeof (rect))))
+    RECT rect = {0};
+    if (!SUCCEEDED(DwmGetWindowAttribute(border->target, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                         &rect, sizeof(rect))))
     {
-        // DWM frame bounds are usually correct for visible windows
-    }
-    else if (!GetWindowRect (border->target, &rect))
-    {
-        return;
+        if (!GetWindowRect(border->target, &rect))
+            return;
     }
 
-    // Skip if unchanged (and strictly checking rect, not forced)
-    if (memcmp (&rect, &border->last_rect, sizeof (RECT)) == 0)
+    if (memcmp(&rect, &border->last_rect, sizeof(RECT)) == 0)
         return;
 
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
 
-    // Expand width/height slightly to draw OUTSIDE the window content
-    // But since this is an overlay, we usually want it *on top* of the border area.
-    // Given the user report of "gap", using exact DWM bounds is the best starting point.
-
     if (width <= 0 || height <= 0)
         return;
 
-    // ... (rest of drawing logic stays same, but we need to ensure the overlay window
-    // MOVES to the new rect)
+    HDC hdcScreen = NULL;
+    HDC hdcMem = NULL;
+    HBITMAP hBmp = NULL;
+    HGDIOBJ oldBmp = NULL;
+    HPEN hPen = NULL;
+    HGDIOBJ oldPen = NULL;
+    HBRUSH hTransparent = NULL;
 
-    HDC hdcScreen = GetDC (NULL);
-    if (!hdcScreen)
-        return;
+    // Allocate all resources with proper cleanup on failure
+    hdcScreen = GetDC(NULL);
+    if (!hdcScreen) goto cleanup;
 
-    HDC hdcMem = CreateCompatibleDC (hdcScreen);
-    if (!hdcMem)
+    hdcMem = CreateCompatibleDC(hdcScreen);
+    if (!hdcMem) goto cleanup;
+
+    hBmp = CreateCompatibleBitmap(hdcScreen, width, height);
+    if (!hBmp) goto cleanup;
+
+    oldBmp = SelectObject(hdcMem, hBmp);
+
+    // Fill transparent background
+    RECT full_rect = {0, 0, width, height};
+    hTransparent = CreateSolidBrush(RGB(0, 0, 0));
+    if (hTransparent)
     {
-        ReleaseDC (NULL, hdcScreen);
-        return;
+        FillRect(hdcMem, &full_rect, hTransparent);
+        DeleteObject(hTransparent);
+        hTransparent = NULL;
     }
-
-    HBITMAP hBmp = CreateCompatibleBitmap (hdcScreen, width, height);
-    if (!hBmp)
-    {
-        DeleteDC (hdcMem);
-        ReleaseDC (NULL, hdcScreen);
-        return;
-    }
-
-    HGDIOBJ oldBmp = SelectObject (hdcMem, hBmp);
-
-    // Fill transparent
-    // Note: We use 0,0,0 as key for 'transparent' usually, or alpha channel.
-    // Since we use ULW_ALPHA, we need pre-multiplied alpha or just 0 alpha.
-    // Creating a 32-bit bitmap might be needed for per-pixel alpha if we wanted fancy
-    // effects, but here we just want a simple border. For simple borders, a mask color or
-    // regions is often used, but UpdateLayeredWindow is fine.
-
-    // Clear background
-    RECT full_rect = { 0, 0, width, height };
-    HBRUSH hTransparent
-        = CreateSolidBrush (RGB (0, 0, 0)); // Black is usually the color key
-    FillRect (hdcMem, &full_rect, hTransparent);
-    DeleteObject (hTransparent);
 
     // Draw border
-    // Draw hollow rectangle
-    // Convert RGB (0xRRGGBB) to Windows BGR (0x00BBGGRR)
-    COLORREF gdi_color = ((border->color & 0xFF) << 16) | (border->color & 0x00FF00)
-                         | ((border->color & 0xFF0000) >> 16);
-    HPEN hPen = CreatePen (PS_INSIDEFRAME, border->thickness, gdi_color);
-    HGDIOBJ oldPen = SelectObject (hdcMem, hPen);
-    HGDIOBJ oldBrush = SelectObject (hdcMem, GetStockObject (NULL_BRUSH));
+    COLORREF gdi_color = ((border->color & 0xFF) << 16) | 
+                         (border->color & 0x00FF00) |
+                         ((border->color & 0xFF0000) >> 16);
+    
+    hPen = CreatePen(PS_INSIDEFRAME, border->thickness, gdi_color);
+    if (hPen)
+    {
+        oldPen = SelectObject(hdcMem, hPen);
+        HGDIOBJ oldBrush = SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
 
-    Rectangle (hdcMem, 0, 0, width, height);
+        Rectangle(hdcMem, 0, 0, width, height);
 
-    SelectObject (hdcMem, oldBrush);
-    SelectObject (hdcMem, oldPen);
-    DeleteObject (hPen);
+        SelectObject(hdcMem, oldBrush);
+        SelectObject(hdcMem, oldPen);
+        DeleteObject(hPen);
+        hPen = NULL;
+    }
 
-    BLENDFUNCTION blend = { 0 };
+    BLENDFUNCTION blend = {0};
     blend.BlendOp = AC_SRC_OVER;
     blend.SourceConstantAlpha = 255;
-    blend.AlphaFormat = AC_SRC_ALPHA; // Only if using 32-bit bitmap with alpha channel
+    blend.AlphaFormat = AC_SRC_ALPHA;
 
-    // If we are NOT using per-pixel alpha (just color keying), we should use LWA_COLORKEY
-    // method but we started with ULW_ALPHA. Let's assume standard GDI drawing creates 0
-    // alpha for background and non-zero for content if we are lucky, OR we simply use
-    // color key. Actually, UpdateLayeredWindow with ULW_ALPHA expects 32bpp bitmap.
-    // CreateCompatibleBitmap might return screen compatible (usually 32bpp now).
-    // Let's stick to previous working logic but ensure rect is correct.
+    POINT ptZero = {0, 0};
+    SIZE size = {width, height};
+    POINT ptDest = {rect.left, rect.top};
 
-    POINT ptZero = { 0, 0 };
-    SIZE size = { width, height };
-    POINT ptDest = { rect.left, rect.top };
-
-    // Important: Use LWA_COLORKEY if we want simple transparency without alpha headaches
-    // But since we are using UpdateLayeredWindow, let's keep it.
-    // However, we should explicitly set using ULW_COLORKEY if we want black to be
-    // transparent. The previous code used ULW_ALPHA.
-
-    UpdateLayeredWindow (border->overlay, hdcScreen, &ptDest, &size, hdcMem, &ptZero, 0,
-                         &blend, ULW_ALPHA);
+    UpdateLayeredWindow(border->overlay, hdcScreen, &ptDest, &size, hdcMem, &ptZero, 
+                       0, &blend, ULW_ALPHA);
 
     // Visibility and Z-order logic
-    if (IsIconic (border->target))
+    if (IsIconic(border->target))
     {
-        ShowWindow (border->overlay, SW_HIDE);
+        ShowWindow(border->overlay, SW_HIDE);
     }
     else
     {
-        ShowWindow (border->overlay, SW_SHOWNA);
-
-        HWND foreground = GetForegroundWindow ();
-        if (foreground == border->target)
-        {
-            // Only be TOPMOST if we are the active window
-            SetWindowPos (border->overlay, HWND_TOPMOST, rect.left, rect.top, width,
-                          height, SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-        }
-        else
-        {
-            // Follow the target window in Z-order
-            SetWindowPos (border->overlay, border->target, rect.left, rect.top, width,
-                          height, SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-        }
+        ShowWindow(border->overlay, SW_SHOWNA);
+        
+        // NEVER use HWND_TOPMOST - always relative positioning
+        SetWindowPos(border->overlay, border->target, rect.left, rect.top, width,
+                    height, SWP_NOACTIVATE | SWP_NOSENDCHANGING);
     }
 
     border->last_rect = rect;
 
-    SelectObject (hdcMem, oldBmp);
-    DeleteObject (hBmp);
-    DeleteDC (hdcMem);
-    ReleaseDC (NULL, hdcScreen);
+cleanup:
+    if (oldBmp && hBmp)
+        SelectObject(hdcMem, oldBmp);
+    if (hBmp)
+        DeleteObject(hBmp);
+    if (hdcMem)
+        DeleteDC(hdcMem);
+    if (hdcScreen)
+        ReleaseDC(NULL, hdcScreen);
+    if (hTransparent)
+        DeleteObject(hTransparent);
+    if (hPen)
+        DeleteObject(hPen);
 }
 
 void

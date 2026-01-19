@@ -214,18 +214,21 @@ _window_manager_handle_new_window (gf_window_manager_t *m, gf_window_info_t *new
     {
         gf_workspace_id_t ws_id = workspaces->items[i].id;
 
-        // Skip the workspace where the new window is
         if (ws_id == workspace_id)
             continue;
 
         gf_window_info_t *list = NULL;
         uint32_t count = 0;
 
-        if (gf_window_list_get_by_workspace (windows, ws_id, &list, &count) != GF_SUCCESS)
-            continue;
-
-        _minimize_workspace_windows (m, list, count);
-        gf_free (list);
+        gf_error_code_t result = gf_window_list_get_by_workspace(windows, ws_id, &list, &count);
+        
+        if (result == GF_SUCCESS && list)
+        {
+            _minimize_workspace_windows(m, list, count);
+        }
+        
+        if (list)
+            gf_free(list);
     }
 
     GF_LOG_INFO ("Focusing new window %lu", new_window->id);
@@ -1148,7 +1151,8 @@ gf_window_manager_load_cfg (gf_window_manager_t *m)
             else
             {
                 GF_LOG_INFO ("Borders enabled, adding to all valid windows...");
-                
+                if (m->platform->cleanup_borders)
+                    m->platform->cleanup_borders(m->platform);
                 // Get all windows from all workspaces to ensure we don't miss any
                 for (gf_workspace_id_t workspace = 0; workspace < GF_MAX_WORKSPACES; workspace++)
                 {
