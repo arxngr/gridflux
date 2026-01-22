@@ -463,7 +463,6 @@ gf_platform_create (void)
     platform->create_workspace = gf_platform_create_workspace;
     platform->is_window_valid = gf_platform_is_window_valid;
     platform->is_window_excluded = gf_platform_is_window_excluded;
-    platform->is_window_drag = gf_platform_is_window_drag;
     platform->get_active_window = gf_platform_active_window;
     platform->get_screen_bounds = gf_platform_get_screen_bounds;
     platform->set_window_geometry = gf_platform_set_window_geometry;
@@ -800,17 +799,6 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
     }
 
     return false;
-}
-
-gf_error_code_t
-gf_platform_is_window_drag (gf_display_t display, gf_native_window_t window,
-                            gf_rect_t *geometry)
-{
-    (void)display;
-    (void)window;
-
-    memset (geometry, 0, sizeof (*geometry));
-    return GF_SUCCESS;
 }
 
 gf_error_code_t
