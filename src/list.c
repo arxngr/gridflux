@@ -355,7 +355,7 @@ gf_workspace_list_find_free (gf_workspace_list_t *ws, uint32_t max_win_per_ws)
             return info->id;
     }
 
-    gf_workspace_info_t info = { .id = ws->count,
+    gf_workspace_info_t info = { .id = ws->count + GF_FIRST_WORKSPACE_ID,
                                  .window_count = 0,
                                  .max_windows = max_win_per_ws,
                                  .available_space = max_win_per_ws,
@@ -369,10 +369,10 @@ void
 gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
                           uint32_t max_per_ws)
 {
-    if (!ws || ws_id < 0)
+    if (!ws || ws_id < GF_FIRST_WORKSPACE_ID)
         return;
 
-    for (gf_workspace_id_t id = 0; id <= ws_id; id++)
+    for (gf_workspace_id_t id = GF_FIRST_WORKSPACE_ID; id <= ws_id; id++)
     {
         if (!gf_workspace_list_find (ws, id))
         {

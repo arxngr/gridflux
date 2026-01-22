@@ -282,7 +282,8 @@ load_or_create_config (const char *filename)
 bool
 gf_config_is_workspace_locked (const gf_config_t *cfg, gf_workspace_id_t ws)
 {
-    if (!cfg || ws < 0 || ws >= (gf_workspace_id_t)cfg->max_workspaces)
+    if (!cfg || ws < GF_FIRST_WORKSPACE_ID
+        || ws >= (gf_workspace_id_t)cfg->max_workspaces + GF_FIRST_WORKSPACE_ID)
         return false;
 
     for (uint32_t i = 0; i < cfg->locked_workspaces_count; i++)
