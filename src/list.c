@@ -265,10 +265,7 @@ gf_workspace_list_add (gf_workspace_list_t *list, const gf_workspace_info_t *wor
 
     // Check if workspace already exists
     if (gf_workspace_list_find (list, workspace->id))
-    {
-        if (list->capacity < workspace->max_windows)
-            return GF_SUCCESS;
-    }
+        return GF_SUCCESS;
 
     if (list->count >= list->capacity)
     {
@@ -358,7 +355,7 @@ gf_workspace_list_find_free (gf_workspace_list_t *ws, uint32_t max_win_per_ws)
             return info->id;
     }
 
-    gf_workspace_info_t info = { .id = ws->count,
+    gf_workspace_info_t info = { .id = ws->count + GF_FIRST_WORKSPACE_ID,
                                  .window_count = 0,
                                  .max_windows = max_win_per_ws,
                                  .available_space = max_win_per_ws,
@@ -372,19 +369,22 @@ void
 gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
                           uint32_t max_per_ws)
 {
-    if (!ws)
+    if (!ws || ws_id < GF_FIRST_WORKSPACE_ID)
         return;
 
-    while (ws->count <= ws_id)
+    for (gf_workspace_id_t id = GF_FIRST_WORKSPACE_ID; id <= ws_id; id++)
     {
-        gf_workspace_info_t info = {
-            .id = ws->count,
-            .window_count = 0,
-            .max_windows = max_per_ws,
-            .available_space = max_per_ws,
-            .is_locked = false,
-        };
+        if (!gf_workspace_list_find (ws, id))
+        {
+            gf_workspace_info_t info = {
+                .id = id,
+                .window_count = 0,
+                .max_windows = max_per_ws,
+                .available_space = max_per_ws,
+                .is_locked = false,
+            };
 
-        gf_workspace_list_add (ws, &info);
+            gf_workspace_list_add (ws, &info);
+        }
     }
 }

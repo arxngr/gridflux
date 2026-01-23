@@ -126,8 +126,7 @@ _is_excluded_class (const char *class_name, const char *title)
             "Windows.UI.Composition.DesktopWindowContentBridge",
             "Xaml",
             "Overflow",
-            "ApplicationFrameWindow"
-        };
+            "ApplicationFrameWindow" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
     {
@@ -230,23 +229,23 @@ _create_border_overlay (HWND target)
 }
 
 static void
-_update_border(gf_border_t *border)
+_update_border (gf_border_t *border)
 {
     if (!border || !border->target || !border->overlay)
         return;
 
-    if (!IsWindow(border->target) || !IsWindow(border->overlay))
+    if (!IsWindow (border->target) || !IsWindow (border->overlay))
         return;
 
-    RECT rect = {0};
-    if (!SUCCEEDED(DwmGetWindowAttribute(border->target, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                         &rect, sizeof(rect))))
+    RECT rect = { 0 };
+    if (!SUCCEEDED (DwmGetWindowAttribute (border->target, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                           &rect, sizeof (rect))))
     {
-        if (!GetWindowRect(border->target, &rect))
+        if (!GetWindowRect (border->target, &rect))
             return;
     }
 
-    if (memcmp(&rect, &border->last_rect, sizeof(RECT)) == 0)
+    if (memcmp (&rect, &border->last_rect, sizeof (RECT)) == 0)
         return;
 
     int width = rect.right - rect.left;
@@ -264,87 +263,89 @@ _update_border(gf_border_t *border)
     HBRUSH hTransparent = NULL;
 
     // Allocate all resources with proper cleanup on failure
-    hdcScreen = GetDC(NULL);
-    if (!hdcScreen) goto cleanup;
+    hdcScreen = GetDC (NULL);
+    if (!hdcScreen)
+        goto cleanup;
 
-    hdcMem = CreateCompatibleDC(hdcScreen);
-    if (!hdcMem) goto cleanup;
+    hdcMem = CreateCompatibleDC (hdcScreen);
+    if (!hdcMem)
+        goto cleanup;
 
-    hBmp = CreateCompatibleBitmap(hdcScreen, width, height);
-    if (!hBmp) goto cleanup;
+    hBmp = CreateCompatibleBitmap (hdcScreen, width, height);
+    if (!hBmp)
+        goto cleanup;
 
-    oldBmp = SelectObject(hdcMem, hBmp);
+    oldBmp = SelectObject (hdcMem, hBmp);
 
     // Fill transparent background
-    RECT full_rect = {0, 0, width, height};
-    hTransparent = CreateSolidBrush(RGB(0, 0, 0));
+    RECT full_rect = { 0, 0, width, height };
+    hTransparent = CreateSolidBrush (RGB (0, 0, 0));
     if (hTransparent)
     {
-        FillRect(hdcMem, &full_rect, hTransparent);
-        DeleteObject(hTransparent);
+        FillRect (hdcMem, &full_rect, hTransparent);
+        DeleteObject (hTransparent);
         hTransparent = NULL;
     }
 
     // Draw border
-    COLORREF gdi_color = ((border->color & 0xFF) << 16) | 
-                         (border->color & 0x00FF00) |
-                         ((border->color & 0xFF0000) >> 16);
-    
-    hPen = CreatePen(PS_INSIDEFRAME, border->thickness, gdi_color);
+    COLORREF gdi_color = ((border->color & 0xFF) << 16) | (border->color & 0x00FF00)
+                         | ((border->color & 0xFF0000) >> 16);
+
+    hPen = CreatePen (PS_INSIDEFRAME, border->thickness, gdi_color);
     if (hPen)
     {
-        oldPen = SelectObject(hdcMem, hPen);
-        HGDIOBJ oldBrush = SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
+        oldPen = SelectObject (hdcMem, hPen);
+        HGDIOBJ oldBrush = SelectObject (hdcMem, GetStockObject (NULL_BRUSH));
 
-        Rectangle(hdcMem, 0, 0, width, height);
+        Rectangle (hdcMem, 0, 0, width, height);
 
-        SelectObject(hdcMem, oldBrush);
-        SelectObject(hdcMem, oldPen);
-        DeleteObject(hPen);
+        SelectObject (hdcMem, oldBrush);
+        SelectObject (hdcMem, oldPen);
+        DeleteObject (hPen);
         hPen = NULL;
     }
 
-    BLENDFUNCTION blend = {0};
+    BLENDFUNCTION blend = { 0 };
     blend.BlendOp = AC_SRC_OVER;
     blend.SourceConstantAlpha = 255;
     blend.AlphaFormat = AC_SRC_ALPHA;
 
-    POINT ptZero = {0, 0};
-    SIZE size = {width, height};
-    POINT ptDest = {rect.left, rect.top};
+    POINT ptZero = { 0, 0 };
+    SIZE size = { width, height };
+    POINT ptDest = { rect.left, rect.top };
 
-    UpdateLayeredWindow(border->overlay, hdcScreen, &ptDest, &size, hdcMem, &ptZero, 
-                       0, &blend, ULW_ALPHA);
+    UpdateLayeredWindow (border->overlay, hdcScreen, &ptDest, &size, hdcMem, &ptZero, 0,
+                         &blend, ULW_ALPHA);
 
     // Visibility and Z-order logic
-    if (IsIconic(border->target))
+    if (IsIconic (border->target))
     {
-        ShowWindow(border->overlay, SW_HIDE);
+        ShowWindow (border->overlay, SW_HIDE);
     }
     else
     {
-        ShowWindow(border->overlay, SW_SHOWNA);
-        
+        ShowWindow (border->overlay, SW_SHOWNA);
+
         // NEVER use HWND_TOPMOST - always relative positioning
-        SetWindowPos(border->overlay, border->target, rect.left, rect.top, width,
-                    height, SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+        SetWindowPos (border->overlay, border->target, rect.left, rect.top, width, height,
+                      SWP_NOACTIVATE | SWP_NOSENDCHANGING);
     }
 
     border->last_rect = rect;
 
 cleanup:
     if (oldBmp && hBmp)
-        SelectObject(hdcMem, oldBmp);
+        SelectObject (hdcMem, oldBmp);
     if (hBmp)
-        DeleteObject(hBmp);
+        DeleteObject (hBmp);
     if (hdcMem)
-        DeleteDC(hdcMem);
+        DeleteDC (hdcMem);
     if (hdcScreen)
-        ReleaseDC(NULL, hdcScreen);
+        ReleaseDC (NULL, hdcScreen);
     if (hTransparent)
-        DeleteObject(hTransparent);
+        DeleteObject (hTransparent);
     if (hPen)
-        DeleteObject(hPen);
+        DeleteObject (hPen);
 }
 
 void
@@ -560,7 +561,7 @@ gf_platform_get_windows (gf_display_t display, gf_workspace_id_t *workspace_id,
                 window_list[found_count] = (gf_window_info_t){
                     .id = (gf_window_id_t)hwnd,
                     .native_handle = hwnd,
-                    .workspace_id = 0,
+                    .workspace_id = GF_FIRST_WORKSPACE_ID,
                     .geometry = {
                         .x = rect.left,
                         .y = rect.top,
@@ -727,7 +728,7 @@ gf_workspace_id_t
 gf_platform_get_current_workspace (gf_display_t display)
 {
     (void)display;
-    return 0;
+    return GF_FIRST_WORKSPACE_ID;
 }
 
 uint32_t

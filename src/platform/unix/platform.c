@@ -465,7 +465,8 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     XWindowAttributes attrs;
     if (!XGetWindowAttributes (dpy, target, &attrs))
     {
-        GF_LOG_ERROR ("Failed to get window attributes for target %lu", (unsigned long)target);
+        GF_LOG_ERROR ("Failed to get window attributes for target %lu",
+                      (unsigned long)target);
         return None;
     }
 
@@ -482,7 +483,8 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     Window child;
     if (!XTranslateCoordinates (dpy, target, root, 0, 0, &abs_x, &abs_y, &child))
     {
-        GF_LOG_ERROR ("Failed to translate coordinates for window %lu", (unsigned long)target);
+        GF_LOG_ERROR ("Failed to translate coordinates for window %lu",
+                      (unsigned long)target);
         return None;
     }
 
@@ -491,7 +493,8 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
 
     if (is_csd)
     {
-        // For CSD, visible frame is INSIDE the window geometry (shadows are part of window)
+        // For CSD, visible frame is INSIDE the window geometry (shadows are part of
+        // window)
         frame_x = abs_x + left_ext;
         frame_y = abs_y + top_ext;
         frame_w = attrs.width - left_ext - right_ext;
@@ -509,8 +512,9 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     // Validate geometry
     if (frame_w <= 0 || frame_h <= 0 || thickness < 0)
     {
-        GF_LOG_ERROR ("Invalid geometry for border overlay: frame_w=%d, frame_h=%d, thickness=%d", 
-                      frame_w, frame_h, thickness);
+        GF_LOG_ERROR (
+            "Invalid geometry for border overlay: frame_w=%d, frame_h=%d, thickness=%d",
+            frame_w, frame_h, thickness);
         return None;
     }
 
@@ -552,7 +556,8 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
 
     Window overlay = XCreateWindow (
         dpy, root, x, y, w, h, 0, root_attrs.depth, InputOutput, root_attrs.visual,
-        CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWSaveUnder | CWColormap, &swa);
+        CWOverrideRedirect | CWBackPixel | CWBorderPixel | CWSaveUnder | CWColormap,
+        &swa);
 
     if (!overlay)
     {
@@ -563,8 +568,9 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
     // Shape the window: Cut out the middle (The Frame Size)
     // This is optional - if it fails, we still have a working border overlay
     int shape_event_base, shape_error_base;
-    bool shape_supported = XShapeQueryExtension (dpy, &shape_event_base, &shape_error_base);
-    
+    bool shape_supported
+        = XShapeQueryExtension (dpy, &shape_event_base, &shape_error_base);
+
     if (shape_supported && w > 2 * thickness && h > 2 * thickness)
     {
         XRectangle rects[1];
@@ -579,8 +585,9 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
                                  ShapeSubtract, Unsorted);
 
         // Make input pass-through (Set Input shape to empty)
-        XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
-        
+        XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet,
+                                 Unsorted);
+
         GF_LOG_DEBUG ("Shape operations completed successfully");
     }
     else if (!shape_supported)
@@ -618,7 +625,8 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
     {
         if (data->borders[i] && data->borders[i]->target == (Window)window)
         {
-            GF_LOG_INFO ("Border already exists for window %lu, updating color", (unsigned long)window);
+            GF_LOG_INFO ("Border already exists for window %lu, updating color",
+                         (unsigned long)window);
             // Update existing border color
             gf_border_t *border = data->borders[i];
             border->color = color;
@@ -634,7 +642,8 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
     Window overlay = _create_border_overlay (data->display, window, color, thickness);
     if (!overlay)
     {
-        GF_LOG_WARN ("Failed to create border overlay for window %lu", (unsigned long)window);
+        GF_LOG_WARN ("Failed to create border overlay for window %lu",
+                     (unsigned long)window);
         return;
     }
 
@@ -756,7 +765,7 @@ gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t colo
             XClearWindow (data->display, b->overlay);
         }
     }
-    
+
     XFlush (data->display);
 }
 
@@ -797,7 +806,8 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
 
         // If window is unmapped (minimized or on another workspace)
         // Note: In GNOME, minimized windows may be mapped but have _NET_WM_STATE_HIDDEN
-        if (attrs.map_state == IsUnmapped || gf_platform_is_window_minimized (dpy, b->target))
+        if (attrs.map_state == IsUnmapped
+            || gf_platform_is_window_minimized (dpy, b->target))
         {
             XUnmapWindow (dpy, b->overlay);
             i++;
@@ -848,16 +858,16 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
 
             // Validate geometry before configuring window
             // Use X11 protocol constants instead of magic numbers
-            if (w > 0 && h > 0 && 
-                x >= SHRT_MIN && y >= SHRT_MIN && 
-                x <= SHRT_MAX && y <= SHRT_MAX && 
-                w <= USHRT_MAX && h <= USHRT_MAX)
+            if (w > 0 && h > 0 && x >= SHRT_MIN && y >= SHRT_MIN && x <= SHRT_MAX
+                && y <= SHRT_MAX && w <= USHRT_MAX && h <= USHRT_MAX)
             {
                 XMoveResizeWindow (dpy, b->overlay, x, y, w, h);
             }
             else
             {
-                GF_LOG_WARN ("Skipping border update due to invalid geometry: x=%d, y=%d, w=%d, h=%d", x, y, w, h);
+                GF_LOG_WARN ("Skipping border update due to invalid geometry: x=%d, "
+                             "y=%d, w=%d, h=%d",
+                             x, y, w, h);
                 continue;
             }
 
@@ -979,7 +989,7 @@ gf_platform_get_windows (gf_display_t display, gf_workspace_id_t *workspace_id,
             unsigned long window_workspace = *(unsigned long *)desktop_data;
             XFree (desktop_data);
 
-            if (workspace_id != NULL && *workspace_id >= 0
+            if (workspace_id != NULL && *workspace_id >= GF_FIRST_WORKSPACE_ID
                 && (gf_workspace_id_t)window_workspace != *workspace_id)
             {
                 continue;
@@ -999,7 +1009,8 @@ gf_platform_get_windows (gf_display_t display, gf_workspace_id_t *workspace_id,
 
         bool is_valid = gf_platform_is_window_excluded (display, window) == false;
 
-        gf_workspace_id_t resolved_workspace = (workspace_id != NULL) ? *workspace_id : 0;
+        gf_workspace_id_t resolved_workspace
+            = (workspace_id != NULL) ? *workspace_id : GF_FIRST_WORKSPACE_ID;
 
         filtered_windows[filtered_count]
             = (gf_window_info_t){ .id = (gf_window_id_t)window,
@@ -1093,7 +1104,7 @@ gf_platform_get_current_workspace (gf_display_t display)
         return workspace;
     }
 
-    return 0; // Default to workspace 0
+    return GF_FIRST_WORKSPACE_ID; // Default to workspace 1
 }
 
 uint32_t
