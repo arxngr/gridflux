@@ -8,6 +8,7 @@
 #include <dbus/dbus.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 static int
 gf_kwin_dbus_call (DBusConnection *conn, const char *method, const char *arg1,
@@ -197,10 +198,20 @@ gf_kwin_platform_init (gf_platform_interface_t *platform)
         GF_LOG_INFO ("[kwin] init: script unloaded");
     }
 
-    GF_LOG_DEBUG ("[kwin] attempting to load script from installed location: %s",
-                  script_path);
-    ret = gf_kwin_dbus_call (data->kwin_dbus_conn, "loadDeclarativeScript", script_path,
-                             data->kwin_script_name);
+    char abs_path[PATH_MAX];
+    if (realpath(script_path, abs_path))
+    {
+         GF_LOG_DEBUG ("[kwin] attempting to load script from installed location: %s",
+                       abs_path);
+         ret = gf_kwin_dbus_call (data->kwin_dbus_conn, "loadDeclarativeScript", abs_path,
+                                  data->kwin_script_name);
+    }
+    else
+    {
+         GF_LOG_WARN ("[kwin] failed to resolve absolute path for script, using: %s", script_path);
+         ret = gf_kwin_dbus_call (data->kwin_dbus_conn, "loadDeclarativeScript", script_path,
+                                  data->kwin_script_name);
+    }
 
     if (ret >= 0)
     {
