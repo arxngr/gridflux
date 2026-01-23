@@ -636,7 +636,9 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
             border->color = color;
             if (border->overlay)
             {
-                XSetWindowBackground (data->display, border->overlay, color & 0x00FFFFFF);
+                XSetWindowAttributes swa;
+                swa.background_pixel = color & 0x00FFFFFF;
+                XChangeWindowAttributes (data->display, border->overlay, CWBackPixel, &swa);
                 XClearWindow (data->display, border->overlay);
             }
             return;
@@ -765,7 +767,9 @@ gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t colo
         if (b && b->overlay)
         {
             b->color = color;
-            XSetWindowBackground (data->display, b->overlay, color & 0x00FFFFFF);
+            XSetWindowAttributes swa;
+            swa.background_pixel = color & 0x00FFFFFF;
+            XChangeWindowAttributes (data->display, b->overlay, CWBackPixel, &swa);
             XClearWindow (data->display, b->overlay);
         }
     }
