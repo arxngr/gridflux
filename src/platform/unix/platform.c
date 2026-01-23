@@ -158,7 +158,6 @@ gf_platform_create (void)
     platform->create_workspace = gf_platform_create_workspace;
     platform->is_window_valid = gf_platform_is_window_valid;
     platform->is_window_excluded = gf_platform_is_window_excluded;
-    platform->is_window_drag = gf_platform_is_window_drag;
     platform->get_active_window = gf_platform_active_window;
     platform->is_window_minimized = gf_platform_is_window_minimized;
     platform->is_fullscreen = gf_platform_is_fullscreen;
@@ -458,100 +457,128 @@ gf_platform_get_frame_extents (Display *dpy, Window win, int *left, int *right, 
     return GF_ERROR_PLATFORM_ERROR;
 }
 
-static Window
-_create_border_overlay (Display *dpy, Window target, gf_color_t color, int thickness)
+static bool
+_get_frame_geometry (Display *dpy, Window target, gf_rect_t *frame_rect)
 {
-    // Get target geometry
     XWindowAttributes attrs;
     if (!XGetWindowAttributes (dpy, target, &attrs))
-    {
-        GF_LOG_ERROR ("Failed to get window attributes for target %lu",
-                      (unsigned long)target);
-        return None;
-    }
+        return false;
 
     int left_ext = 0, right_ext = 0, top_ext = 0, bottom_ext = 0;
     bool is_csd = false;
     gf_platform_get_frame_extents (dpy, target, &left_ext, &right_ext, &top_ext,
                                    &bottom_ext, &is_csd);
 
-    // Calculate overlay geometry
-    // We need absolute coordinates for the overlay since it's override_redirect and child
-    // of root
     Window root = DefaultRootWindow (dpy);
     int abs_x, abs_y;
     Window child;
     if (!XTranslateCoordinates (dpy, target, root, 0, 0, &abs_x, &abs_y, &child))
+        return false;
+
+    if (is_csd)
     {
-        GF_LOG_ERROR ("Failed to translate coordinates for window %lu",
+        frame_rect->x = abs_x + left_ext;
+        frame_rect->y = abs_y + top_ext;
+        frame_rect->width = attrs.width - left_ext - right_ext;
+        frame_rect->height = attrs.height - top_ext - bottom_ext;
+    }
+    else
+    {
+        frame_rect->x = abs_x - left_ext;
+        frame_rect->y = abs_y - top_ext;
+        frame_rect->width = attrs.width + left_ext + right_ext;
+        frame_rect->height = attrs.height + top_ext + bottom_ext;
+    }
+    return true;
+}
+
+static void
+_apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, int frame_w,
+                   int frame_h)
+{
+    int shape_event_base, shape_error_base;
+    if (!XShapeQueryExtension (dpy, &shape_event_base, &shape_error_base))
+    {
+        GF_LOG_WARN ("Shape extension not supported");
+        return;
+    }
+
+    if (w <= 2 * thickness || h <= 2 * thickness)
+        return;
+
+    XRectangle rects[1];
+    rects[0].x = thickness;
+    rects[0].y = thickness;
+    rects[0].width = frame_w;
+    rects[0].height = frame_h;
+
+    XShapeCombineMask (dpy, overlay, ShapeBounding, 0, 0, None, ShapeSet);
+    XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, rects, 1, ShapeSubtract,
+                             Unsorted);
+    XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+    XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+}
+
+static void
+_resize_border_overlay (Display *dpy, gf_border_t *b, const gf_rect_t *frame)
+{
+    if (frame->x == b->last_rect.x && frame->y == b->last_rect.y
+        && frame->width == b->last_rect.width && frame->height == b->last_rect.height)
+    {
+        return;
+    }
+
+    int thickness = b->thickness;
+    int x = frame->x - thickness;
+    int y = frame->y - thickness;
+    int w = frame->width + 2 * thickness;
+    int h = frame->height + 2 * thickness;
+
+    if (w > 0 && h > 0 && x >= SHRT_MIN && y >= SHRT_MIN && x <= SHRT_MAX && y <= SHRT_MAX
+        && w <= USHRT_MAX && h <= USHRT_MAX)
+    {
+        XMoveResizeWindow (dpy, b->overlay, x, y, w, h);
+        _apply_shape_mask (dpy, b->overlay, w, h, thickness, frame->width, frame->height);
+    }
+
+    b->last_rect = *frame;
+}
+
+static Window
+_create_border_overlay (Display *dpy, Window target, gf_color_t color, int thickness)
+{
+    gf_rect_t frame;
+    if (!_get_frame_geometry (dpy, target, &frame))
+    {
+        GF_LOG_ERROR ("Failed to get frame geometry for target %lu",
                       (unsigned long)target);
         return None;
     }
 
-    // Frame position
-    int frame_x, frame_y, frame_w, frame_h;
-
-    if (is_csd)
-    {
-        // For CSD, visible frame is INSIDE the window geometry (shadows are part of
-        // window)
-        frame_x = abs_x + left_ext;
-        frame_y = abs_y + top_ext;
-        frame_w = attrs.width - left_ext - right_ext;
-        frame_h = attrs.height - top_ext - bottom_ext;
-    }
-    else
-    {
-        // For WM decorations, visible frame is OUTSIDE the window geometry
-        frame_x = abs_x - left_ext;
-        frame_y = abs_y - top_ext;
-        frame_w = attrs.width + left_ext + right_ext;
-        frame_h = attrs.height + top_ext + bottom_ext;
-    }
-
     // Validate geometry
-    if (frame_w <= 0 || frame_h <= 0 || thickness < 0)
+    if (frame.width <= 0 || frame.height <= 0 || thickness < 0)
     {
-        GF_LOG_ERROR (
-            "Invalid geometry for border overlay: frame_w=%d, frame_h=%d, thickness=%d",
-            frame_w, frame_h, thickness);
+        GF_LOG_ERROR ("Invalid geometry for border overlay: w=%d, h=%d, thickness=%d",
+                      frame.width, frame.height, thickness);
         return None;
     }
 
-    GF_LOG_INFO ("Border Create: Target %lu, Extents L%d R%d T%d B%d", target, left_ext,
-                 right_ext, top_ext, bottom_ext);
-    GF_LOG_INFO ("Border Create: Frame X%d Y%d W%d H%d", frame_x, frame_y, frame_w,
-                 frame_h);
+    int x = frame.x - thickness;
+    int y = frame.y - thickness;
+    int w = frame.width + 2 * thickness;
+    int h = frame.height + 2 * thickness;
 
-    // Overlay position (Outside the frame by thickness)
-    int x = frame_x - thickness;
-    int y = frame_y - thickness;
-    int w = frame_w + 2 * thickness;
-    int h = frame_h + 2 * thickness;
-
-    // Validate final dimensions
-    if (w <= 0 || h <= 0)
-    {
-        GF_LOG_ERROR ("Invalid overlay dimensions: w=%d, h=%d", w, h);
-        return None;
-    }
-
-    // Get root window attributes to match visual/depth
+    Window root = DefaultRootWindow (dpy);
     XWindowAttributes root_attrs;
     if (!XGetWindowAttributes (dpy, root, &root_attrs))
-    {
-        GF_LOG_ERROR ("Failed to get root window attributes");
         return None;
-    }
 
     XSetWindowAttributes swa;
     swa.override_redirect = True;
-    // Map ARGB to RGB for background pixel
     swa.background_pixel = color & 0x00FFFFFF;
     swa.border_pixel = 0;
     swa.save_under = True;
     swa.colormap = root_attrs.colormap;
-    swa.background_pixmap = None;
     swa.bit_gravity = NorthWestGravity;
 
     Window overlay = XCreateWindow (
@@ -565,40 +592,7 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
         return None;
     }
 
-    // Shape the window: Cut out the middle (The Frame Size)
-    // This is optional - if it fails, we still have a working border overlay
-    int shape_event_base, shape_error_base;
-    bool shape_supported
-        = XShapeQueryExtension (dpy, &shape_event_base, &shape_error_base);
-
-    if (shape_supported && w > 2 * thickness && h > 2 * thickness)
-    {
-        XRectangle rects[1];
-        rects[0].x = thickness;
-        rects[0].y = thickness;
-        rects[0].width = frame_w;
-        rects[0].height = frame_h;
-
-        // Set bounding shape: Rectangle of window MINUS the hole
-        XShapeCombineMask (dpy, overlay, ShapeBounding, 0, 0, None, ShapeSet);
-        XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, rects, 1,
-                                 ShapeSubtract, Unsorted);
-
-        // Make input pass-through (Set Input shape to empty)
-        XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet,
-                                 Unsorted);
-
-        GF_LOG_DEBUG ("Shape operations completed successfully");
-    }
-    else if (!shape_supported)
-    {
-        GF_LOG_WARN ("Shape extension not supported, using solid border");
-    }
-    else
-    {
-        GF_LOG_WARN ("Window too small for shape cutout, using solid border");
-    }
-
+    _apply_shape_mask (dpy, overlay, w, h, thickness, frame.width, frame.height);
     XMapWindow (dpy, overlay);
     return overlay;
 }
@@ -617,6 +611,11 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
     if (data->border_count >= GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES)
     {
         GF_LOG_WARN ("Border limit reached, cannot add more borders");
+        return;
+    }
+
+    if (gf_platform_is_window_excluded (data->display, (Window)window))
+    {
         return;
     }
 
@@ -774,7 +773,6 @@ gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t colo
     XFlush (data->display);
 }
 
-
 void
 gf_platform_update_borders (gf_platform_interface_t *platform)
 {
@@ -783,7 +781,6 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
 
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
     Display *dpy = data->display;
-    Window root = DefaultRootWindow (dpy);
 
     for (int i = 0; i < data->border_count;)
     {
@@ -800,18 +797,13 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
             // Window is definitely gone - removing
             XDestroyWindow (dpy, b->overlay);
             gf_free (b);
-
             // Shift array
             for (int j = i; j < data->border_count - 1; j++)
-            {
                 data->borders[j] = data->borders[j + 1];
-            }
             data->border_count--;
-            continue; // Stay at index i
+            continue;
         }
 
-        // If window is unmapped (minimized or on another workspace)
-        // Note: In GNOME, minimized windows may be mapped but have _NET_WM_STATE_HIDDEN
         if (attrs.map_state == IsUnmapped
             || gf_platform_is_window_minimized (dpy, b->target))
         {
@@ -820,116 +812,68 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
             continue;
         }
 
-        // Window is mapped - ensure overlay is mapped
         XMapWindow (dpy, b->overlay);
 
-        int left_ext = 0, right_ext = 0, top_ext = 0, bottom_ext = 0;
-        bool is_csd = false;
-        gf_platform_get_frame_extents (dpy, b->target, &left_ext, &right_ext, &top_ext,
-                                       &bottom_ext, &is_csd);
-
-        int abs_x, abs_y;
-        Window child;
-        if (!XTranslateCoordinates (dpy, b->target, root, 0, 0, &abs_x, &abs_y, &child))
+        gf_rect_t frame;
+        if (!_get_frame_geometry (dpy, b->target, &frame))
         {
             i++;
             continue;
         }
 
-        int frame_x, frame_y, frame_w, frame_h;
-
-        if (is_csd)
-        {
-            frame_x = abs_x + left_ext;
-            frame_y = abs_y + top_ext;
-            frame_w = attrs.width - left_ext - right_ext;
-            frame_h = attrs.height - top_ext - bottom_ext;
-        }
-        else
-        {
-            frame_x = abs_x - left_ext;
-            frame_y = abs_y - top_ext;
-            frame_w = attrs.width + left_ext + right_ext;
-            frame_h = attrs.height + top_ext + bottom_ext;
-        }
-
-        if (frame_x != b->last_rect.x || frame_y != b->last_rect.y
-            || frame_w != b->last_rect.width || frame_h != b->last_rect.height)
-        {
-            int thickness = b->thickness;
-            int x = frame_x - thickness;
-            int y = frame_y - thickness;
-            int w = frame_w + 2 * thickness;
-            int h = frame_h + 2 * thickness;
-
-            // Validate geometry before configuring window
-            // Use X11 protocol constants instead of magic numbers
-            if (w > 0 && h > 0 && x >= SHRT_MIN && y >= SHRT_MIN && x <= SHRT_MAX
-                && y <= SHRT_MAX && w <= USHRT_MAX && h <= USHRT_MAX)
-            {
-                XMoveResizeWindow (dpy, b->overlay, x, y, w, h);
-            }
-            else
-            {
-                GF_LOG_WARN ("Skipping border update due to invalid geometry: x=%d, "
-                             "y=%d, w=%d, h=%d",
-                             x, y, w, h);
-                continue;
-            }
-
-            if (w > 2 * thickness && h > 2 * thickness)
-            {
-                XRectangle rects[1];
-                rects[0].x = thickness;
-                rects[0].y = thickness;
-                rects[0].width = frame_w;
-                rects[0].height = frame_h;
-
-                XShapeCombineMask (dpy, b->overlay, ShapeBounding, 0, 0, None, ShapeSet);
-                XShapeCombineRectangles (dpy, b->overlay, ShapeBounding, 0, 0, rects, 1,
-                                         ShapeSubtract, Unsorted);
-            }
-
-            b->last_rect.x = frame_x;
-            b->last_rect.y = frame_y;
-            b->last_rect.width = frame_w;
-            b->last_rect.height = frame_h;
-        }
-
+        _resize_border_overlay (dpy, b, &frame);
         i++;
     }
     XFlush (dpy);
 }
 
-const char *
-gf_platform_detect_desktop_environment (void)
+static bool
+_process_window_for_list (Display *display, Window window, gf_platform_atoms_t *atoms,
+                          gf_workspace_id_t *workspace_id, gf_window_info_t *info)
 {
-    const char *xdg_current_desktop = getenv ("XDG_CURRENT_DESKTOP");
-    const char *desktop_session = getenv ("DESKTOP_SESSION");
-    const char *kde_full_session = getenv ("KDE_FULL_SESSION");
-    const char *gnome_session_id = getenv ("GNOME_DESKTOP_SESSION_ID");
+    if (!gf_platform_is_window_valid (display, window))
+        return false;
 
-    if (kde_full_session && strcmp (kde_full_session, "true") == 0)
+    unsigned char *desktop_data = NULL;
+    unsigned long desktop_nitems = 0;
+    if (gf_platform_get_window_property (display, window, atoms->net_wm_desktop,
+                                         XA_CARDINAL, &desktop_data, &desktop_nitems)
+            == GF_SUCCESS
+        && desktop_nitems > 0)
     {
-        return "KDE";
+        unsigned long window_workspace = *(unsigned long *)desktop_data;
+        XFree (desktop_data);
+
+        if (workspace_id != NULL && *workspace_id >= GF_FIRST_WORKSPACE_ID
+            && (gf_workspace_id_t)window_workspace != *workspace_id)
+        {
+            return false;
+        }
     }
-    else if (gnome_session_id
-             || (xdg_current_desktop && strstr (xdg_current_desktop, "GNOME")))
-    {
-        return "GNOME";
-    }
-    else if (xdg_current_desktop)
-    {
-        return xdg_current_desktop;
-    }
-    else if (desktop_session)
-    {
-        return desktop_session;
-    }
-    else
-    {
-        return "Unknown";
-    }
+
+    gf_rect_t geometry;
+    if (gf_platform_get_window_geometry (display, window, &geometry) != GF_SUCCESS)
+        return false;
+
+    bool is_maximized = gf_platform_window_has_state (display, window,
+                                                      atoms->net_wm_state_maximized_horz)
+                        || gf_platform_window_has_state (
+                            display, window, atoms->net_wm_state_maximized_vert);
+
+    bool is_excluded = gf_platform_is_window_excluded (display, window);
+
+    gf_workspace_id_t resolved_workspace
+        = (workspace_id != NULL) ? *workspace_id : GF_FIRST_WORKSPACE_ID;
+
+    *info = (gf_window_info_t){ .id = (gf_window_id_t)window,
+                                .native_handle = window,
+                                .workspace_id = resolved_workspace,
+                                .geometry = geometry,
+                                .is_maximized = is_maximized,
+                                .needs_update = false,
+                                .is_valid = !is_excluded,
+                                .last_modified = time (NULL) };
+    return true;
 }
 
 gf_error_code_t
@@ -966,56 +910,12 @@ gf_platform_get_windows (gf_display_t display, gf_workspace_id_t *workspace_id,
 
     for (unsigned long i = 0; i < nitems; i++)
     {
-        Window window = window_list[i];
-
-        if (!gf_platform_is_window_valid (display, window))
+        gf_window_info_t info;
+        if (_process_window_for_list (display, window_list[i], atoms, workspace_id,
+                                      &info))
         {
-            continue;
+            filtered_windows[filtered_count++] = info;
         }
-
-        unsigned char *desktop_data = NULL;
-        unsigned long desktop_nitems = 0;
-        if (gf_platform_get_window_property (display, window, atoms->net_wm_desktop,
-                                             XA_CARDINAL, &desktop_data, &desktop_nitems)
-                == GF_SUCCESS
-            && desktop_nitems > 0)
-        {
-            unsigned long window_workspace = *(unsigned long *)desktop_data;
-            XFree (desktop_data);
-
-            if (workspace_id != NULL && *workspace_id >= GF_FIRST_WORKSPACE_ID
-                && (gf_workspace_id_t)window_workspace != *workspace_id)
-            {
-                continue;
-            }
-        }
-
-        gf_rect_t geometry;
-        if (gf_platform_get_window_geometry (display, window, &geometry) != GF_SUCCESS)
-        {
-            continue;
-        }
-
-        bool is_maximized = gf_platform_window_has_state (
-                                display, window, atoms->net_wm_state_maximized_horz)
-                            || gf_platform_window_has_state (
-                                display, window, atoms->net_wm_state_maximized_vert);
-
-        bool is_valid = gf_platform_is_window_excluded (display, window) == false;
-
-        gf_workspace_id_t resolved_workspace
-            = (workspace_id != NULL) ? *workspace_id : GF_FIRST_WORKSPACE_ID;
-
-        filtered_windows[filtered_count]
-            = (gf_window_info_t){ .id = (gf_window_id_t)window,
-                                  .native_handle = window,
-                                  .workspace_id = resolved_workspace,
-                                  .geometry = geometry,
-                                  .is_maximized = is_maximized,
-                                  .needs_update = false,
-                                  .is_valid = is_valid,
-                                  .last_modified = time (NULL) };
-        filtered_count++;
     }
 
     XFree (data);
@@ -1180,6 +1080,7 @@ gf_platform_is_window_valid (gf_display_t display, gf_native_window_t window)
 }
 
 bool
+
 gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
 {
     if (!display || window == None)
@@ -1187,8 +1088,6 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
 
     char name[256] = { 0 };
     gf_platform_get_window_name (display, window, name, sizeof (name));
-    
-    // GF_LOG_DEBUG ("Checking exclusion for window: '%s' (0x%lx)", name, (unsigned long)window);
 
     /* Exclude our own app */
     if (strstr (name, "GridFlux") != NULL)
@@ -1227,104 +1126,6 @@ gf_platform_is_fullscreen (gf_display_t display, gf_native_window_t window)
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     return gf_platform_window_has_state (display, (Window)window,
                                          atoms->net_wm_state_fullscreen);
-}
-
-gf_error_code_t
-gf_platform_is_window_drag (gf_display_t display, gf_native_window_t window,
-                            gf_rect_t *geometry)
-{
-    memset (geometry, 0, sizeof (*geometry));
-
-    Window root = DefaultRootWindow (display);
-    Window root_return, parent_return;
-    Window *children = NULL;
-    unsigned int nchildren = 0;
-
-    if (!XQueryTree (display, root, &root_return, &parent_return, &children, &nchildren))
-    {
-        GF_LOG_ERROR ("Failed to get window list\n");
-        return GF_ERROR_PLATFORM_ERROR;
-    }
-
-    int *initial_x = gf_malloc (nchildren * sizeof (int));
-    int *initial_y = gf_malloc (nchildren * sizeof (int));
-    Bool *valid = gf_malloc (nchildren * sizeof (Bool));
-
-    for (unsigned int i = 0; i < nchildren; i++)
-    {
-        Window child;
-        unsigned int width, height, border_width, depth;
-
-        valid[i] = XGetGeometry (display, children[i], &child, &initial_x[i],
-                                 &initial_y[i], &width, &height, &border_width, &depth);
-
-        if (valid[i])
-        {
-            // Convert to absolute screen coords
-            int abs_x = 0, abs_y = 0;
-            Window dummy;
-            XTranslateCoordinates (display, children[i], root, 0, 0, &abs_x, &abs_y,
-                                   &dummy);
-            initial_x[i] = abs_x;
-            initial_y[i] = abs_y;
-        }
-    }
-
-    while (1)
-    {
-        Window child_return;
-        int root_x, root_y, win_x, win_y;
-        unsigned int mask;
-
-        if (XQueryPointer (display, root, &root_return, &child_return, &root_x, &root_y,
-                           &win_x, &win_y, &mask))
-        {
-            if (mask & Button1Mask)
-            {
-                for (unsigned int i = 0; i < nchildren; i++)
-                {
-                    if (!valid[i])
-                        continue;
-
-                    Window child;
-                    int x, y;
-                    unsigned int width, height, border_width, depth;
-
-                    if (XGetGeometry (display, children[i], &child, &x, &y, &width,
-                                      &height, &border_width, &depth))
-                    {
-                        // Translate coordinates to root
-                        int abs_x = 0, abs_y = 0;
-                        Window dummy;
-                        XTranslateCoordinates (display, children[i], root, 0, 0, &abs_x,
-                                               &abs_y, &dummy);
-
-                        if (abs_x != initial_x[i] || abs_y != initial_y[i])
-                        {
-                            geometry->x = abs_x;
-                            geometry->y = abs_y;
-                            geometry->width = (gf_dimension_t)width;
-                            geometry->height = (gf_dimension_t)height;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        usleep (20000); // 20ms delay
-    }
-
-    gf_free (initial_x);
-    gf_free (initial_y);
-    gf_free (valid);
-    if (children)
-        XFree (children);
-
-    return GF_SUCCESS;
 }
 
 gf_error_code_t

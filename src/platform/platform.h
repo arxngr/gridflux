@@ -32,8 +32,6 @@ struct gf_platform_interface
     gf_error_code_t (*get_screen_bounds) (gf_display_t display, gf_rect_t *bounds);
     bool (*is_window_valid) (gf_display_t display, gf_native_window_t window);
     bool (*is_window_excluded) (gf_display_t display, gf_native_window_t window);
-    gf_error_code_t (*is_window_drag) (gf_display_t display, gf_native_window_t window,
-                                       gf_rect_t *geometry);
     gf_error_code_t (*remove_workspace) (gf_display_t display,
                                          gf_workspace_id_t workspace_id);
     gf_window_id_t (*get_active_window) (gf_display_t display);

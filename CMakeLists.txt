@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(gridflux VERSION 0.1.0 LANGUAGES C)
+project(gridflux VERSION 0.1.2 LANGUAGES C)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_STANDARD 99)
