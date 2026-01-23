@@ -620,6 +620,11 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
         return;
     }
 
+    if (gf_platform_is_window_excluded (data->display, (Window)window))
+    {
+        return;
+    }
+
     // Check if border already exists for this window
     for (int i = 0; i < data->border_count; i++)
     {
@@ -769,6 +774,7 @@ gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t colo
     XFlush (data->display);
 }
 
+
 void
 gf_platform_update_borders (gf_platform_interface_t *platform)
 {
@@ -888,18 +894,6 @@ gf_platform_update_borders (gf_platform_interface_t *platform)
             b->last_rect.y = frame_y;
             b->last_rect.width = frame_w;
             b->last_rect.height = frame_h;
-        }
-
-        // Only raise the border if its target is the active window
-        if (gf_platform_active_window (dpy) == b->target)
-        {
-            XRaiseWindow (dpy, b->overlay);
-        }
-        else
-        {
-            // Try to keep it just above the target window
-            Window windows[2] = { b->target, b->overlay };
-            XRestackWindows (dpy, windows, 2);
         }
 
         i++;
@@ -1193,9 +1187,11 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
 
     char name[256] = { 0 };
     gf_platform_get_window_name (display, window, name, sizeof (name));
+    
+    // GF_LOG_DEBUG ("Checking exclusion for window: '%s' (0x%lx)", name, (unsigned long)window);
 
     /* Exclude our own app */
-    if (strcmp (name, "GridFlux") == 0)
+    if (strstr (name, "GridFlux") != NULL)
         return true;
 
     if (_is_screenshot_app (display, window))
