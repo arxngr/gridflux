@@ -1246,18 +1246,28 @@ gf_platform_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
     bool is_csd = false;
     
     // We try to get frame extents. If we have them, we must adjust our target position.
-    // If we want the Frame at (rect.x, rect.y), the Client must be at (rect.x + left, rect.y + top).
     if (gf_platform_get_frame_extents(dpy, win, &left, &right, &top, &bottom, &is_csd) == GF_SUCCESS) {
-        if (!is_csd) { // Only adjust for server-side decorations
+        if (is_csd) { 
+            // Client Side Decorations (GTK, etc.)
+            // The X Window includes the shadows/borders defined by extents.
+            // To make the VISUAL content match the grid 'rect', we must EXPAND the X Window.
+            // so that the shadows hang 'outside' the grid cell.
+            rect.x -= left;
+            rect.y -= top;
+            rect.width += (left + right);
+            rect.height += (top + bottom);
+        } else { 
+            // Server Side Decorations (Standard X11)
+            // The X Window is just the content. The WM adds the frame.
+            // The grid 'rect' includes the frame.
+            // So we must SHRINK the Client X Window so it fits inside the frame.
             rect.x += left;
             rect.y += top;
-            // Width/Height in MoveResize are usually for the Client, keeping them as is (unless we want to shrink content to fit frame in bounds)
-            // But usually tiling managers define the "slot" for the whole window including border.
-            // So Client Width = rect.width - left - right.
             rect.width -= (left + right);
             rect.height -= (top + bottom);
         }
     }
+
 
     // Use StaticGravity (10) to force the WM to place the client at exactly x, y
     // This removes ambiguity about how NorthWestGravity is interpreted relative to frames.
