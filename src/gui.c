@@ -901,6 +901,41 @@ _create_dropdown (GtkStringList **model, int width)
 
 #ifdef _WIN32
 static void
+_get_icon_path (char *buffer, size_t size)
+{
+    char exe_path[MAX_PATH];
+    if (GetModuleFileNameA (NULL, exe_path, MAX_PATH) == 0)
+    {
+        strncpy (buffer, "icons\\gridflux.ico", size);
+        return;
+    }
+
+    char *last_slash = strrchr (exe_path, '\\');
+    if (last_slash)
+    {
+        *last_slash = '\0';
+    }
+
+    // Check same dir as exe
+    snprintf (buffer, size, "%s\\gridflux.ico", exe_path);
+    if (GetFileAttributesA (buffer) != INVALID_FILE_ATTRIBUTES)
+        return;
+
+    // Check icons/ dir in same dir as exe
+    snprintf (buffer, size, "%s\\icons\\gridflux.ico", exe_path);
+    if (GetFileAttributesA (buffer) != INVALID_FILE_ATTRIBUTES)
+        return;
+
+    // Check ../icons/ dir (if in bin/ or build/)
+    snprintf (buffer, size, "%s\\..\\icons\\gridflux.ico", exe_path);
+    if (GetFileAttributesA (buffer) != INVALID_FILE_ATTRIBUTES)
+        return;
+
+    // Fallback to relative path
+    strncpy (buffer, "icons\\gridflux.ico", size);
+}
+
+static void
 _setup_tray_icon (gf_gtk_app_widget_t *app, HWND hwnd)
 {
     memset (&app->tray_data, 0, sizeof (NOTIFYICONDATA));
@@ -909,10 +944,14 @@ _setup_tray_icon (gf_gtk_app_widget_t *app, HWND hwnd)
     app->tray_data.uID = 1;
     app->tray_data.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     app->tray_data.uCallbackMessage = WM_TRAYICON;
+
+    char icon_path[MAX_PATH];
+    _get_icon_path (icon_path, MAX_PATH);
+
     HICON hIcon = LoadIcon (GetModuleHandle (NULL), MAKEINTRESOURCE (IDI_ICON1));
     if (!hIcon)
     {
-        hIcon = (HICON)LoadImageA (NULL, "..\\icons\\gridflux.ico", IMAGE_ICON, 0, 0,
+        hIcon = (HICON)LoadImageA (NULL, icon_path, IMAGE_ICON, 0, 0,
                                    LR_LOADFROMFILE | LR_DEFAULTSIZE);
     }
     app->tray_data.hIcon = hIcon;
@@ -1013,10 +1052,13 @@ _on_window_realize (GtkWidget *widget, gpointer user_data)
     HWND hwnd = GDK_SURFACE_HWND (surface);
     if (hwnd)
     {
+        char icon_path[MAX_PATH];
+        _get_icon_path (icon_path, MAX_PATH);
+
         HICON hIcon = LoadIcon (GetModuleHandle (NULL), MAKEINTRESOURCE (IDI_ICON1));
         if (!hIcon)
         {
-            hIcon = (HICON)LoadImageA (NULL, "icons\\gridflux.ico", IMAGE_ICON, 0, 0,
+            hIcon = (HICON)LoadImageA (NULL, icon_path, IMAGE_ICON, 0, 0,
                                        LR_LOADFROMFILE | LR_DEFAULTSIZE);
         }
 
