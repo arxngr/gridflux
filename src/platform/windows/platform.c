@@ -126,6 +126,7 @@ _is_excluded_class (const char *class_name, const char *title)
             "Windows.UI.Composition.DesktopWindowContentBridge",
             "Xaml",
             "Overflow",
+            "SDL_app",
             "ApplicationFrameWindow" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
