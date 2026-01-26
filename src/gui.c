@@ -12,6 +12,7 @@
 #include <gdk/win32/gdkwin32.h>
 #include <windows.h>
 #define IDI_ICON1 101
+#define WM_TRAYICON (WM_USER + 1)
 #endif
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gtk/gtk.h>
@@ -42,6 +43,8 @@ typedef struct
     GtkStringList *target_ws_model;
 #ifdef _WIN32
     gboolean operation_in_progress;
+    NOTIFYICONDATA tray_data;
+    WNDPROC prev_wnd_proc;
 #endif
 } gf_gtk_app_widget_t;
 
@@ -83,6 +86,10 @@ static gboolean _handle_refresh_response (gpointer user_data);
 static void _run_refresh_async (gf_gtk_app_widget_t *app);
 static void _run_command_async (gf_gtk_app_widget_t *app, const char *command,
                                 gboolean should_refresh, gboolean show_dialog);
+static void _setup_tray_icon (gf_gtk_app_widget_t *app, HWND hwnd);
+static void _remove_tray_icon (gf_gtk_app_widget_t *app);
+static LRESULT CALLBACK _tray_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam,
+                                        LPARAM lparam);
 #endif
 
 // Check if window is GridFlux itself
@@ -892,9 +899,112 @@ _create_dropdown (GtkStringList **model, int width)
     return dropdown;
 }
 
+#ifdef _WIN32
+static void
+_setup_tray_icon (gf_gtk_app_widget_t *app, HWND hwnd)
+{
+    memset (&app->tray_data, 0, sizeof (NOTIFYICONDATA));
+    app->tray_data.cbSize = sizeof (NOTIFYICONDATA);
+    app->tray_data.hWnd = hwnd;
+    app->tray_data.uID = 1;
+    app->tray_data.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    app->tray_data.uCallbackMessage = WM_TRAYICON;
+    HICON hIcon = LoadIcon (GetModuleHandle (NULL), MAKEINTRESOURCE (IDI_ICON1));
+    if (!hIcon)
+    {
+        hIcon = (HICON)LoadImageA (NULL, "..\\icons\\gridflux.ico", IMAGE_ICON, 0, 0,
+                                   LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    }
+    app->tray_data.hIcon = hIcon;
+    strcpy (app->tray_data.szTip, "GridFlux Control Panel");
+
+    Shell_NotifyIcon (NIM_ADD, &app->tray_data);
+
+    // Subclass the window to handle tray messages
+    SetProp (hwnd, "GF_APP_PTR", (HANDLE)app);
+    app->prev_wnd_proc
+        = (WNDPROC)SetWindowLongPtr (hwnd, GWLP_WNDPROC, (LONG_PTR)_tray_wnd_proc);
+}
+
+static void
+_remove_tray_icon (gf_gtk_app_widget_t *app)
+{
+    Shell_NotifyIcon (NIM_DELETE, &app->tray_data);
+}
+
+static LRESULT CALLBACK
+_tray_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    gf_gtk_app_widget_t *app = (gf_gtk_app_widget_t *)GetProp (hwnd, "GF_APP_PTR");
+
+    if (msg == WM_TRAYICON)
+    {
+        if (lparam == WM_LBUTTONDBLCLK)
+        {
+            if (gtk_widget_get_visible (app->window))
+                gtk_widget_set_visible (app->window, FALSE);
+            else
+            {
+                gtk_widget_set_visible (app->window, TRUE);
+                gtk_window_present (GTK_WINDOW (app->window));
+                SetForegroundWindow (hwnd);
+            }
+            return 0;
+        }
+        else if (lparam == WM_RBUTTONUP)
+        {
+            POINT pt;
+            GetCursorPos (&pt);
+            HMENU hMenu = CreatePopupMenu ();
+            if (hMenu)
+            {
+                InsertMenu (hMenu, 0, MF_BYPOSITION | MF_STRING, 1,
+                            gtk_widget_get_visible (app->window) ? "Hide" : "Show");
+                InsertMenu (hMenu, 1, MF_BYPOSITION | MF_STRING, 2, "Exit");
+
+                SetForegroundWindow (hwnd);
+                int id = TrackPopupMenu (hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x,
+                                         pt.y, 0, hwnd, NULL);
+                if (id == 1)
+                {
+                    if (gtk_widget_get_visible (app->window))
+                        gtk_widget_set_visible (app->window, FALSE);
+                    else
+                    {
+                        gtk_widget_set_visible (app->window, TRUE);
+                        gtk_window_present (GTK_WINDOW (app->window));
+                        SetForegroundWindow (hwnd);
+                    }
+                }
+                else if (id == 2)
+                {
+                    PostQuitMessage (0);
+                    // Also tell GTK to quit
+                    g_application_quit (G_APPLICATION (
+                        gtk_window_get_application (GTK_WINDOW (app->window))));
+                }
+                DestroyMenu (hMenu);
+            }
+            return 0;
+        }
+    }
+    else if (msg == WM_DESTROY)
+    {
+        _remove_tray_icon (app);
+        RemoveProp (hwnd, "GF_APP_PTR");
+    }
+
+    if (app && app->prev_wnd_proc)
+        return CallWindowProc (app->prev_wnd_proc, hwnd, msg, wparam, lparam);
+
+    return DefWindowProc (hwnd, msg, wparam, lparam);
+}
+#endif
+
 static void
 _on_window_realize (GtkWidget *widget, gpointer user_data)
 {
+    gf_gtk_app_widget_t *app = (gf_gtk_app_widget_t *)user_data;
     GdkSurface *surface = gtk_native_get_surface (GTK_NATIVE (widget));
     if (!surface)
         return;
@@ -904,6 +1014,12 @@ _on_window_realize (GtkWidget *widget, gpointer user_data)
     if (hwnd)
     {
         HICON hIcon = LoadIcon (GetModuleHandle (NULL), MAKEINTRESOURCE (IDI_ICON1));
+        if (!hIcon)
+        {
+            hIcon = (HICON)LoadImageA (NULL, "icons\\gridflux.ico", IMAGE_ICON, 0, 0,
+                                       LR_LOADFROMFILE | LR_DEFAULTSIZE);
+        }
+
         if (hIcon)
         {
             SendMessage (hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
@@ -914,6 +1030,8 @@ _on_window_realize (GtkWidget *widget, gpointer user_data)
         {
             g_warning ("Failed to load icon resource");
         }
+
+        _setup_tray_icon (app, hwnd);
     }
 #endif
 
@@ -969,8 +1087,18 @@ _setup_window_icon (GtkWidget *window)
         g_object_set_data_full (G_OBJECT (window), "window_icon", icon, g_object_unref);
     }
 
-    g_signal_connect (window, "realize", G_CALLBACK (_on_window_realize), NULL);
+    g_signal_connect (window, "realize", G_CALLBACK (_on_window_realize),
+                      g_object_get_data (G_OBJECT (window), "gf_widgets"));
 }
+
+#ifdef _WIN32
+static gboolean
+_on_window_close_request (GtkWindow *window, gpointer user_data)
+{
+    gtk_widget_set_visible (GTK_WIDGET (window), FALSE);
+    return TRUE; // Stop the signal from propagating (prevents closing)
+}
+#endif
 
 static void
 _create_control_panel (GtkWidget *main, gf_gtk_app_widget_t *widgets)
@@ -1033,7 +1161,13 @@ _gf_gtk_activate (GtkApplication *app, gpointer user_data)
                                  WINDOW_HEIGHT);
     gtk_window_set_resizable (GTK_WINDOW (widgets->window), TRUE);
 
+    g_object_set_data (G_OBJECT (widgets->window), "gf_widgets", widgets);
     _setup_window_icon (widgets->window);
+
+#ifdef _WIN32
+    g_signal_connect (widgets->window, "close-request",
+                      G_CALLBACK (_on_window_close_request), widgets);
+#endif
 
     GtkWidget *main = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
     gtk_window_set_child (GTK_WINDOW (widgets->window), main);
