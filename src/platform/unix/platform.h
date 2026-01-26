@@ -14,11 +14,7 @@ typedef struct
     int screen;
     Window root_window;
     Display *display;
-    bool use_kwin_backend;
-#ifdef GF_KWIN_SUPPORT
-    void *kwin_dbus_conn; // DBusConnection*
-    char *kwin_script_name;
-#endif
+
     gf_border_t **borders;
     int border_count;
 } gf_linux_platform_data_t;
@@ -61,13 +57,7 @@ gf_error_code_t gf_platform_unminimize_window (gf_display_t display,
                                                gf_window_id_t window);
 void gf_platform_get_window_name (gf_display_t display, gf_native_window_t win,
                                   char *buffer, size_t bufsize);
-static gf_error_code_t gf_platform_noop_get_screen_bounds (gf_display_t display,
-                                                           gf_rect_t *bounds);
-static gf_error_code_t gf_platform_noop_set_window_geometry (gf_display_t display,
-                                                             gf_native_window_t window,
-                                                             const gf_rect_t *geometry,
-                                                             gf_geometry_flags_t flags,
-                                                             gf_config_t *cfg);
+
 
 gf_error_code_t gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds);
 

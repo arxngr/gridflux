@@ -78,6 +78,7 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
 
     atoms->net_wm_name = XInternAtom (display, "_NET_WM_NAME", False);
     atoms->utf8_string = XInternAtom (display, "UTF8_STRING", False);
+    atoms->net_workarea = XInternAtom (display, "_NET_WORKAREA", False);
 
     g_atoms = *atoms;
     GF_LOG_DEBUG ("Platform atoms initialized successfully");

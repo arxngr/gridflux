@@ -3,8 +3,8 @@
 #include "../../logger.h"
 #include "../../memory.h"
 #include "../../types.h"
-#include "backend.h"
 #include "platform_compat.h"
+
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -119,6 +119,22 @@ _window_has_excluded_type (gf_display_t display, gf_native_window_t window)
     return false;
 }
 
+static gf_error_code_t
+_remove_size_constraints (Display *dpy, Window win)
+{
+    XSizeHints *hints = XAllocSizeHints ();
+    if (!hints)
+        return GF_ERROR_MEMORY_ALLOCATION;
+    hints->flags = 0;
+    hints->min_width = 1;
+    hints->min_height = 1;
+    hints->max_width = INT_MAX;
+    hints->max_height = INT_MAX;
+    XSetWMNormalHints (dpy, win, hints);
+    XFree (hints);
+    return GF_SUCCESS;
+}
+
 static int
 gf_platform_error_handler (Display *display, XErrorEvent *error)
 {
@@ -170,36 +186,10 @@ gf_platform_create (void)
 
     platform->platform_data = data;
 
-    gf_desktop_env_t env = gf_detect_desktop_env ();
-    switch (env)
-    {
-    case GF_DE_GNOME:
-        GF_LOG_INFO ("Using GNOME Extensions backend for tilling");
-        platform->get_screen_bounds = gf_platform_noop_get_screen_bounds;
-        platform->set_window_geometry = gf_platform_noop_set_window_geometry;
-        break;
+    // KWin/GNOME backend logic removed - strictly X11
+    platform->get_screen_bounds = gf_platform_get_screen_bounds;
+    platform->set_window_geometry = gf_platform_set_window_geometry;
 
-    default:
-        platform->get_screen_bounds = gf_platform_get_screen_bounds;
-        platform->set_window_geometry = gf_platform_set_window_geometry;
-        break;
-    }
-
-    gf_backend_type_t backend = gf_detect_backend ();
-    data->use_kwin_backend = false;
-
-#ifdef GF_KWIN_SUPPORT
-    if (backend == GF_BACKEND_KWIN_QML)
-    {
-        GF_LOG_INFO ("Using KWin QML backend for tiling");
-        data->use_kwin_backend = true;
-
-        platform->get_screen_bounds = gf_platform_noop_get_screen_bounds;
-        platform->set_window_geometry = gf_platform_noop_set_window_geometry;
-
-        return platform;
-    }
-#endif
 
     return platform;
 }
@@ -245,7 +235,7 @@ gf_platform_init (gf_platform_interface_t *platform, gf_display_t *display)
         return result;
     }
 
-    // Initialize borders array (Do this before KWin init might return)
+    // Initialize borders array
     data->borders = gf_calloc (GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES,
                                sizeof (gf_border_t *));
     if (!data->borders)
@@ -254,14 +244,6 @@ gf_platform_init (gf_platform_interface_t *platform, gf_display_t *display)
         return GF_ERROR_MEMORY_ALLOCATION;
     }
     data->border_count = 0;
-
-#ifdef GF_KWIN_SUPPORT
-    // If KWin backend, also initialize D-Bus and load script
-    if (data->use_kwin_backend)
-    {
-        return gf_kwin_platform_init (platform);
-    }
-#endif
 
     GF_LOG_INFO ("Platform initialized successfully");
     return GF_SUCCESS;
@@ -281,15 +263,6 @@ gf_platform_cleanup (gf_display_t display, gf_platform_interface_t *platform)
         return;
 
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
-
-#ifdef GF_KWIN_SUPPORT
-    if (data->use_kwin_backend)
-    {
-        gf_kwin_platform_cleanup (platform);
-        /* Give KWin time to release X resources */
-        usleep (100 * 1000); // 100ms
-    }
-#endif
 
     if (display)
     {
@@ -638,7 +611,8 @@ gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window_t wi
             {
                 XSetWindowAttributes swa;
                 swa.background_pixel = color & 0x00FFFFFF;
-                XChangeWindowAttributes (data->display, border->overlay, CWBackPixel, &swa);
+                XChangeWindowAttributes (data->display, border->overlay, CWBackPixel,
+                                         &swa);
                 XClearWindow (data->display, border->overlay);
             }
             return;
@@ -1002,7 +976,7 @@ gf_platform_get_current_workspace (gf_display_t display)
         return workspace;
     }
 
-    return GF_FIRST_WORKSPACE_ID; // Default to workspace 1
+    return 0; // Default to workspace 0 (0-indexed EWMH)
 }
 
 uint32_t
@@ -1141,53 +1115,109 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
     int screen = DefaultScreen (dpy);
     Window root = DefaultRootWindow (dpy);
     Screen *scr = ScreenOfDisplay (dpy, screen);
-
     int sw = scr->width;
     int sh = scr->height;
-
+    
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
 
-    int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
-    Atom type;
-    int format;
-    unsigned long count, bytes_after;
-    Window *clients = NULL;
+    // Initialize with full screen
+    bounds->x = 0;
+    bounds->y = 0;
+    bounds->width = sw;
+    bounds->height = sh;
 
-    if (XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 2048, False, XA_WINDOW,
-                            &type, &format, &count, &bytes_after,
-                            (unsigned char **)&clients)
-            == Success
-        && clients)
+    bool workarea_valid = false;
+
+    // Try _NET_WORKAREA first
+    unsigned char *data = NULL;
+    unsigned long nitems = 0;
+    
+    if (gf_platform_get_window_property (dpy, root, atoms->net_workarea, XA_CARDINAL,
+                                         &data, &nitems)
+            == GF_SUCCESS
+        && data && nitems >= 4)
     {
-        for (unsigned long i = 0; i < count; i++)
-        {
-            long *strut = NULL;
-            unsigned long nitems = 0;
+        // _NET_WORKAREA is an array of 4 integers (x, y, w, h) per desktop
+        const int EWMH_WORKAREA_STRIDE = 4;
+        gf_workspace_id_t workspace = gf_platform_get_current_workspace (dpy);
+        unsigned long offset = workspace * EWMH_WORKAREA_STRIDE;
 
-            if (gf_platform_get_window_property (dpy, clients[i],
-                                                 atoms->net_wm_strut_partial, XA_CARDINAL,
-                                                 (unsigned char **)&strut, &nitems)
-                    == GF_SUCCESS
-                && strut && nitems >= 12)
+        // Ensure we don't go out of bounds
+        if (offset + (EWMH_WORKAREA_STRIDE - 1) < nitems)
+
+        {
+            long *workarea = (long *)data;
+            // Validate workarea makes sense (smaller than screen, non-zero)
+            if (workarea[offset + 2] > 0 && workarea[offset + 3] > 0 &&
+                (workarea[offset + 1] > 0 || workarea[offset+2] < sw || workarea[offset+3] < sh)) 
             {
-                if (strut[0] > panel_left)
-                    panel_left = strut[0];
-                if (strut[1] > panel_right)
-                    panel_right = strut[1];
-                if (strut[2] > panel_top)
-                    panel_top = strut[2];
-                if (strut[3] > panel_bottom)
-                    panel_bottom = strut[3];
-                XFree (strut);
+                bounds->x = workarea[offset];
+                bounds->y = workarea[offset + 1];
+                bounds->width = workarea[offset + 2];
+                bounds->height = workarea[offset + 3];
+                workarea_valid = true;
             }
         }
-        XFree (clients);
+    }
+    
+    if (data)
+        XFree (data);
+
+    // If Workarea gave full screen (or failed), try Struts to be safe
+    if (!workarea_valid || (bounds->x == 0 && bounds->y == 0 && bounds->width == sw && bounds->height == sh))
+    {
+        int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
+        unsigned char *clients_data = NULL;
+        unsigned long clients_count = 0;
+        Atom actual_type;
+        int actual_format;
+        unsigned long bytes_after;
+
+        if ((XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 4096, False, XA_WINDOW,
+                                &actual_type, &actual_format, &clients_count, &bytes_after,
+                                &clients_data) 
+            == Success) && clients_data)
+        {
+            Window *clients = (Window *)clients_data;
+            for (unsigned long i = 0; i < clients_count; i++)
+            {
+                long *strut = NULL;
+                unsigned long nitems_strut = 0;
+
+                if (gf_platform_get_window_property (dpy, clients[i],
+                                                     atoms->net_wm_strut_partial, XA_CARDINAL,
+                                                     (unsigned char **)&strut, &nitems_strut)
+                        == GF_SUCCESS
+                    && strut && nitems_strut >= 12)
+                {
+                    if (strut[0] > panel_left) panel_left = strut[0];
+                    if (strut[1] > panel_right) panel_right = strut[1];
+                    if (strut[2] > panel_top) panel_top = strut[2];
+                    if (strut[3] > panel_bottom) panel_bottom = strut[3];
+                    XFree (strut);
+                }
+                else if (strut) { XFree(strut); }
+            }
+            XFree (clients_data);
+        }
+
+        // If Struts found reserved space, use it (intersect with current bounds if valid, else replace)
+        if (panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0)
+        {
+            // Struts are reserved space logic.
+            int new_x = panel_left;
+            int new_y = panel_top;
+            int new_w = sw - panel_left - panel_right;
+            int new_h = sh - panel_top - panel_bottom;
+            
+            // Prefer the "smaller" area (most restrictive)
+            if (new_x > bounds->x) bounds->x = new_x;
+            if (new_y > bounds->y) bounds->y = new_y;
+            if (new_w < bounds->width) bounds->width = new_w;
+            if (new_h < bounds->height) bounds->height = new_h;
+        }
     }
 
-    bounds->x = panel_left;
-    bounds->y = panel_top;
-    bounds->width = sw - panel_left - panel_right;
-    bounds->height = sh - panel_top - panel_bottom;
     return GF_SUCCESS;
 }
 
@@ -1201,14 +1231,49 @@ gf_platform_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
     if (!dpy || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
+    if (_remove_size_constraints (dpy, win) != GF_SUCCESS)
+    {
+        GF_LOG_WARN ("Failed to remove size constraints, continuing anyway");
+    }
+
     gf_rect_t rect = *geometry;
 
     if (flags & GF_GEOMETRY_APPLY_PADDING)
         gf_rect_apply_padding (&rect, cfg->default_padding);
 
+    // Calculate Frame Extents to correctly position the Client window
+    int left = 0, right = 0, top = 0, bottom = 0;
+    bool is_csd = false;
+    
+    // We try to get frame extents. If we have them, we must adjust our target position.
+    if (gf_platform_get_frame_extents(dpy, win, &left, &right, &top, &bottom, &is_csd) == GF_SUCCESS) {
+        if (is_csd) { 
+            // Client Side Decorations (GTK, etc.)
+            // The X Window includes the shadows/borders defined by extents.
+            // To make the VISUAL content match the grid 'rect', we must EXPAND the X Window.
+            // so that the shadows hang 'outside' the grid cell.
+            rect.x -= left;
+            rect.y -= top;
+            rect.width += (left + right);
+            rect.height += (top + bottom);
+        } else { 
+            // Server Side Decorations (Standard X11)
+            // The X Window is just the content. The WM adds the frame.
+            // The grid 'rect' includes the frame.
+            // So we must SHRINK the Client X Window so it fits inside the frame.
+            rect.x += left;
+            rect.y += top;
+            rect.width -= (left + right);
+            rect.height -= (top + bottom);
+        }
+    }
+
+
+    // Use StaticGravity (10) to force the WM to place the client at exactly x, y
+    // This removes ambiguity about how NorthWestGravity is interpreted relative to frames.
     long data[5];
 
-    data[0] = NorthWestGravity | // gravity = NorthWestGravity
+    data[0] = (10) |             // gravity = StaticGravity (10)
               (1 << 8) |         // set x
               (1 << 9) |         // set y
               (1 << 10) |        // set width
@@ -1314,15 +1379,7 @@ gf_platform_unminimize_window (gf_display_t display, Window window)
     if (!atoms)
         return GF_ERROR_PLATFORM_ERROR;
 
-    gf_desktop_env_t env = gf_detect_desktop_env ();
 
-    if (env == GF_DE_KDE)
-    {
-        XMapWindow (display, window);
-        XRaiseWindow (display, window);
-        XFlush (display);
-        return GF_SUCCESS;
-    }
 
     if (atoms->net_wm_state != None && atoms->net_wm_state_hidden != None)
     {
