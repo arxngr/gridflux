@@ -49,6 +49,7 @@ typedef struct
     Atom net_wm_pid;
     Atom net_wm_name;
     Atom utf8_string;
+    Atom net_workarea;
 } gf_platform_atoms_t;
 
 // Atoms management

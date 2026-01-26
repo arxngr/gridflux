@@ -60,8 +60,8 @@ if(UNIX AND NOT APPLE)
 
     file(GLOB_RECURSE PLATFORM_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_SOURCE_DIR}/src/platform/unix/*.c"
-        "${CMAKE_SOURCE_DIR}/src/platform/platform_env.c"
     )
+
 
     set(PLATFORM_LIBRARIES
         ${X11_LIBRARIES}
@@ -75,16 +75,18 @@ if(UNIX AND NOT APPLE)
         ${JSONC_INCLUDE_DIRS}
     )
 
-    if(DBUS_FOUND)
-        file(GLOB_RECURSE KWIN_SOURCES CONFIGURE_DEPENDS
-            "${CMAKE_SOURCE_DIR}/src/platform/unix/kwin/*.c"
-        )
-        list(APPEND PLATFORM_SOURCES ${KWIN_SOURCES})
-        add_definitions(-DGF_KWIN_SUPPORT)
+    # KWin and DBus support removed as per user request
+    # if(DBUS_FOUND)
+    #     file(GLOB_RECURSE KWIN_SOURCES CONFIGURE_DEPENDS
+    #         "${CMAKE_SOURCE_DIR}/src/platform/unix/kwin/*.c"
+    #     )
+    #     list(APPEND PLATFORM_SOURCES ${KWIN_SOURCES})
+    #     add_definitions(-DGF_KWIN_SUPPORT)
+    #
+    #     list(APPEND PLATFORM_LIBRARIES ${DBUS_LIBRARIES})
+    #     list(APPEND PLATFORM_INCLUDES ${DBUS_INCLUDE_DIRS})
+    # endif()
 
-        list(APPEND PLATFORM_LIBRARIES ${DBUS_LIBRARIES})
-        list(APPEND PLATFORM_INCLUDES ${DBUS_INCLUDE_DIRS})
-    endif()
 
     # DEB/RPM packaging
     set(CPACK_GENERATOR "DEB;RPM")

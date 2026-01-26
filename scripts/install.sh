@@ -366,18 +366,15 @@ create_default_config
 create_desktop_entry
 install_icons
 
-if [[ $IS_KDE -eq 1 ]]; then
-    log_info "KDE detected - installing KWin integration"
-    install_kwin_script
-    install_systemd_service
-elif [[ $IS_GNOME -eq 1 ]]; then
+if [[ $IS_GNOME -eq 1 ]]; then
     log_info "GNOME detected - installing GNOME Shell extension"
     install_gnome_extension
     install_systemd_service
 else
-    log_warn "Unknown desktop - installing generic service"
+    log_info "Installing X11 service"
     install_systemd_service
 fi
+
 
 echo ""
 echo "=== Installation Complete ==="
