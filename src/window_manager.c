@@ -1081,7 +1081,6 @@ gf_window_manager_watch (gf_window_manager_t *m)
     if (active_win_id != 0
         && m->platform->is_fullscreen (m->display, (gf_native_window_t)active_win_id))
     {
-        GF_LOG_DEBUG ("FULLSCREEN BG");
         for (uint32_t i = 0; i < windows->count; i++)
         {
             m->platform->minimize_window (m->display, windows->items[i].native_handle);

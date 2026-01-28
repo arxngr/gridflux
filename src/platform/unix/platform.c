@@ -1197,8 +1197,8 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
                         panel_left = strut[0];
                     if (strut[1] > panel_right)
                         panel_right = strut[1];
-                https: // id.atlassian.com/login?continue=https%3A%2F%2Fid.atlassian.com%2Fjoin%2Fuser-access%3Fresource%3Dari%253Acloud%253Aconfluence%253A%253Asite%252F36445227-b48e-4599-afe4-cba426a537ed%26continue%3Dhttps%253A%252F%252Fbvarta-project.atlassian.net%252Fwiki%252Fspaces%252FORB%252Fpages%252F931233793%252FUser%252BData%252BImprovement&application=admin--confluence-atlas-75650&orgId=09118445-k16c-1877-jdc1-akj149j805cb
-                       // if (strut[2] > panel_top) panel_top = strut[2];
+                    if (strut[2] > panel_top)
+                        panel_top = strut[2];
                     if (strut[3] > panel_bottom)
                         panel_bottom = strut[3];
                     XFree (strut);
