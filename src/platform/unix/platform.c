@@ -32,7 +32,7 @@ static bool
 _is_screenshot_app (gf_display_t display, gf_native_window_t window)
 {
     const char *screenshot_classes[]
-        = { "flameshot", "Gnome-screenshot", "Spectacle", "Shutter" };
+        = { "flameshot", "Gnome-screenshot", "Spectacle", "Shutter", "Plasma" };
 
     XClassHint hint;
     if (XGetClassHint (display, window, &hint))
@@ -189,7 +189,6 @@ gf_platform_create (void)
     // KWin/GNOME backend logic removed - strictly X11
     platform->get_screen_bounds = gf_platform_get_screen_bounds;
     platform->set_window_geometry = gf_platform_set_window_geometry;
-
 
     return platform;
 }
@@ -1117,7 +1116,7 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
     Screen *scr = ScreenOfDisplay (dpy, screen);
     int sw = scr->width;
     int sh = scr->height;
-    
+
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
 
     // Initialize with full screen
@@ -1131,7 +1130,7 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
     // Try _NET_WORKAREA first
     unsigned char *data = NULL;
     unsigned long nitems = 0;
-    
+
     if (gf_platform_get_window_property (dpy, root, atoms->net_workarea, XA_CARDINAL,
                                          &data, &nitems)
             == GF_SUCCESS
@@ -1148,8 +1147,9 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
         {
             long *workarea = (long *)data;
             // Validate workarea makes sense (smaller than screen, non-zero)
-            if (workarea[offset + 2] > 0 && workarea[offset + 3] > 0 &&
-                (workarea[offset + 1] > 0 || workarea[offset+2] < sw || workarea[offset+3] < sh)) 
+            if (workarea[offset + 2] > 0 && workarea[offset + 3] > 0
+                && (workarea[offset + 1] > 0 || workarea[offset + 2] < sw
+                    || workarea[offset + 3] < sh))
             {
                 bounds->x = workarea[offset];
                 bounds->y = workarea[offset + 1];
@@ -1159,12 +1159,14 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
             }
         }
     }
-    
+
     if (data)
         XFree (data);
 
     // If Workarea gave full screen (or failed), try Struts to be safe
-    if (!workarea_valid || (bounds->x == 0 && bounds->y == 0 && bounds->width == sw && bounds->height == sh))
+    if (!workarea_valid
+        || (bounds->x == 0 && bounds->y == 0 && bounds->width == sw
+            && bounds->height == sh))
     {
         int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
         unsigned char *clients_data = NULL;
@@ -1173,10 +1175,11 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
         int actual_format;
         unsigned long bytes_after;
 
-        if ((XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 4096, False, XA_WINDOW,
-                                &actual_type, &actual_format, &clients_count, &bytes_after,
-                                &clients_data) 
-            == Success) && clients_data)
+        if ((XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 4096, False,
+                                 XA_WINDOW, &actual_type, &actual_format, &clients_count,
+                                 &bytes_after, &clients_data)
+             == Success)
+            && clients_data)
         {
             Window *clients = (Window *)clients_data;
             for (unsigned long i = 0; i < clients_count; i++)
@@ -1184,24 +1187,32 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
                 long *strut = NULL;
                 unsigned long nitems_strut = 0;
 
-                if (gf_platform_get_window_property (dpy, clients[i],
-                                                     atoms->net_wm_strut_partial, XA_CARDINAL,
-                                                     (unsigned char **)&strut, &nitems_strut)
+                if (gf_platform_get_window_property (
+                        dpy, clients[i], atoms->net_wm_strut_partial, XA_CARDINAL,
+                        (unsigned char **)&strut, &nitems_strut)
                         == GF_SUCCESS
                     && strut && nitems_strut >= 12)
                 {
-                    if (strut[0] > panel_left) panel_left = strut[0];
-                    if (strut[1] > panel_right) panel_right = strut[1];
-                    if (strut[2] > panel_top) panel_top = strut[2];
-                    if (strut[3] > panel_bottom) panel_bottom = strut[3];
+                    if (strut[0] > panel_left)
+                        panel_left = strut[0];
+                    if (strut[1] > panel_right)
+                        panel_right = strut[1];
+                https: // id.atlassian.com/login?continue=https%3A%2F%2Fid.atlassian.com%2Fjoin%2Fuser-access%3Fresource%3Dari%253Acloud%253Aconfluence%253A%253Asite%252F36445227-b48e-4599-afe4-cba426a537ed%26continue%3Dhttps%253A%252F%252Fbvarta-project.atlassian.net%252Fwiki%252Fspaces%252FORB%252Fpages%252F931233793%252FUser%252BData%252BImprovement&application=admin--confluence-atlas-75650&orgId=09118445-k16c-1877-jdc1-akj149j805cb
+                       // if (strut[2] > panel_top) panel_top = strut[2];
+                    if (strut[3] > panel_bottom)
+                        panel_bottom = strut[3];
                     XFree (strut);
                 }
-                else if (strut) { XFree(strut); }
+                else if (strut)
+                {
+                    XFree (strut);
+                }
             }
             XFree (clients_data);
         }
 
-        // If Struts found reserved space, use it (intersect with current bounds if valid, else replace)
+        // If Struts found reserved space, use it (intersect with current bounds if valid,
+        // else replace)
         if (panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0)
         {
             // Struts are reserved space logic.
@@ -1209,12 +1220,16 @@ gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds)
             int new_y = panel_top;
             int new_w = sw - panel_left - panel_right;
             int new_h = sh - panel_top - panel_bottom;
-            
+
             // Prefer the "smaller" area (most restrictive)
-            if (new_x > bounds->x) bounds->x = new_x;
-            if (new_y > bounds->y) bounds->y = new_y;
-            if (new_w < bounds->width) bounds->width = new_w;
-            if (new_h < bounds->height) bounds->height = new_h;
+            if (new_x > bounds->x)
+                bounds->x = new_x;
+            if (new_y > bounds->y)
+                bounds->y = new_y;
+            if (new_w < bounds->width)
+                bounds->width = new_w;
+            if (new_h < bounds->height)
+                bounds->height = new_h;
         }
     }
 
@@ -1244,19 +1259,24 @@ gf_platform_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
     // Calculate Frame Extents to correctly position the Client window
     int left = 0, right = 0, top = 0, bottom = 0;
     bool is_csd = false;
-    
+
     // We try to get frame extents. If we have them, we must adjust our target position.
-    if (gf_platform_get_frame_extents(dpy, win, &left, &right, &top, &bottom, &is_csd) == GF_SUCCESS) {
-        if (is_csd) { 
+    if (gf_platform_get_frame_extents (dpy, win, &left, &right, &top, &bottom, &is_csd)
+        == GF_SUCCESS)
+    {
+        if (is_csd)
+        {
             // Client Side Decorations (GTK, etc.)
             // The X Window includes the shadows/borders defined by extents.
-            // To make the VISUAL content match the grid 'rect', we must EXPAND the X Window.
-            // so that the shadows hang 'outside' the grid cell.
+            // To make the VISUAL content match the grid 'rect', we must EXPAND the X
+            // Window. so that the shadows hang 'outside' the grid cell.
             rect.x -= left;
             rect.y -= top;
             rect.width += (left + right);
             rect.height += (top + bottom);
-        } else { 
+        }
+        else
+        {
             // Server Side Decorations (Standard X11)
             // The X Window is just the content. The WM adds the frame.
             // The grid 'rect' includes the frame.
@@ -1268,16 +1288,16 @@ gf_platform_set_window_geometry (gf_display_t dpy, gf_native_window_t win,
         }
     }
 
-
     // Use StaticGravity (10) to force the WM to place the client at exactly x, y
-    // This removes ambiguity about how NorthWestGravity is interpreted relative to frames.
+    // This removes ambiguity about how NorthWestGravity is interpreted relative to
+    // frames.
     long data[5];
 
-    data[0] = (10) |             // gravity = StaticGravity (10)
-              (1 << 8) |         // set x
-              (1 << 9) |         // set y
-              (1 << 10) |        // set width
-              (1 << 11);         // set height
+    data[0] = (10) |      // gravity = StaticGravity (10)
+              (1 << 8) |  // set x
+              (1 << 9) |  // set y
+              (1 << 10) | // set width
+              (1 << 11);  // set height
 
     data[1] = rect.x;
     data[2] = rect.y;
@@ -1378,8 +1398,6 @@ gf_platform_unminimize_window (gf_display_t display, Window window)
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     if (!atoms)
         return GF_ERROR_PLATFORM_ERROR;
-
-
 
     if (atoms->net_wm_state != None && atoms->net_wm_state_hidden != None)
     {
