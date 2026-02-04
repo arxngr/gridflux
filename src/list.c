@@ -355,6 +355,15 @@ gf_workspace_list_find_free (gf_workspace_list_t *ws, uint32_t max_win_per_ws)
             return info->id;
     }
 
+    return -1;
+}
+
+gf_workspace_id_t
+gf_workspace_create (gf_workspace_list_t *ws, uint32_t max_win_per_ws)
+{
+    if (!ws)
+        return -1;
+
     gf_workspace_info_t info = { .id = ws->count + GF_FIRST_WORKSPACE_ID,
                                  .window_count = 0,
                                  .max_windows = max_win_per_ws,

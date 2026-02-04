@@ -64,4 +64,5 @@ gf_error_code_t gf_window_list_get_by_workspace (const gf_window_list_t *list,
                                                  gf_workspace_id_t workspace_id,
                                                  gf_window_info_t **windows,
                                                  uint32_t *count);
+gf_workspace_id_t gf_workspace_create (gf_workspace_list_t *ws, uint32_t max_win_per_ws);
 #endif
