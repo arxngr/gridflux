@@ -3,11 +3,14 @@
 
 #include "../platform.h"
 #include "atoms.h"
+#include "gesture.h"
 #include <X11/Xlib.h>
 #include <stdbool.h>
 
 // Border structure
 // Linux platform data
+#define GF_MAX_DOCK_WINDOWS 8
+
 typedef struct
 {
     gf_platform_atoms_t atoms;
@@ -17,6 +20,14 @@ typedef struct
 
     gf_border_t **borders;
     int border_count;
+
+    // Dock auto-hide state
+    Window saved_dock_windows[GF_MAX_DOCK_WINDOWS];
+    int saved_dock_count;
+    bool dock_hidden;
+
+    // Gesture state
+    gf_gesture_state_t gesture;
 } gf_linux_platform_data_t;
 
 // Platform interface (Linux implementation)
@@ -58,7 +69,6 @@ gf_error_code_t gf_platform_unminimize_window (gf_display_t display,
 void gf_platform_get_window_name (gf_display_t display, gf_native_window_t win,
                                   char *buffer, size_t bufsize);
 
-
 gf_error_code_t gf_platform_get_screen_bounds (gf_display_t dpy, gf_rect_t *bounds);
 
 gf_error_code_t gf_platform_set_window_geometry (gf_display_t display,
@@ -86,6 +96,10 @@ void gf_platform_set_border_color (gf_platform_interface_t *platform, gf_color_t
 void gf_platform_cleanup_borders (gf_platform_interface_t *platform);
 void gf_platform_remove_border (gf_platform_interface_t *platform,
                                 gf_native_window_t window);
-bool gf_platform_is_fullscreen (gf_display_t display, gf_native_window_t window);
+bool gf_platform_is_window_fullscreen (gf_display_t display, gf_native_window_t window);
+bool gf_platform_is_window_maximized (gf_display_t display, gf_native_window_t window);
+
+void gf_platform_set_dock_autohide (gf_platform_interface_t *platform);
+void gf_platform_restore_dock (gf_platform_interface_t *platform);
 
 #endif // GF_PLATFORM_LINUX_H

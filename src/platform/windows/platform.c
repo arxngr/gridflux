@@ -427,7 +427,7 @@ gf_platform_cleanup_borders (gf_platform_interface_t *platform)
 }
 
 bool
-gf_platform_is_fullscreen (gf_display_t display, gf_native_window_t window)
+gf_platform_is_window_fullscreen (gf_display_t display, gf_native_window_t window)
 {
     (void)display;
     return _is_fullscreen_window ((HWND)window);
@@ -454,10 +454,10 @@ gf_platform_create (void)
     platform->init = gf_platform_init;
     platform->cleanup = gf_platform_cleanup;
     platform->get_windows = gf_platform_get_windows;
-    platform->unmaximize_window = gf_platform_unmaximize_window;
-    platform->window_name_info = gf_platform_get_window_name;
-    platform->minimize_window = gf_platform_minimize_window;
-    platform->unminimize_window = gf_platform_unminimize_window;
+    platform->set_unmaximize_window = gf_platform_unmaximize_window;
+    platform->get_window_name_info = gf_platform_get_window_name;
+    platform->set_minimize_window = gf_platform_minimize_window;
+    platform->set_unminimize_window = gf_platform_unminimize_window;
     platform->get_window_geometry = gf_platform_get_window_geometry;
     platform->get_current_workspace = gf_platform_get_current_workspace;
     platform->get_workspace_count = gf_platform_get_workspace_count;
@@ -468,8 +468,8 @@ gf_platform_create (void)
     platform->get_screen_bounds = gf_platform_get_screen_bounds;
     platform->set_window_geometry = gf_platform_set_window_geometry;
     platform->is_window_minimized = gf_platform_window_minimized;
-    platform->is_fullscreen = gf_platform_is_fullscreen;
-    platform->add_border = gf_platform_add_border;
+    platform->is_window_fullscreen = gf_platform_is_window_fullscreen;
+    platform->set_border = gf_platform_add_border;
     platform->update_border = gf_platform_update_borders;
     platform->cleanup_borders = gf_platform_cleanup_borders;
     platform->is_window_hidden = gf_platform_window_hidden;
