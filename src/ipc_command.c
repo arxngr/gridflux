@@ -36,40 +36,24 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    int ws_filter = -1;
-    sscanf (args, "workspace %d", &ws_filter);
-
+    // Ensure names are populated
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_window_info_t *w = &windows->items[i];
         if (!w->name[0])
         {
-            platform->window_name_info (display, w->native_handle, w->name,
-                                        sizeof (w->name) - 1);
+            platform->get_window_name_info (display, w->native_handle, w->name,
+                                            sizeof (w->name) - 1);
         }
     }
 
-    gf_window_info_t filtered[windows->count];
-    uint32_t filtered_count = 0;
-
-    for (uint32_t i = 0; i < windows->count; i++)
-    {
-        gf_window_info_t *w = &windows->items[i];
-        if (ws_filter == -1 || w->workspace_id == (uint32_t)ws_filter)
-        {
-            filtered[filtered_count++] = *w;
-        }
-    }
-
-    // Write response
     size_t offset = 0;
-    memcpy (response->message + offset, &filtered_count, sizeof (uint32_t));
+    memcpy (response->message + offset, &windows->count, sizeof (uint32_t));
     offset += sizeof (uint32_t);
-    uint32_t capacity = windows->capacity; // keep original capacity
-    memcpy (response->message + offset, &capacity, sizeof (uint32_t));
+    memcpy (response->message + offset, &windows->capacity, sizeof (uint32_t));
     offset += sizeof (uint32_t);
-    memcpy (response->message + offset, filtered,
-            filtered_count * sizeof (gf_window_info_t));
+    memcpy (response->message + offset, windows->items,
+            windows->count * sizeof (gf_window_info_t));
 }
 
 static void
@@ -271,51 +255,6 @@ gf_cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *us
 
     memcpy (response->message, &resp, sizeof (resp));
 }
-
-static void
-gf_cmd_border (const char *args, gf_ipc_response_t *response, void *user_data)
-{
-    gf_window_manager_t *m = (gf_window_manager_t *)user_data;
-    gf_command_response_t resp;
-    resp.type = 0;
-
-    const char *config_path = gf_config_get_path ();
-    if (!config_path)
-    {
-        resp.type = 1;
-        snprintf (resp.message, sizeof (resp.message), "Failed to get config path");
-        memcpy (response->message, &resp, sizeof (resp));
-        return;
-    }
-
-    gf_config_t cfg = load_or_create_config (config_path);
-
-    if (strcmp (args, "on") == 0)
-    {
-        cfg.enable_borders = true;
-    }
-    else if (strcmp (args, "off") == 0)
-    {
-        cfg.enable_borders = false;
-    }
-    else if (strcmp (args, "toggle") == 0 || !*args)
-    {
-        cfg.enable_borders = !cfg.enable_borders;
-    }
-    else
-    {
-        resp.type = 1;
-        snprintf (resp.message, sizeof (resp.message), "Usage: border [on|off|toggle]");
-        memcpy (response->message, &resp, sizeof (resp));
-        return;
-    }
-
-    gf_config_save_config (config_path, &cfg);
-    snprintf (resp.message, sizeof (resp.message), "Borders %s",
-              cfg.enable_borders ? "enabled" : "disabled");
-    memcpy (response->message, &resp, sizeof (resp));
-}
-
 void
 gf_handle_client_message (const char *message, gf_ipc_response_t *response,
                           void *user_data)
@@ -364,10 +303,6 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     else if (strcmp (command, "unlock") == 0)
     {
         gf_cmd_unlock_workspace (args, response, user_data);
-    }
-    else if (strcmp (command, "border") == 0)
-    {
-        gf_cmd_border (args, response, user_data);
     }
     else
     {

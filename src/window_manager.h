@@ -19,6 +19,8 @@ typedef struct
     gf_window_id_t last_active_window;
     gf_workspace_id_t last_active_workspace;
     bool initialized;
+    bool dock_hidden;
+    bool gesture_initialized;
 } gf_window_manager_state_t;
 
 typedef struct
@@ -55,9 +57,6 @@ static gf_error_code_t gf_window_manager_calculate_layout (gf_window_manager_t *
                                                            gf_window_info_t *windows,
                                                            uint32_t window_count,
                                                            gf_rect_t **out_geometries);
-static void gf_window_manager_unmaximize_all (gf_window_manager_t *m,
-                                              gf_window_info_t *windows,
-                                              uint32_t window_count);
 static void gf_window_manager_apply_layout (gf_window_manager_t *m,
                                             gf_window_info_t *windows,
                                             gf_rect_t *geometry, uint32_t window_count);
@@ -75,4 +74,6 @@ gf_error_code_t gf_window_manager_lock_workspace (gf_window_manager_t *m,
 
 gf_error_code_t gf_window_manager_unlock_workspace (gf_window_manager_t *m,
                                                     gf_workspace_id_t workspace_id);
+void gf_window_manager_init_window_list (gf_window_manager_t *m);
+
 #endif // GF_CORE_WINDOW_MANAGER_H

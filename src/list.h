@@ -43,8 +43,8 @@ gf_error_code_t gf_workspace_list_init (gf_workspace_list_t *list,
 void gf_workspace_list_cleanup (gf_workspace_list_t *list);
 gf_error_code_t gf_workspace_list_add (gf_workspace_list_t *list,
                                        const gf_workspace_info_t *workspace);
-gf_workspace_info_t *gf_workspace_list_find (const gf_workspace_list_t *list,
-                                             gf_workspace_id_t workspace_id);
+gf_workspace_info_t *gf_workspace_list_find_by_id (const gf_workspace_list_t *list,
+                                                   gf_workspace_id_t workspace_id);
 
 gf_workspace_info_t *gf_workspace_list_get_current (gf_workspace_list_t *ws);
 
@@ -64,5 +64,10 @@ gf_error_code_t gf_window_list_get_by_workspace (const gf_window_list_t *list,
                                                  gf_workspace_id_t workspace_id,
                                                  gf_window_info_t **windows,
                                                  uint32_t *count);
-gf_workspace_id_t gf_workspace_create (gf_workspace_list_t *ws, uint32_t max_win_per_ws);
+gf_workspace_id_t gf_workspace_create (gf_workspace_list_t *ws, uint32_t max_win_per_ws,
+                                       bool maximized_state);
+bool gf_workspace_list_add_window (gf_workspace_info_t *ws, gf_window_list_t *windows,
+                                   gf_window_id_t win_id);
+bool gf_workspace_list_remove_window (gf_workspace_info_t *ws, gf_window_list_t *windows,
+                                      gf_window_id_t win_id);
 #endif

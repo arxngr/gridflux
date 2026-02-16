@@ -1,4 +1,5 @@
 #include "platform.h"
+#include "gesture.h"
 #include "../../layout.h"
 #include "../../logger.h"
 #include "../../memory.h"
@@ -164,21 +165,23 @@ gf_platform_create (void)
     platform->init = gf_platform_init;
     platform->cleanup = gf_platform_cleanup;
     platform->get_windows = gf_platform_get_windows;
-    platform->unmaximize_window = gf_platform_unmaximize_window;
-    platform->window_name_info = gf_platform_get_window_name;
-    platform->minimize_window = gf_platform_minimize_window;
-    platform->unminimize_window = gf_platform_unminimize_window;
+    platform->set_unmaximize_window = gf_platform_unmaximize_window;
+    platform->get_window_name_info = gf_platform_get_window_name;
+    platform->set_minimize_window = gf_platform_minimize_window;
+    platform->set_unminimize_window = gf_platform_unminimize_window;
     platform->get_window_geometry = gf_platform_get_window_geometry;
     platform->get_current_workspace = gf_platform_get_current_workspace;
     platform->get_workspace_count = gf_platform_get_workspace_count;
     platform->create_workspace = gf_platform_create_workspace;
+    platform->get_active_window = gf_platform_active_window;
+
     platform->is_window_valid = gf_platform_is_window_valid;
     platform->is_window_excluded = gf_platform_is_window_excluded;
-    platform->get_active_window = gf_platform_active_window;
+    platform->is_window_maximized = gf_platform_is_window_maximized;
     platform->is_window_minimized = gf_platform_is_window_minimized;
-    platform->is_fullscreen = gf_platform_is_fullscreen;
+    platform->is_window_fullscreen = gf_platform_is_window_fullscreen;
 
-    platform->add_border = gf_platform_add_border;
+    platform->create_border = gf_platform_add_border;
     platform->update_border = gf_platform_update_borders;
     platform->set_border_color = gf_platform_set_border_color;
     platform->cleanup_borders = gf_platform_cleanup_borders;
@@ -186,9 +189,15 @@ gf_platform_create (void)
 
     platform->platform_data = data;
 
-    // KWin/GNOME backend logic removed - strictly X11
     platform->get_screen_bounds = gf_platform_get_screen_bounds;
     platform->set_window_geometry = gf_platform_set_window_geometry;
+
+    platform->set_dock_autohide = gf_platform_set_dock_autohide;
+    platform->restore_dock = gf_platform_restore_dock;
+
+    platform->gesture_init = gf_gesture_init;
+    platform->gesture_poll = gf_gesture_poll;
+    platform->gesture_cleanup = gf_gesture_cleanup;
 
     return platform;
 }
@@ -832,11 +841,7 @@ _process_window_for_list (Display *display, Window window, gf_platform_atoms_t *
     if (gf_platform_get_window_geometry (display, window, &geometry) != GF_SUCCESS)
         return false;
 
-    bool is_maximized = gf_platform_window_has_state (display, window,
-                                                      atoms->net_wm_state_maximized_horz)
-                        || gf_platform_window_has_state (
-                            display, window, atoms->net_wm_state_maximized_vert);
-
+    bool is_maximized = gf_platform_is_window_maximized (display, window);
     bool is_excluded = gf_platform_is_window_excluded (display, window);
 
     gf_workspace_id_t resolved_workspace
@@ -1077,13 +1082,10 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     bool is_fullscreen
         = gf_platform_window_has_state (display, window, atoms->net_wm_state_fullscreen);
-    bool is_maximized = gf_platform_window_has_state (display, window,
-                                                      atoms->net_wm_state_maximized_horz)
-                        && gf_platform_window_has_state (
-                            display, window, atoms->net_wm_state_maximized_vert);
 
     if (_window_has_type (display, window, atoms->net_wm_window_type_normal)
-        && (is_fullscreen || is_maximized))
+
+        && (is_fullscreen))
     {
         return true;
     }
@@ -1098,7 +1100,7 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
 }
 
 bool
-gf_platform_is_fullscreen (gf_display_t display, gf_native_window_t window)
+gf_platform_is_window_fullscreen (gf_display_t display, gf_native_window_t window)
 {
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     return gf_platform_window_has_state (display, (Window)window,
@@ -1500,4 +1502,137 @@ gf_platform_is_window_minimized (gf_display_t display, gf_native_window_t window
         return false;
 
     return gf_platform_window_has_state (display, window, atoms->net_wm_state_hidden);
+}
+
+bool
+gf_platform_is_window_maximized (gf_display_t display, gf_native_window_t window)
+{
+    if (!display || window == None)
+        return false;
+
+    if (!gf_platform_is_window_valid (display, window))
+        return false;
+
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    if (!atoms)
+        return false;
+
+    return gf_platform_window_has_state (display, window,
+                                         atoms->net_wm_state_maximized_vert)
+           && gf_platform_window_has_state (display, window,
+                                            atoms->net_wm_state_maximized_horz);
+}
+
+void
+gf_platform_set_dock_autohide (gf_platform_interface_t *platform)
+{
+    if (!platform || !platform->platform_data)
+        return;
+
+    gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
+    Display *dpy = data->display;
+
+    if (data->dock_hidden)
+        return;
+
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    if (!atoms)
+        return;
+
+    // Find all dock-type windows by scanning the client list
+    unsigned char *clients_data = NULL;
+    unsigned long clients_count = 0;
+    Atom actual_type;
+    int actual_format;
+    unsigned long bytes_after;
+
+    Window root = DefaultRootWindow (dpy);
+
+    if (XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 4096, False, XA_WINDOW,
+                            &actual_type, &actual_format, &clients_count, &bytes_after,
+                            &clients_data)
+            != Success
+        || !clients_data)
+    {
+        return;
+    }
+
+    Window *clients = (Window *)clients_data;
+    data->saved_dock_count = 0;
+
+    for (unsigned long i = 0; i < clients_count && data->saved_dock_count < GF_MAX_DOCK_WINDOWS; i++)
+    {
+        if (_window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
+        {
+            data->saved_dock_windows[data->saved_dock_count++] = clients[i];
+            XUnmapWindow (dpy, clients[i]);
+            GF_LOG_DEBUG ("Hidden dock window %lu", (unsigned long)clients[i]);
+        }
+    }
+
+    XFree (clients_data);
+
+    // Also check root window children for override-redirect docks not in client list
+    Window root_ret, parent_ret;
+    Window *children = NULL;
+    unsigned int nchildren = 0;
+
+    if (XQueryTree (dpy, root, &root_ret, &parent_ret, &children, &nchildren))
+    {
+        for (unsigned int i = 0; i < nchildren && data->saved_dock_count < GF_MAX_DOCK_WINDOWS; i++)
+        {
+            // Skip if already saved
+            bool already_saved = false;
+            for (int j = 0; j < data->saved_dock_count; j++)
+            {
+                if (data->saved_dock_windows[j] == children[i])
+                {
+                    already_saved = true;
+                    break;
+                }
+            }
+            if (already_saved)
+                continue;
+
+            if (_window_has_type (dpy, children[i], atoms->net_wm_window_type_dock))
+            {
+                data->saved_dock_windows[data->saved_dock_count++] = children[i];
+                XUnmapWindow (dpy, children[i]);
+                GF_LOG_DEBUG ("Hidden dock window (root child) %lu",
+                              (unsigned long)children[i]);
+            }
+        }
+        if (children)
+            XFree (children);
+    }
+
+    data->dock_hidden = true;
+    XFlush (dpy);
+    GF_LOG_INFO ("Dock auto-hidden (%d dock windows)", data->saved_dock_count);
+}
+
+void
+gf_platform_restore_dock (gf_platform_interface_t *platform)
+{
+    if (!platform || !platform->platform_data)
+        return;
+
+    gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
+    Display *dpy = data->display;
+
+    if (!data->dock_hidden || data->saved_dock_count == 0)
+        return;
+
+    for (int i = 0; i < data->saved_dock_count; i++)
+    {
+        XMapWindow (dpy, data->saved_dock_windows[i]);
+        XMapRaised (dpy, data->saved_dock_windows[i]);
+        GF_LOG_DEBUG ("Restored dock window %lu",
+                      (unsigned long)data->saved_dock_windows[i]);
+    }
+
+    data->dock_hidden = false;
+    data->saved_dock_count = 0;
+    XFlush (dpy);
+    GF_LOG_INFO ("Dock restored");
 }

@@ -117,6 +117,7 @@ typedef struct
     uint32_t max_windows;
     int32_t available_space;
     bool is_locked;
+    bool has_maximized_state;
 } gf_workspace_info_t;
 
 // Geometry flags

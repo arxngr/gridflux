@@ -264,7 +264,7 @@ gf_workspace_list_add (gf_workspace_list_t *list, const gf_workspace_info_t *wor
         return GF_ERROR_INVALID_PARAMETER;
 
     // Check if workspace already exists
-    if (gf_workspace_list_find (list, workspace->id))
+    if (gf_workspace_list_find_by_id (list, workspace->id))
         return GF_SUCCESS;
 
     if (list->count >= list->capacity)
@@ -286,7 +286,8 @@ gf_workspace_list_add (gf_workspace_list_t *list, const gf_workspace_info_t *wor
 }
 
 gf_workspace_info_t *
-gf_workspace_list_find (const gf_workspace_list_t *list, gf_workspace_id_t workspace_id)
+gf_workspace_list_find_by_id (const gf_workspace_list_t *list,
+                              gf_workspace_id_t workspace_id)
 {
     if (!list)
         return NULL;
@@ -324,7 +325,7 @@ gf_workspace_list_get_current (gf_workspace_list_t *ws)
     if (!ws)
         return NULL;
 
-    return gf_workspace_list_find (ws, ws->active_workspace);
+    return gf_workspace_list_find_by_id (ws, ws->active_workspace);
 }
 
 uint32_t
@@ -359,18 +360,33 @@ gf_workspace_list_find_free (gf_workspace_list_t *ws, uint32_t max_win_per_ws)
 }
 
 gf_workspace_id_t
-gf_workspace_create (gf_workspace_list_t *ws, uint32_t max_win_per_ws)
+gf_workspace_create (gf_workspace_list_t *ws, uint32_t max_win_per_ws,
+                     bool maximized_state)
 {
     if (!ws)
         return -1;
 
-    gf_workspace_info_t info = { .id = ws->count + GF_FIRST_WORKSPACE_ID,
-                                 .window_count = 0,
-                                 .max_windows = max_win_per_ws,
-                                 .available_space = max_win_per_ws,
-                                 .is_locked = false };
+    gf_workspace_info_t info
+        = { .id = ws->count + GF_FIRST_WORKSPACE_ID,
+            .window_count = 0,
+            .max_windows = maximized_state ? UINT32_MAX : max_win_per_ws,
+            .available_space = maximized_state ? UINT32_MAX : max_win_per_ws,
+            .has_maximized_state = maximized_state,
+            .is_locked = false };
 
     gf_workspace_list_add (ws, &info);
+
+    if (maximized_state)
+    {
+        GF_LOG_INFO ("Created MAXIMIZED workspace %d (capacity=%u)", info.id,
+                     max_win_per_ws);
+    }
+    else
+    {
+        GF_LOG_INFO ("Created NORMAL workspace %d (capacity=%u)", info.id,
+                     max_win_per_ws);
+    }
+
     return info.id;
 }
 
@@ -383,7 +399,7 @@ gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
 
     for (gf_workspace_id_t id = GF_FIRST_WORKSPACE_ID; id <= ws_id; id++)
     {
-        if (!gf_workspace_list_find (ws, id))
+        if (!gf_workspace_list_find_by_id (ws, id))
         {
             gf_workspace_info_t info = {
                 .id = id,
@@ -396,4 +412,56 @@ gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
             gf_workspace_list_add (ws, &info);
         }
     }
+}
+
+bool
+gf_workspace_list_remove_window (gf_workspace_info_t *ws, gf_window_list_t *windows,
+                                 gf_window_id_t win_id)
+{
+    if (!ws)
+        return false;
+
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        gf_window_info_t *w = &windows->items[i];
+
+        if (!w->is_valid)
+            continue;
+
+        if (w->id == win_id && w->workspace_id == ws->id)
+        {
+            ws->window_count--;
+            ws->available_space++;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool
+gf_workspace_list_add_window (gf_workspace_info_t *ws, gf_window_list_t *windows,
+                              gf_window_id_t win_id)
+{
+    if (!ws || ws->available_space <= 0)
+        return false;
+
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        gf_window_info_t *w = &windows->items[i];
+
+        if (!w->is_valid)
+            continue;
+
+        if (w->id == win_id)
+        {
+            w->workspace_id = ws->id;
+
+            ws->window_count++;
+            ws->available_space--;
+            return true;
+        }
+    }
+
+    return false;
 }

@@ -1,9 +1,0 @@
-{
-  "uuid": "gridflux@gridflux.dev",
-  "name": "GridFlux",
-  "description": "GridFlux tiling backend, please dont remove it, it will cause the gridflux engine fail",
-  "shell-version": ["45", "46"],
-  "version": 1,
-  "module": true
-}
-
