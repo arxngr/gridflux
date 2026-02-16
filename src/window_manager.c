@@ -226,25 +226,26 @@ _minimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list,
 
 static void
 _unminimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list,
-                               uint32_t count)
+                               uint32_t count, gf_native_window_t active_window)
 {
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
+    // First pass: unminimize all non-active windows
     for (uint32_t i = 0; i < count; i++)
     {
         gf_window_info_t *win = &ws_list[i];
 
         if (wm_is_excluded (m, win->native_handle))
-        {
             continue;
-        }
+
         if (platform->is_window_hidden
             && platform->is_window_hidden (display, win->native_handle))
-        {
-            GF_LOG_DEBUG ("Skipping hidden window %lu (closed to tray)", win->id);
             continue;
-        }
+
+        // Skip active window for now
+        if (active_window != 0 && win->native_handle == active_window)
+            continue;
 
         platform->set_unminimize_window (display, win->native_handle);
         win->is_minimized = false;
@@ -252,15 +253,39 @@ _unminimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list
         gf_window_info_t *actual
             = gf_window_list_find_by_window_id (wm_windows (m), win->id);
         if (actual)
-        {
             actual->is_minimized = false;
-        }
 
-        // Restore border for non-maximized windows after unminimizing
         if (m->config->enable_borders && !win->is_maximized && platform->create_border)
         {
             platform->create_border (platform, win->native_handle,
                                      m->config->border_color, 3);
+        }
+    }
+
+    // Second pass: unminimize active window last (to ensure it's on top)
+    if (active_window != 0)
+    {
+        for (uint32_t i = 0; i < count; i++)
+        {
+            gf_window_info_t *win = &ws_list[i];
+
+            if (win->native_handle == active_window)
+            {
+                platform->set_unminimize_window (display, win->native_handle);
+                win->is_minimized = false;
+
+                gf_window_info_t *actual
+                    = gf_window_list_find_by_window_id (wm_windows (m), win->id);
+                if (actual)
+                    actual->is_minimized = false;
+
+                if (m->config->enable_borders && !win->is_maximized && platform->create_border)
+                {
+                    platform->create_border (platform, win->native_handle,
+                                             m->config->border_color, 3);
+                }
+                break;
+            }
         }
     }
 }
@@ -345,16 +370,21 @@ _handle_workspace_switch (gf_window_manager_t *m, gf_workspace_id_t current_work
         }
     }
 
+    gf_platform_interface_t *platform = wm_platform (m);
+
+    // Get current active window to preserve focus
+    gf_native_window_t active_window = 0;
+    if (platform->get_active_window)
+        active_window = platform->get_active_window (*wm_display(m));
+
     // Unminimize windows in current workspace
-    _unminimize_workspace_windows (m, workspace_windows, workspace_win_count);
+    _unminimize_workspace_windows (m, workspace_windows, workspace_win_count, active_window);
     gf_free (workspace_windows);
 
     // Toggle dock based on target workspace type
     gf_workspace_info_t *target_ws
         = gf_workspace_list_find_by_id (workspaces, current_workspace);
-    gf_platform_interface_t *platform = wm_platform (m);
 
-    // Toggle dock based on target workspace type
     if (target_ws && target_ws->has_maximized_state)
     {
         if (!m->state.dock_hidden && platform->set_dock_autohide)
