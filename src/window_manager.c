@@ -1015,7 +1015,7 @@ gf_window_manager_run (gf_window_manager_t *m)
             m->state.last_cleanup_time = current_time;
         }
 
-        usleep (100);
+        usleep (50000);
     }
 
     return GF_SUCCESS;
