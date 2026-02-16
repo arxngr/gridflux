@@ -10,6 +10,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/shape.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -143,6 +144,31 @@ gf_platform_error_handler (Display *display, XErrorEvent *error)
     XGetErrorText (display, error->error_code, error_text, sizeof (error_text));
     GF_LOG_ERROR ("Platform Error: %s (code: %d)", error_text, error->error_code);
     return 0;
+}
+
+static void
+_run_bg_command (const char *cmd, char *const argv[])
+{
+    pid_t pid = fork ();
+    if (pid == 0)
+    {
+        // Child process
+        // Redirect stdout/stderr to /dev/null to avoid cluttering logs
+        int null_fd = open ("/dev/null", O_WRONLY);
+        if (null_fd >= 0)
+        {
+            dup2 (null_fd, STDOUT_FILENO);
+            dup2 (null_fd, STDERR_FILENO);
+            close (null_fd);
+        }
+
+        execvp (cmd, argv);
+        _exit (1); // Exit if exec fails
+    }
+    // Parent returns immediately (fire and forget)
+    // In a long-running WM, we should technically waitpid() later or handle SIGCHLD,
+    // but for occasional short-lived commands, letting init adopt orphans is acceptable
+    // for this specific use case to avoid complexity.
 }
 
 gf_platform_interface_t *
@@ -1535,6 +1561,27 @@ gf_platform_set_dock_autohide (gf_platform_interface_t *platform)
     if (data->dock_hidden)
         return;
 
+    // Check for GNOME session first
+    const char *desktop = getenv ("XDG_CURRENT_DESKTOP");
+    if (desktop && strstr (desktop, "GNOME"))
+    {
+        // Try Ubuntu Dock first (most likely on Ubuntu)
+        char *args_ubuntu[]
+            = { "gsettings", "set", "org.gnome.shell.extensions.ubuntu-dock",
+                "dock-fixed", "false", NULL };
+        _run_bg_command ("gsettings", args_ubuntu);
+
+        // Also try standard Dash to Dock (fire both, one will fail silently)
+        char *args_dash[]
+            = { "gsettings", "set", "org.gnome.shell.extensions.dash-to-dock",
+                "dock-fixed", "false", NULL };
+        _run_bg_command ("gsettings", args_dash);
+
+        data->dock_hidden = true;
+        GF_LOG_INFO ("Dock auto-hidden (GNOME gsettings)");
+        return;
+    }
+
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     if (!atoms)
         return;
@@ -1619,6 +1666,27 @@ gf_platform_restore_dock (gf_platform_interface_t *platform)
 
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
     Display *dpy = data->display;
+
+    // Check for GNOME session
+    const char *desktop = getenv ("XDG_CURRENT_DESKTOP");
+    if (desktop && strstr (desktop, "GNOME"))
+    {
+        // Try Ubuntu Dock
+        char *args_ubuntu[]
+            = { "gsettings", "set", "org.gnome.shell.extensions.ubuntu-dock",
+                "dock-fixed", "true", NULL };
+        _run_bg_command ("gsettings", args_ubuntu);
+
+        // Try standard Dash to Dock
+        char *args_dash[]
+            = { "gsettings", "set", "org.gnome.shell.extensions.dash-to-dock",
+                "dock-fixed", "true", NULL };
+        _run_bg_command ("gsettings", args_dash);
+
+        data->dock_hidden = false;
+        GF_LOG_INFO ("Dock restored (GNOME gsettings)");
+        return;
+    }
 
     if (!data->dock_hidden || data->saved_dock_count == 0)
         return;

@@ -10,8 +10,6 @@ KWIN_SCRIPT_NAME="gridflux-tiler"
 KWIN_QML_FILE="main.qml"
 KWIN_INSTALL_DIR="/usr/share/kwin/scripts/$KWIN_SCRIPT_NAME"
 SERVICE_FILE="$HOME/.config/systemd/user/gridflux.service"
-GNOME_EXT_UUID="gridflux@gridflux.dev"
-GNOME_EXT_DIR="$HOME/.local/share/gnome-shell/extensions/$GNOME_EXT_UUID"
 
 # Colors for output
 RED='\033[0;31m'
@@ -62,23 +60,23 @@ install_dependencies() {
     ubuntu | debian)
         echo "Installing dependencies for Ubuntu/Debian..."
         sudo apt update
-        sudo apt install -y libx11-dev libjson-c-dev libdbus-1-dev cmake gcc make pkg-config
+        sudo apt install -y libx11-dev libxi-dev libjson-c-dev libdbus-1-dev cmake gcc make pkg-config
         sudo apt install -y libgtk-4-dev libglib2.0-dev
         ;;
     fedora | rhel | centos | almalinux | rocky)
         echo "Installing dependencies for Fedora/RHEL..."
-        sudo dnf install -y libX11-devel json-c-devel dbus-devel cmake gcc make pkgconfig
+        sudo dnf install -y libX11-devel libXi-devel json-c-devel dbus-devel cmake gcc make pkgconfig
         sudo dnf install -y gtk4-devel glib2-devel
         ;;
     arch | manjaro)
         echo "Installing dependencies for Arch/Manjaro..."
         sudo pacman -Syu --noconfirm
-        sudo pacman -S --noconfirm libx11 json-c dbus cmake gcc make pkgconf
+        sudo pacman -S --noconfirm libx11 libxi json-c dbus cmake gcc make pkgconf
         sudo pacman -S --noconfirm gtk4 glib2
         ;;
     *)
         log_error "Unsupported distro"
-        echo "Please install: libx11-dev, libjson-c-dev, libdbus-1-dev, cmake, gcc, make, pkg-config"
+        echo "Please install: libx11-dev, libxi-dev, libjson-c-dev, libdbus-1-dev, cmake, gcc, make, pkg-config"
         echo "For GUI: libgtk-4-dev, libglib2.0-dev"
         exit 1
         ;;
@@ -227,32 +225,7 @@ install_kwin_script() {
     fi
 }
 
-install_gnome_extension() {
-    echo "Installing GNOME Shell extension..."
 
-    # Verify files exist
-    if [ ! -f "src/platform/unix/mutter/extension.js" ] ||
-        [ ! -f "src/platform/unix/mutter/metadata.json" ]; then
-        log_error "GNOME extension files not found"
-        return 1
-    fi
-
-    mkdir -p "$GNOME_EXT_DIR"
-    cp src/platform/unix/mutter/extension.js "$GNOME_EXT_DIR/"
-    cp src/platform/unix/mutter/metadata.json "$GNOME_EXT_DIR/"
-
-    log_info "GNOME extension files installed"
-
-    if command -v gnome-extensions >/dev/null 2>&1; then
-        if gnome-extensions enable "$GNOME_EXT_UUID" 2>/dev/null; then
-            log_info "GNOME extension enabled"
-        else
-            log_warn "Failed to enable GNOME extension (enable manually in settings)"
-        fi
-    else
-        log_warn "gnome-extensions tool not found - enable '$GNOME_EXT_UUID' manually"
-    fi
-}
 
 install_systemd_service() {
     local SERVICE_DIR="$HOME/.config/systemd/user"
@@ -366,14 +339,9 @@ create_default_config
 create_desktop_entry
 install_icons
 
-if [[ $IS_GNOME -eq 1 ]]; then
-    log_info "GNOME detected - installing GNOME Shell extension"
-    install_gnome_extension
-    install_systemd_service
-else
-    log_info "Installing X11 service"
-    install_systemd_service
-fi
+
+
+install_systemd_service
 
 
 echo ""
