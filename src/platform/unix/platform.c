@@ -171,6 +171,17 @@ _run_bg_command (const char *cmd, char *const argv[])
     // for this specific use case to avoid complexity.
 }
 
+static void
+gf_platform_sync (gf_display_t display)
+{
+    if (display)
+    {
+        XSync (display, False);
+    }
+    // 75ms delay to allow compositor to hide old windows before showing new ones
+    usleep (75000);
+}
+
 gf_platform_interface_t *
 gf_platform_create (void)
 {
@@ -220,6 +231,7 @@ gf_platform_create (void)
 
     platform->set_dock_autohide = gf_platform_set_dock_autohide;
     platform->restore_dock = gf_platform_restore_dock;
+    platform->sync = gf_platform_sync;
 
     platform->gesture_init = gf_gesture_init;
     platform->gesture_poll = gf_gesture_poll;
