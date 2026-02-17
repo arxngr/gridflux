@@ -1133,6 +1133,7 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
                 break;
             }
 
+            if (src_ws->id == dst_id) continue;
             gf_window_info_t *win = &list[0];
 
             for (uint32_t w = 0; w < windows->count; w++)
