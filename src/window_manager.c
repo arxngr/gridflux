@@ -372,10 +372,6 @@ _handle_workspace_switch (gf_window_manager_t *m, gf_workspace_id_t current_work
 
     gf_platform_interface_t *platform = wm_platform (m);
 
-    // Sync platform visual state (e.g. wait for minimization)
-    if (platform->sync)
-        platform->sync (*wm_display(m));
-
     // Get current active window to preserve focus
     gf_native_window_t active_window = 0;
     if (platform->get_active_window)

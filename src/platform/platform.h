@@ -77,8 +77,6 @@ struct gf_platform_interface
     void (*set_dock_autohide) (gf_platform_interface_t *platform);
     void (*restore_dock) (gf_platform_interface_t *platform);
 
-    void (*sync) (gf_display_t display);
-
     /* Gesture support (NULL if not available on this platform) */
     gf_error_code_t (*gesture_init) (gf_platform_interface_t *platform,
                                      gf_display_t display);
