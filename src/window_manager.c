@@ -221,6 +221,11 @@ _minimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list,
 
         platform->set_minimize_window (display, ws_list[i].native_handle);
         ws_list[i].is_minimized = true;
+
+        gf_window_info_t *actual
+            = gf_window_list_find_by_window_id (wm_windows (m), ws_list[i].id);
+        if (actual)
+            actual->is_minimized = true;
     }
 }
 
@@ -279,7 +284,8 @@ _unminimize_workspace_windows (gf_window_manager_t *m, gf_window_info_t *ws_list
                 if (actual)
                     actual->is_minimized = false;
 
-                if (m->config->enable_borders && !win->is_maximized && platform->create_border)
+                if (m->config->enable_borders && !win->is_maximized
+                    && platform->create_border)
                 {
                     platform->create_border (platform, win->native_handle,
                                              m->config->border_color, 3);
@@ -375,10 +381,11 @@ _handle_workspace_switch (gf_window_manager_t *m, gf_workspace_id_t current_work
     // Get current active window to preserve focus
     gf_native_window_t active_window = 0;
     if (platform->get_active_window)
-        active_window = platform->get_active_window (*wm_display(m));
+        active_window = platform->get_active_window (*wm_display (m));
 
     // Unminimize windows in current workspace
-    _unminimize_workspace_windows (m, workspace_windows, workspace_win_count, active_window);
+    _unminimize_workspace_windows (m, workspace_windows, workspace_win_count,
+                                   active_window);
     gf_free (workspace_windows);
 
     // Toggle dock based on target workspace type
@@ -1133,7 +1140,8 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
                 break;
             }
 
-            if (src_ws->id == dst_id) continue;
+            if (src_ws->id == dst_id)
+                continue;
             gf_window_info_t *win = &list[0];
 
             for (uint32_t w = 0; w < windows->count; w++)
@@ -1516,6 +1524,24 @@ gf_window_manager_event (gf_window_manager_t *m)
 
         _move_window_between_workspaces (m, focused, max_ws);
 
+        // Handle switching between maximized windows (e.g. Alt+Tab)
+        // Ensure other windows in the same maximized workspace are minimized
+        gf_window_info_t *ws_wins = NULL;
+        uint32_t ws_count = 0;
+        if (gf_window_list_get_by_workspace (windows, focused->workspace_id, &ws_wins,
+                                             &ws_count)
+            == GF_SUCCESS)
+        {
+            for (uint32_t i = 0; i < ws_count; i++)
+            {
+                if (ws_wins[i].id != focused->id)
+                {
+                    _minimize_workspace_windows (m, &ws_wins[i], 1);
+                }
+            }
+            gf_free (ws_wins);
+        }
+
         // Hide dock when maximizing
         if (!m->state.dock_hidden && platform->set_dock_autohide)
         {
@@ -1525,39 +1551,31 @@ gf_window_manager_event (gf_window_manager_t *m)
     }
     else if (!now_maximized && was_maximized)
     {
-        // Clear the maximized state from the old workspace
-        gf_workspace_info_t *old_ws
-            = gf_workspace_list_find_by_id (workspaces, focused->workspace_id);
-        if (old_ws && old_ws->has_maximized_state)
-        {
-            old_ws->has_maximized_state = false;
-            old_ws->max_windows = m->config->max_windows_per_workspace;
-            old_ws->available_space = m->config->max_windows_per_workspace;
-            GF_LOG_DEBUG (
-                "Cleared maximized state from workspace %d (window unmaximized)",
-                old_ws->id);
-        }
-
+        gf_workspace_id_t old_ws_id = focused->workspace_id;
         focused->is_maximized = false;
 
         gf_workspace_id_t normal_ws = _find_or_create_ws (m);
 
         _move_window_between_workspaces (m, focused, normal_ws);
 
-        // Restore dock when unmaximizing
-        if (m->state.dock_hidden && platform->restore_dock)
+        // Only clear maximized state and restore dock if no other
+        // maximized windows remain in the original workspace.
+        uint32_t remaining = gf_window_list_count_by_workspace (windows, old_ws_id);
+        if (remaining == 0)
         {
-            // Only restore if no other maximized windows remain
-            gf_workspace_info_t *max_ws_check
-                = gf_workspace_list_find_by_id (workspaces, old_ws ? old_ws->id : 0);
-            bool has_remaining_max = false;
-            if (max_ws_check)
+            gf_workspace_info_t *old_ws
+                = gf_workspace_list_find_by_id (workspaces, old_ws_id);
+            if (old_ws && old_ws->has_maximized_state)
             {
-                uint32_t remaining
-                    = gf_window_list_count_by_workspace (windows, max_ws_check->id);
-                has_remaining_max = (remaining > 0);
+                old_ws->has_maximized_state = false;
+                old_ws->max_windows = m->config->max_windows_per_workspace;
+                old_ws->available_space = m->config->max_windows_per_workspace;
+                GF_LOG_DEBUG ("Cleared maximized state from empty workspace %d",
+                              old_ws->id);
             }
-            if (!has_remaining_max)
+
+            // Restore dock when no maximized windows remain
+            if (m->state.dock_hidden && platform->restore_dock)
             {
                 platform->restore_dock (platform);
                 m->state.dock_hidden = false;
