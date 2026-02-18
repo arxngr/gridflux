@@ -1087,16 +1087,15 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
         for (uint32_t j = 0; j < overflow; j++)
         {
             gf_workspace_id_t dst_id = -1;
-            gf_workspace_info_t *active_ws_info
-                = gf_workspace_list_find_by_id (workspaces, workspaces->active_workspace);
+            gf_workspace_id_t free_ws = gf_workspace_list_find_free (workspaces);
 
-            if (active_ws_info->available_space == 0)
+            if (free_ws == -1)
             {
                 dst_id = gf_workspace_create (workspaces, max_per_ws, false);
             }
             else
             {
-                dst_id = active_ws_info->id;
+                dst_id = free_ws;
             }
             if (dst_id < 0)
             {

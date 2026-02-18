@@ -52,8 +52,7 @@ uint32_t gf_workspace_list_calc_required_workspaces (uint32_t total_windows,
                                                      uint32_t current_workspaces,
                                                      uint32_t max_per_workspace);
 
-gf_workspace_id_t gf_workspace_list_find_free (gf_workspace_list_t *ws,
-                                               uint32_t max_win_per_ws);
+gf_workspace_id_t gf_workspace_list_find_free (gf_workspace_list_t *ws);
 
 void gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
                                uint32_t max_per_ws);
