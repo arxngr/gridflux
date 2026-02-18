@@ -85,46 +85,6 @@ _remove_stale_windows (gf_window_manager_t *m, gf_window_list_t *windows)
         GF_LOG_DEBUG ("Cleaned %u invalid/excluded windows", removed_windows);
 }
 
-void
-_remove_stale_workspaces (gf_window_manager_t *m, gf_workspace_list_t *workspaces,
-                          gf_window_list_t *windows)
-{
-    for (uint32_t i = 0; i < workspaces->count; i++)
-    {
-        workspaces->items[i].window_count
-            = gf_window_list_count_by_workspace (windows, workspaces->items[i].id);
-    }
-
-    int *ws_id_to_clean = NULL;
-    size_t count = 0;
-
-    for (uint32_t i = 0; i < workspaces->count; i++)
-    {
-        gf_workspace_info_t *ws = &workspaces->items[i];
-
-        bool is_active = (ws->id == workspaces->active_workspace);
-        bool is_empty = (ws->window_count == 0);
-
-        if (is_empty && !is_active)
-        {
-            int *tmp = realloc (ws_id_to_clean, (count + 1) * sizeof (int));
-            if (!tmp)
-                break;
-
-            ws_id_to_clean = tmp;
-            ws_id_to_clean[count++] = i;
-        }
-    }
-
-    if (count - workspaces->count == 1)
-        return;
-
-    for (uint32_t i = 0; i < count; i++)
-        _cleanup_unused_workspace (workspaces, i);
-
-    free (ws_id_to_clean);
-}
-
 static bool
 _workspace_is_valid (gf_workspace_list_t *workspaces, gf_workspace_id_t id)
 {
@@ -572,7 +532,6 @@ gf_window_manager_cleanup_invalid_data (gf_window_manager_t *m)
         return;
 
     _remove_stale_windows (m, windows);
-    _remove_stale_workspaces (m, workspaces, windows);
 }
 
 static void
@@ -1091,7 +1050,7 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
 
             if (free_ws == -1)
             {
-                dst_id = gf_workspace_create (workspaces, max_per_ws, false);
+                dst_id = gf_workspace_create (workspaces, max_per_ws, false, false);
             }
             else
             {
@@ -1181,7 +1140,8 @@ _find_or_create_maximized_ws (gf_window_manager_t *m)
         }
     }
 
-    return gf_workspace_create (workspaces, m->config->max_windows_per_workspace, true);
+    return gf_workspace_create (workspaces, m->config->max_windows_per_workspace, true,
+                                true);
 }
 
 static gf_workspace_id_t
@@ -1198,7 +1158,8 @@ _find_or_create_ws (gf_window_manager_t *m)
         }
     }
 
-    return gf_workspace_create (workspaces, m->config->max_windows_per_workspace, false);
+    return gf_workspace_create (workspaces, m->config->max_windows_per_workspace, false,
+                                false);
 }
 
 static gf_workspace_id_t
