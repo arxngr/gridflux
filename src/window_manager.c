@@ -1046,20 +1046,30 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
         for (uint32_t j = 0; j < overflow; j++)
         {
             gf_workspace_id_t dst_id = -1;
-            gf_workspace_id_t free_ws = gf_workspace_list_find_free (workspaces);
+            gf_workspace_info_t *active_ws_info
+                = gf_workspace_list_find_by_id (workspaces, workspaces->active_workspace);
 
-            if (free_ws == -1)
+            if (active_ws_info->available_space < 1)
             {
-                dst_id = gf_workspace_create (workspaces, max_per_ws, false, false);
+                gf_workspace_id_t free_ws = gf_workspace_list_find_free (workspaces);
+
+                if (free_ws == -1)
+                {
+                    dst_id = gf_workspace_create (workspaces, max_per_ws, false, false);
+                }
+                else
+                {
+                    dst_id = free_ws;
+                }
+                if (dst_id < 0)
+                {
+                    GF_LOG_ERROR ("Failed to find free workspace for overflow");
+                    break;
+                }
             }
             else
             {
-                dst_id = free_ws;
-            }
-            if (dst_id < 0)
-            {
-                GF_LOG_ERROR ("Failed to find free workspace for overflow");
-                break;
+                dst_id = active_ws_info->id;
             }
 
             gf_window_info_t *list = NULL;
