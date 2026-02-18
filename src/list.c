@@ -361,7 +361,7 @@ gf_workspace_list_find_free (gf_workspace_list_t *ws)
 
 gf_workspace_id_t
 gf_workspace_create (gf_workspace_list_t *ws, uint32_t max_win_per_ws,
-                     bool maximized_state)
+                     bool maximized_state, bool is_locked)
 {
     if (!ws)
         return -1;
@@ -372,7 +372,7 @@ gf_workspace_create (gf_workspace_list_t *ws, uint32_t max_win_per_ws,
             .max_windows = maximized_state ? UINT32_MAX : max_win_per_ws,
             .available_space = maximized_state ? UINT32_MAX : max_win_per_ws,
             .has_maximized_state = maximized_state,
-            .is_locked = false };
+            .is_locked = is_locked };
 
     gf_workspace_list_add (ws, &info);
 
