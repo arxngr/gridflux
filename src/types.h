@@ -40,8 +40,6 @@ typedef void *gf_display_t;
 #endif
 #endif
 
-typedef gf_native_window_t gf_window_id_t;
-
 // Callbacks
 typedef void (*gf_window_destroy_callback_t) (gf_native_window_t window, void *user_data);
 

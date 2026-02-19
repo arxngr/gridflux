@@ -1361,7 +1361,7 @@ gf_platform_get_focused_window (Display *dpy)
     return win;
 }
 
-gf_window_id_t
+gf_native_window_t
 gf_platform_active_window (Display *dpy)
 {
     if (!dpy)

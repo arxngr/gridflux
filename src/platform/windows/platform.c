@@ -559,8 +559,7 @@ gf_platform_get_windows (gf_display_t display, gf_workspace_id_t *workspace_id,
             if (GetWindowRect (hwnd, &rect))
             {
                 window_list[found_count] = (gf_window_info_t){
-                    .id = (gf_window_id_t)hwnd,
-                    .native_handle = hwnd,
+                    .id = hwnd,
                     .workspace_id = GF_FIRST_WORKSPACE_ID,
                     .geometry = {
                         .x = rect.left,
@@ -826,7 +825,7 @@ gf_platform_get_screen_bounds (gf_display_t display, gf_rect_t *bounds)
     return GF_SUCCESS;
 }
 
-gf_window_id_t
+gf_native_window_t
 gf_platform_active_window (gf_display_t display)
 {
     (void)display;

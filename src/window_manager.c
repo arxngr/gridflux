@@ -165,7 +165,7 @@ gf_window_manager_get_window_name (const gf_window_manager_t *m,
 
 static void
 _minimize_workspace_windows (gf_window_manager_t *m, gf_workspace_id_t ws_id,
-                             gf_window_id_t exclude_id)
+                             gf_native_window_t exclude_id)
 {
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -486,7 +486,7 @@ gf_window_manager_update_window_info (gf_window_manager_t *m, gf_native_window_t
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    gf_window_id_t id = window;
+    gf_native_window_t id = window;
 
     if (wm_is_excluded (m, window))
     {
@@ -908,7 +908,7 @@ gf_window_manager_gesture_event (gf_window_manager_t *m)
             {
                 bool swipe_left = (gev.total_dx < 0);
 
-                gf_window_id_t active = 0;
+                gf_native_window_t active = 0;
                 if (platform->get_active_window)
                     active = platform->get_active_window (display);
 
@@ -1115,7 +1115,7 @@ _handle_fullscreen_windows (gf_window_manager_t *m)
     gf_window_list_t *windows = wm_windows (m);
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
-    gf_window_id_t active_win_id = m->platform->get_active_window (m->display);
+    gf_native_window_t active_win_id = m->platform->get_active_window (m->display);
 
     if (active_win_id != 0
         && m->platform->is_window_fullscreen (m->display,
@@ -1423,7 +1423,7 @@ gf_window_manager_event (gf_window_manager_t *m)
     gf_window_list_t *windows = wm_windows (m);
     gf_workspace_list_t *workspaces = wm_workspaces (m);
 
-    gf_window_id_t curr_win_id = platform->get_active_window (display);
+    gf_native_window_t curr_win_id = platform->get_active_window (display);
 
     if (curr_win_id == 0)
     {
@@ -1514,7 +1514,7 @@ gf_window_manager_event (gf_window_manager_t *m)
 }
 
 gf_error_code_t
-gf_window_manager_move_window (gf_window_manager_t *m, gf_window_id_t window_id,
+gf_window_manager_move_window (gf_window_manager_t *m, gf_native_window_t window_id,
                                gf_workspace_id_t target_workspace)
 {
     if (!m)

@@ -112,7 +112,7 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
 {
     gf_window_manager_t *m = (gf_window_manager_t *)user_data;
 
-    gf_window_id_t window_id = 0;
+    gf_native_window_t window_id = 0;
     int target_workspace = -1;
 
     gf_command_response_t resp;
