@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 static gf_workspace_info_t *
 _get_workspace (gf_workspace_list_t *workspaces, gf_workspace_id_t id)
@@ -882,8 +881,6 @@ _find_maximized_index (gf_window_info_t *windows, uint32_t count,
     return -1;
 }
 
-#define GF_SWIPE_THRESHOLD_PX 200.0
-
 static void
 gf_window_manager_gesture_event (gf_window_manager_t *m)
 {
@@ -933,8 +930,7 @@ gf_window_manager_gesture_event (gf_window_manager_t *m)
                             platform->set_unminimize_window (display, next_win);
 
                         GF_LOG_INFO ("Gesture swipe %s: switched to window %lu",
-                                     swipe_left ? "left" : "right",
-                                     (unsigned long)next_win);
+                                     swipe_left ? "left" : "right", next_win);
                     }
                 }
                 gf_free (max_wins);
@@ -1123,6 +1119,9 @@ _handle_fullscreen_windows (gf_window_manager_t *m)
     {
         for (uint32_t i = 0; i < windows->count; i++)
         {
+            if (windows->items[i].id == active_win_id)
+                continue;
+
             m->platform->set_minimize_window (m->display, windows->items[i].id);
             windows->items[i].is_minimized = true;
         }
@@ -1481,7 +1480,7 @@ gf_window_manager_event (gf_window_manager_t *m)
                 = gf_workspace_list_find_by_id (workspaces, old_ws_id);
             if (old_ws && old_ws->has_maximized_state)
             {
-                old_ws->has_maximized_state = false;
+                old_ws->has_maximized_state = true;
                 old_ws->max_windows = m->config->max_windows_per_workspace;
                 old_ws->available_space = m->config->max_windows_per_workspace;
                 GF_LOG_DEBUG ("Cleared maximized state from empty workspace %d",
