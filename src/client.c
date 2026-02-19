@@ -18,7 +18,8 @@ print_usage (const char *prog)
     printf ("\nExamples:\n");
     printf ("  %s query windows              # List all windows\n", prog);
     printf ("  %s query workspaces           # List all workspaces\n", prog);
-    printf ("  %s move 12345 2               # Move window 12345 to workspace 2\n", prog);
+    printf ("  %s move 0x12345 2               # Move window 0x12345 to workspace 2\n",
+            prog);
     printf ("  %s lock 3                     # Lock workspace 3\n", prog);
     printf ("  %s unlock 3                   # Unlock workspace 3\n", prog);
 }
@@ -82,14 +83,16 @@ main (int argc, char **argv)
         }
 
         printf ("Workspaces:\n");
-        printf ("%-5s %-12s %-12s %-8s %-6s\n", "ID", "Windows", "Max", "Avail", "Locked");
-        printf ("%-5s %-12s %-12s %-8s %-6s\n", "----", "------", "---", "-----", "------");
+        printf ("%-5s %-12s %-12s %-8s %-6s\n", "ID", "Windows", "Max", "Avail",
+                "Locked");
+        printf ("%-5s %-12s %-12s %-8s %-6s\n", "----", "------", "---", "-----",
+                "------");
 
         for (uint32_t i = 0; i < workspaces->count; i++)
         {
             gf_workspace_info_t *ws = &workspaces->items[i];
-            printf ("%-5d %-12u %-12u %-8d %-6s\n", ws->id, ws->window_count, ws->max_windows,
-                    ws->available_space, ws->is_locked ? "Yes" : "No");
+            printf ("%-5d %-12u %-12u %-8d %-6s\n", ws->id, ws->window_count,
+                    ws->max_windows, ws->available_space, ws->is_locked ? "Yes" : "No");
         }
 
         gf_workspace_list_cleanup (workspaces);
@@ -104,14 +107,17 @@ main (int argc, char **argv)
         }
 
         printf ("Windows:\n");
-        printf ("%-10s %-20s %-10s %-6s\n", "ID", "Name", "Workspace", "State");
-        printf ("%-10s %-20s %-10s %-6s\n", "----------", "--------------------", "----------", "------");
+        printf ("%-18s %-20s %-10s %-6s\n", "ID", "Name", "Workspace", "State");
+        printf ("%-18s %-20s %-10s %-6s\n", "------------------", "--------------------",
+                "----------", "------");
 
         for (uint32_t i = 0; i < windows->count; i++)
         {
             gf_window_info_t *win = &windows->items[i];
-            const char *state = win->is_minimized ? "Min" : (win->is_maximized ? "Max" : "Norm");
-            printf ("%-10lu %-20s %-10d %-6s\n", (unsigned long)win->id, win->name, win->workspace_id, state);
+            const char *state
+                = win->is_minimized ? "Min" : (win->is_maximized ? "Max" : "Norm");
+            printf ("%-18p %-20s %-10d %-6s\n", (void *)win->id, win->name,
+                    win->workspace_id, state);
         }
 
         gf_window_list_cleanup (windows);

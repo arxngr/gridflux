@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 static gf_workspace_info_t *
 _get_workspace (gf_workspace_list_t *workspaces, gf_workspace_id_t id)
@@ -44,16 +43,16 @@ _remove_stale_windows (gf_window_manager_t *m, gf_window_list_t *windows)
     {
         gf_window_info_t *win = &windows->items[i];
 
-        bool excluded = wm_is_excluded (m, win->native_handle);
-        bool invalid = !wm_is_valid (m, win->native_handle);
+        bool excluded = wm_is_excluded (m, win->id);
+        bool invalid = !wm_is_valid (m, win->id);
 
         bool hidden = false;
         if (m->platform->is_window_hidden)
         {
-            hidden = m->platform->is_window_hidden (m->display, win->native_handle);
+            hidden = m->platform->is_window_hidden (m->display, win->id);
             if (m->platform->remove_border && hidden)
             {
-                m->platform->remove_border (m->platform, win->native_handle);
+                m->platform->remove_border (m->platform, win->id);
             }
         }
 
@@ -74,7 +73,7 @@ _remove_stale_windows (gf_window_manager_t *m, gf_window_list_t *windows)
             }
 
             gf_window_list_remove (windows, win->id);
-            m->platform->remove_border (m->platform, win->native_handle);
+            m->platform->remove_border (m->platform, win->id);
             removed_windows++;
             continue;
         }
@@ -165,7 +164,7 @@ gf_window_manager_get_window_name (const gf_window_manager_t *m,
 
 static void
 _minimize_workspace_windows (gf_window_manager_t *m, gf_workspace_id_t ws_id,
-                             gf_window_id_t exclude_id)
+                             gf_native_window_t exclude_id)
 {
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -179,14 +178,14 @@ _minimize_workspace_windows (gf_window_manager_t *m, gf_workspace_id_t ws_id,
         if (win->workspace_id != ws_id || win->id == exclude_id)
             continue;
 
-        if (wm_is_excluded (m, win->native_handle))
+        if (wm_is_excluded (m, win->id))
             continue;
 
         // Remove border before minimizing
         if (m->config->enable_borders && platform->remove_border)
-            platform->remove_border (platform, win->native_handle);
+            platform->remove_border (platform, win->id);
 
-        platform->set_minimize_window (display, win->native_handle);
+        platform->set_minimize_window (display, win->id);
         win->is_minimized = true;
     }
 }
@@ -208,24 +207,22 @@ _unminimize_workspace_windows (gf_window_manager_t *m, gf_workspace_id_t ws_id,
         if (win->workspace_id != ws_id)
             continue;
 
-        if (wm_is_excluded (m, win->native_handle))
+        if (wm_is_excluded (m, win->id))
             continue;
 
-        if (platform->is_window_hidden
-            && platform->is_window_hidden (display, win->native_handle))
+        if (platform->is_window_hidden && platform->is_window_hidden (display, win->id))
             continue;
 
         // Skip active window for now
-        if (active_window != 0 && win->native_handle == active_window)
+        if (active_window != 0 && win->id == active_window)
             continue;
 
-        platform->set_unminimize_window (display, win->native_handle);
+        platform->set_unminimize_window (display, win->id);
         win->is_minimized = false;
 
         if (m->config->enable_borders && !win->is_maximized && platform->create_border)
         {
-            platform->create_border (platform, win->native_handle,
-                                     m->config->border_color, 3);
+            platform->create_border (platform, win->id, m->config->border_color, 3);
         }
     }
 
@@ -236,16 +233,16 @@ _unminimize_workspace_windows (gf_window_manager_t *m, gf_workspace_id_t ws_id,
         {
             gf_window_info_t *win = &windows->items[i];
 
-            if (win->workspace_id == ws_id && win->native_handle == active_window)
+            if (win->workspace_id == ws_id && win->id == active_window)
             {
-                platform->set_unminimize_window (display, win->native_handle);
+                platform->set_unminimize_window (display, win->id);
                 win->is_minimized = false;
 
                 if (m->config->enable_borders && !win->is_maximized
                     && platform->create_border)
                 {
-                    platform->create_border (platform, win->native_handle,
-                                             m->config->border_color, 3);
+                    platform->create_border (platform, win->id, m->config->border_color,
+                                             3);
                 }
                 break;
             }
@@ -279,14 +276,13 @@ _detect_minimization_changes (gf_window_manager_t *m, gf_workspace_id_t current_
     {
         gf_window_info_t *win = &windows->items[i];
 
-        if (!win->is_valid || wm_is_excluded (m, win->native_handle))
+        if (!win->is_valid || wm_is_excluded (m, win->id))
             continue;
 
         if (win->workspace_id != current_workspace)
             continue;
 
-        bool currently_minimized
-            = platform->is_window_minimized (display, win->native_handle);
+        bool currently_minimized = platform->is_window_minimized (display, win->id);
 
         if (win->is_minimized != currently_minimized)
         {
@@ -489,7 +485,7 @@ gf_window_manager_update_window_info (gf_window_manager_t *m, gf_native_window_t
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    gf_window_id_t id = (gf_window_id_t)window;
+    gf_native_window_t id = window;
 
     if (wm_is_excluded (m, window))
     {
@@ -503,8 +499,7 @@ gf_window_manager_update_window_info (gf_window_manager_t *m, gf_native_window_t
         return GF_ERROR_PLATFORM_ERROR;
 
     gf_window_info_t info = {
-        .id = id,
-        .native_handle = window,
+        .id = window,
         .workspace_id = workspace_id,
         .geometry = geom,
         .is_minimized = true,
@@ -626,10 +621,9 @@ gf_window_manager_print_stats (const gf_window_manager_t *m)
             if (win->workspace_id != i)
                 continue;
 
-            gf_window_manager_get_window_name (m, win->native_handle, win_name,
-                                               sizeof (win_name));
+            gf_window_manager_get_window_name (m, win->id, win_name, sizeof (win_name));
 
-            GF_LOG_INFO ("   0x%lx  %s", (unsigned long)win->id, win_name);
+            GF_LOG_INFO ("   %p  %s", (void *)win->id, win_name);
         }
     }
 
@@ -881,13 +875,11 @@ _find_maximized_index (gf_window_info_t *windows, uint32_t count,
 {
     for (uint32_t i = 0; i < count; i++)
     {
-        if (windows[i].native_handle == handle)
+        if (windows[i].id == handle)
             return (int)i;
     }
     return -1;
 }
-
-#define GF_SWIPE_THRESHOLD_PX 200.0
 
 static void
 gf_window_manager_gesture_event (gf_window_manager_t *m)
@@ -913,7 +905,7 @@ gf_window_manager_gesture_event (gf_window_manager_t *m)
             {
                 bool swipe_left = (gev.total_dx < 0);
 
-                gf_window_id_t active = 0;
+                gf_native_window_t active = 0;
                 if (platform->get_active_window)
                     active = platform->get_active_window (display);
 
@@ -930,7 +922,7 @@ gf_window_manager_gesture_event (gf_window_manager_t *m)
                                                   : (current_idx - 1 + (int)max_count)
                                                         % (int)max_count;
 
-                        gf_native_window_t next_win = max_wins[next_idx].native_handle;
+                        gf_native_window_t next_win = max_wins[next_idx].id;
 
                         if (platform->set_minimize_window)
                             platform->set_minimize_window (display, active);
@@ -938,8 +930,7 @@ gf_window_manager_gesture_event (gf_window_manager_t *m)
                             platform->set_unminimize_window (display, next_win);
 
                         GF_LOG_INFO ("Gesture swipe %s: switched to window %lu",
-                                     swipe_left ? "left" : "right",
-                                     (unsigned long)next_win);
+                                     swipe_left ? "left" : "right", next_win);
                     }
                 }
                 gf_free (max_wins);
@@ -1009,17 +1000,15 @@ gf_window_manager_apply_layout (gf_window_manager_t *m, gf_window_info_t *window
             continue;
 
         gf_error_code_t result = platform->set_window_geometry (
-            display, windows[i].native_handle, &geometry[i],
+            display, windows[i].id, &geometry[i],
             GF_GEOMETRY_CHANGE_ALL | GF_GEOMETRY_APPLY_PADDING, m->config);
 
         if (result != GF_SUCCESS)
         {
-            GF_LOG_WARN ("Failed to set geometry for window %llu",
-                         (unsigned long long)windows[i].id);
+            GF_LOG_WARN ("Failed to set geometry for window %p", (void *)windows[i].id);
         }
 
-        gf_window_manager_update_window_info (m, windows[i].native_handle,
-                                              windows[i].workspace_id);
+        gf_window_manager_update_window_info (m, windows[i].id, windows[i].workspace_id);
         gf_window_list_clear_update_flags (window_list, windows[i].workspace_id);
     }
 }
@@ -1089,14 +1078,14 @@ gf_window_manager_arrange_overflow (gf_window_manager_t *m)
 
             for (uint32_t w = 0; w < windows->count; w++)
             {
-                if (wm_is_excluded (m, win->native_handle))
+                if (wm_is_excluded (m, win->id))
                     continue;
 
                 if (windows->items[w].id == win->id)
                 {
-                    GF_LOG_INFO ("Move window %u from workspace %u to workspace %u",
-                                 windows->items[w].id, windows->items[w].workspace_id,
-                                 dst_id);
+                    GF_LOG_INFO ("Move window %p from workspace %u to workspace %u",
+                                 (void *)windows->items[w].id,
+                                 windows->items[w].workspace_id, dst_id);
                     windows->items[w].workspace_id = dst_id;
 
                     workspaces->items[dst_id].window_count++;
@@ -1122,7 +1111,7 @@ _handle_fullscreen_windows (gf_window_manager_t *m)
     gf_window_list_t *windows = wm_windows (m);
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
-    gf_window_id_t active_win_id = m->platform->get_active_window (m->display);
+    gf_native_window_t active_win_id = m->platform->get_active_window (m->display);
 
     if (active_win_id != 0
         && m->platform->is_window_fullscreen (m->display,
@@ -1130,8 +1119,10 @@ _handle_fullscreen_windows (gf_window_manager_t *m)
     {
         for (uint32_t i = 0; i < windows->count; i++)
         {
-            m->platform->set_minimize_window (m->display,
-                                              windows->items[i].native_handle);
+            if (windows->items[i].id == active_win_id)
+                continue;
+
+            m->platform->set_minimize_window (m->display, windows->items[i].id);
             windows->items[i].is_minimized = true;
         }
     }
@@ -1182,8 +1173,7 @@ _assign_workspace_for_window (gf_window_manager_t *m, gf_window_info_t *win,
     if (current_ws && current_ws->available_space > 0)
         return current_ws->id;
 
-    if (platform->is_window_maximized
-        && platform->is_window_maximized (display, win->native_handle))
+    if (platform->is_window_maximized && platform->is_window_maximized (display, win->id))
     {
         win->is_maximized = true;
         return _find_or_create_maximized_ws (m);
@@ -1206,15 +1196,14 @@ _handle_new_window (gf_window_manager_t *m, gf_window_info_t *win,
 
     gf_window_list_add (windows, win);
 
-    platform->set_unminimize_window (display, win->native_handle);
+    platform->set_unminimize_window (display, win->id);
 
     m->state.last_active_window = win->id;
     m->state.last_active_workspace = win->workspace_id;
     workspaces->active_workspace = win->workspace_id;
 
     if (m->config->enable_borders && platform->create_border)
-        platform->create_border (platform, win->native_handle, m->config->border_color,
-                                 3);
+        platform->create_border (platform, win->id, m->config->border_color, 3);
 
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
@@ -1226,8 +1215,9 @@ _handle_new_window (gf_window_manager_t *m, gf_window_info_t *win,
     }
 
     char name[256];
-    gf_window_manager_get_window_name (m, win->native_handle, name, sizeof (name));
-    GF_LOG_INFO ("New window %lu → workspace %u (%s)", win->id, win->workspace_id, name);
+    gf_window_manager_get_window_name (m, win->id, name, sizeof (name));
+    GF_LOG_INFO ("New window %p → workspace %u (%s)", (void *)win->id, win->workspace_id,
+                 name);
 }
 
 void
@@ -1263,7 +1253,7 @@ gf_window_manager_watch (gf_window_manager_t *m)
         {
             gf_window_info_t *win = &ws_windows[i];
 
-            if (!win->is_valid || wm_is_excluded (m, win->native_handle))
+            if (!win->is_valid || wm_is_excluded (m, win->id))
                 continue;
 
             gf_window_info_t *existing
@@ -1285,7 +1275,7 @@ gf_window_manager_watch (gf_window_manager_t *m)
             }
 
             if (win->is_maximized && platform->remove_border)
-                platform->remove_border (platform, win->native_handle);
+                platform->remove_border (platform, win->id);
         }
 
         gf_free (ws_windows);
@@ -1369,23 +1359,21 @@ gf_window_manager_load_cfg (gf_window_manager_t *m)
 
                         // Check if window is valid and not excluded
                         if (win->is_valid && !win->is_minimized
-                            && !wm_is_excluded (m, win->native_handle))
+                            && !wm_is_excluded (m, win->id))
                         {
                             GF_LOG_DEBUG ("Adding border to window %lu in workspace %d",
-                                          (unsigned long)win->id, workspace);
+                                          (void *)win->id, workspace);
 
                             if (m->platform->create_border)
-                                m->platform->create_border (m->platform,
-                                                            win->native_handle,
+                                m->platform->create_border (m->platform, win->id,
                                                             m->config->border_color, 5);
                         }
                         else
                         {
                             GF_LOG_DEBUG ("Skipping window %lu (valid=%d, minimized=%d, "
                                           "excluded=%d)",
-                                          (unsigned long)win->id, win->is_valid,
-                                          win->is_minimized,
-                                          wm_is_excluded (m, win->native_handle));
+                                          (void *)win->id, win->is_valid,
+                                          win->is_minimized, wm_is_excluded (m, win->id));
                         }
                     }
 
@@ -1403,14 +1391,14 @@ gf_window_manager_load_cfg (gf_window_manager_t *m)
                     gf_window_info_t *win = &current_windows->items[i];
 
                     if (win->is_valid && !win->is_minimized
-                        && !wm_is_excluded (m, win->native_handle))
+                        && !wm_is_excluded (m, win->id))
                     {
                         // Check if border already exists to avoid duplicates
                         bool has_border = false;
                         // This check will be handled by add_border function now
 
                         if (m->platform->create_border)
-                            m->platform->create_border (m->platform, win->native_handle,
+                            m->platform->create_border (m->platform, win->id,
                                                         m->config->border_color, 3);
                     }
                 }
@@ -1434,7 +1422,7 @@ gf_window_manager_event (gf_window_manager_t *m)
     gf_window_list_t *windows = wm_windows (m);
     gf_workspace_list_t *workspaces = wm_workspaces (m);
 
-    gf_window_id_t curr_win_id = platform->get_active_window (display);
+    gf_native_window_t curr_win_id = platform->get_active_window (display);
 
     if (curr_win_id == 0)
     {
@@ -1492,7 +1480,7 @@ gf_window_manager_event (gf_window_manager_t *m)
                 = gf_workspace_list_find_by_id (workspaces, old_ws_id);
             if (old_ws && old_ws->has_maximized_state)
             {
-                old_ws->has_maximized_state = false;
+                old_ws->has_maximized_state = true;
                 old_ws->max_windows = m->config->max_windows_per_workspace;
                 old_ws->available_space = m->config->max_windows_per_workspace;
                 GF_LOG_DEBUG ("Cleared maximized state from empty workspace %d",
@@ -1525,7 +1513,7 @@ gf_window_manager_event (gf_window_manager_t *m)
 }
 
 gf_error_code_t
-gf_window_manager_move_window (gf_window_manager_t *m, gf_window_id_t window_id,
+gf_window_manager_move_window (gf_window_manager_t *m, gf_native_window_t window_id,
                                gf_workspace_id_t target_workspace)
 {
     if (!m)

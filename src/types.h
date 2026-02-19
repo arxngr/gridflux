@@ -6,7 +6,6 @@
 #include <time.h>
 
 // Cross-platform types
-typedef uint64_t gf_window_id_t;
 typedef int32_t gf_workspace_id_t;
 typedef int32_t gf_coordinate_t;
 typedef uint32_t gf_dimension_t;
@@ -84,8 +83,7 @@ typedef struct
 
 typedef struct
 {
-    gf_window_id_t id;
-    gf_native_window_t native_handle;
+    gf_native_window_t id;
     gf_workspace_id_t workspace_id;
     gf_rect_t geometry;
     bool is_maximized;

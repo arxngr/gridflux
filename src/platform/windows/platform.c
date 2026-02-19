@@ -40,6 +40,9 @@ _is_fullscreen_window (HWND hwnd)
     if (!_validate_window (hwnd) || !IsWindowVisible (hwnd))
         return false;
 
+    if (IsZoomed (hwnd))
+        return false;
+
     if (GetWindow (hwnd, GW_OWNER))
         return false;
 
@@ -469,11 +472,14 @@ gf_platform_create (void)
     platform->set_window_geometry = gf_platform_set_window_geometry;
     platform->is_window_minimized = gf_platform_window_minimized;
     platform->is_window_fullscreen = gf_platform_is_window_fullscreen;
-    platform->set_border = gf_platform_add_border;
+    platform->is_window_maximized = gf_platform_is_window_maximized;
+    platform->create_border = gf_platform_add_border;
     platform->update_border = gf_platform_update_borders;
     platform->cleanup_borders = gf_platform_cleanup_borders;
     platform->is_window_hidden = gf_platform_window_hidden;
     platform->remove_border = gf_platform_remove_border;
+    platform->set_dock_autohide = gf_platform_set_dock_autohide;
+    platform->restore_dock = gf_platform_restore_dock;
     platform->platform_data = data;
 
     return platform;
@@ -559,8 +565,7 @@ gf_platform_get_windows (gf_display_t display, gf_workspace_id_t *workspace_id,
             if (GetWindowRect (hwnd, &rect))
             {
                 window_list[found_count] = (gf_window_info_t){
-                    .id = (gf_window_id_t)hwnd,
-                    .native_handle = hwnd,
+                    .id = hwnd,
                     .workspace_id = GF_FIRST_WORKSPACE_ID,
                     .geometry = {
                         .x = rect.left,
@@ -775,9 +780,6 @@ gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t window)
     if (_is_cloaked_window (hwnd))
         return true;
 
-    if (IsZoomed (hwnd))
-        return true;
-
     if (_is_notification_center (hwnd))
         return true;
 
@@ -826,14 +828,14 @@ gf_platform_get_screen_bounds (gf_display_t display, gf_rect_t *bounds)
     return GF_SUCCESS;
 }
 
-gf_window_id_t
+gf_native_window_t
 gf_platform_active_window (gf_display_t display)
 {
     (void)display;
 
     HWND hwnd = GetForegroundWindow ();
     if (_validate_window (hwnd) && _is_app_window (hwnd))
-        return (gf_window_id_t)hwnd;
+        return hwnd;
 
     return 0;
 }
@@ -860,8 +862,16 @@ gf_platform_unminimize_window (gf_display_t display, gf_native_window_t window)
     if (!_validate_window (window))
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (ShowWindow (window, SW_RESTORE) == 0)
-        return GF_ERROR_PLATFORM_ERROR;
+    if (IsIconic ((HWND)window))
+    {
+        if (ShowWindow ((HWND)window, SW_RESTORE) == 0)
+            return GF_ERROR_PLATFORM_ERROR;
+    }
+    else
+    {
+        if (ShowWindow ((HWND)window, SW_SHOW) == 0)
+            return GF_ERROR_PLATFORM_ERROR;
+    }
 
     SetForegroundWindow (window);
     return GF_SUCCESS;
@@ -1016,5 +1026,40 @@ gf_platform_remove_border (gf_platform_interface_t *platform, gf_native_window_t
             GF_LOG_DEBUG ("Removed border for window %p", window);
             return;
         }
+    }
+}
+
+bool
+gf_platform_is_window_maximized (gf_display_t display, gf_native_window_t window)
+{
+    (void)display;
+    if (!_validate_window ((HWND)window))
+        return false;
+    return IsZoomed ((HWND)window);
+}
+
+void
+gf_platform_set_dock_autohide (gf_platform_interface_t *platform)
+{
+    (void)platform;
+    APPBARDATA abd = { .cbSize = sizeof (abd) };
+    abd.hWnd = FindWindowA ("Shell_TrayWnd", NULL);
+    if (abd.hWnd)
+    {
+        abd.lParam = ABS_AUTOHIDE;
+        SHAppBarMessage (ABM_SETSTATE, &abd);
+    }
+}
+
+void
+gf_platform_restore_dock (gf_platform_interface_t *platform)
+{
+    (void)platform;
+    APPBARDATA abd = { .cbSize = sizeof (abd) };
+    abd.hWnd = FindWindowA ("Shell_TrayWnd", NULL);
+    if (abd.hWnd)
+    {
+        abd.lParam = ABS_ALWAYSONTOP;
+        SHAppBarMessage (ABM_SETSTATE, &abd);
     }
 }

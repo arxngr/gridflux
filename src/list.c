@@ -78,13 +78,13 @@ gf_window_list_add (gf_window_list_t *list, const gf_window_info_t *window)
     list->count++;
     gf_window_list_mark_all_needs_update (list, &window->workspace_id);
 
-    GF_LOG_DEBUG ("Added window %llu to workspace %d (total: %u)",
-                  (unsigned long long)window->id, window->workspace_id, list->count);
+    GF_LOG_DEBUG ("Added window %p to workspace %d (total: %u)", (void *)window->id,
+                  window->workspace_id, list->count);
     return GF_SUCCESS;
 }
 
 gf_error_code_t
-gf_window_list_remove (gf_window_list_t *list, gf_window_id_t window_id)
+gf_window_list_remove (gf_window_list_t *list, gf_native_window_t window_id)
 {
     if (!list)
         return GF_ERROR_INVALID_PARAMETER;
@@ -105,9 +105,8 @@ gf_window_list_remove (gf_window_list_t *list, gf_window_id_t window_id)
             memset (&list->items[list->count], 0, sizeof (list->items[0]));
             gf_window_list_mark_all_needs_update (list, &workspace_id);
             GF_LOG_DEBUG (
-                "Removed window %llu with status %d from workspace %d (total: %u)",
-                (unsigned long long)window_id, list->items[i].is_valid, workspace_id,
-                list->count);
+                "Removed window %p with status %d from workspace %d (total: %u)",
+                (void *)window_id, list->items[i].is_valid, workspace_id, list->count);
             return GF_SUCCESS;
         }
     }
@@ -144,7 +143,8 @@ gf_window_list_update (gf_window_list_t *list, const gf_window_info_t *window)
 }
 
 gf_window_info_t *
-gf_window_list_find_by_window_id (const gf_window_list_t *list, gf_window_id_t window_id)
+gf_window_list_find_by_window_id (const gf_window_list_t *list,
+                                  gf_native_window_t window_id)
 {
     if (!list)
         return NULL;
@@ -416,7 +416,7 @@ gf_workspace_list_ensure (gf_workspace_list_t *ws, gf_workspace_id_t ws_id,
 
 bool
 gf_workspace_list_remove_window (gf_workspace_info_t *ws, gf_window_list_t *windows,
-                                 gf_window_id_t win_id)
+                                 gf_native_window_t win_id)
 {
     if (!ws)
         return false;
@@ -441,7 +441,7 @@ gf_workspace_list_remove_window (gf_workspace_info_t *ws, gf_window_list_t *wind
 
 bool
 gf_workspace_list_add_window (gf_workspace_info_t *ws, gf_window_list_t *windows,
-                              gf_window_id_t win_id)
+                              gf_native_window_t win_id)
 {
     if (!ws || ws->available_space <= 0)
         return false;

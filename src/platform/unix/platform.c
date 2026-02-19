@@ -1,9 +1,9 @@
 #include "platform.h"
-#include "gesture.h"
 #include "../../layout.h"
 #include "../../logger.h"
 #include "../../memory.h"
 #include "../../types.h"
+#include "gesture.h"
 #include "platform_compat.h"
 
 #include <X11/Xatom.h>
@@ -873,8 +873,7 @@ _process_window_for_list (Display *display, Window window, gf_platform_atoms_t *
     gf_workspace_id_t resolved_workspace
         = (workspace_id != NULL) ? *workspace_id : GF_FIRST_WORKSPACE_ID;
 
-    *info = (gf_window_info_t){ .id = (gf_window_id_t)window,
-                                .native_handle = window,
+    *info = (gf_window_info_t){ .id = window,
                                 .workspace_id = resolved_workspace,
                                 .geometry = geometry,
                                 .is_maximized = is_maximized,
@@ -1362,7 +1361,7 @@ gf_platform_get_focused_window (Display *dpy)
     return win;
 }
 
-gf_window_id_t
+gf_native_window_t
 gf_platform_active_window (Display *dpy)
 {
     if (!dpy)
@@ -1411,7 +1410,7 @@ gf_platform_minimize_window (gf_display_t display, gf_native_window_t window)
 }
 
 gf_error_code_t
-gf_platform_unminimize_window (gf_display_t display, Window window)
+gf_platform_unminimize_window (gf_display_t display, gf_native_window_t window)
 {
     if (!display || window == None)
         return GF_ERROR_INVALID_PARAMETER;
@@ -1567,13 +1566,13 @@ gf_platform_set_dock_autohide (gf_platform_interface_t *platform)
     {
         // Try Ubuntu Dock first (most likely on Ubuntu)
         char *args_ubuntu[]
-            = { "gsettings", "set", "org.gnome.shell.extensions.ubuntu-dock",
+            = { "gsettings",  "set",   "org.gnome.shell.extensions.ubuntu-dock",
                 "dock-fixed", "false", NULL };
         _run_bg_command ("gsettings", args_ubuntu);
 
         // Also try standard Dash to Dock (fire both, one will fail silently)
         char *args_dash[]
-            = { "gsettings", "set", "org.gnome.shell.extensions.dash-to-dock",
+            = { "gsettings",  "set",   "org.gnome.shell.extensions.dash-to-dock",
                 "dock-fixed", "false", NULL };
         _run_bg_command ("gsettings", args_dash);
 
@@ -1607,7 +1606,8 @@ gf_platform_set_dock_autohide (gf_platform_interface_t *platform)
     Window *clients = (Window *)clients_data;
     data->saved_dock_count = 0;
 
-    for (unsigned long i = 0; i < clients_count && data->saved_dock_count < GF_MAX_DOCK_WINDOWS; i++)
+    for (unsigned long i = 0;
+         i < clients_count && data->saved_dock_count < GF_MAX_DOCK_WINDOWS; i++)
     {
         if (_window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
         {
@@ -1626,7 +1626,8 @@ gf_platform_set_dock_autohide (gf_platform_interface_t *platform)
 
     if (XQueryTree (dpy, root, &root_ret, &parent_ret, &children, &nchildren))
     {
-        for (unsigned int i = 0; i < nchildren && data->saved_dock_count < GF_MAX_DOCK_WINDOWS; i++)
+        for (unsigned int i = 0;
+             i < nchildren && data->saved_dock_count < GF_MAX_DOCK_WINDOWS; i++)
         {
             // Skip if already saved
             bool already_saved = false;
@@ -1673,13 +1674,13 @@ gf_platform_restore_dock (gf_platform_interface_t *platform)
     {
         // Try Ubuntu Dock
         char *args_ubuntu[]
-            = { "gsettings", "set", "org.gnome.shell.extensions.ubuntu-dock",
+            = { "gsettings",  "set",  "org.gnome.shell.extensions.ubuntu-dock",
                 "dock-fixed", "true", NULL };
         _run_bg_command ("gsettings", args_ubuntu);
 
         // Try standard Dash to Dock
         char *args_dash[]
-            = { "gsettings", "set", "org.gnome.shell.extensions.dash-to-dock",
+            = { "gsettings",  "set",  "org.gnome.shell.extensions.dash-to-dock",
                 "dock-fixed", "true", NULL };
         _run_bg_command ("gsettings", args_dash);
 

@@ -46,7 +46,7 @@ bool gf_platform_is_window_excluded (gf_display_t display, gf_native_window_t wi
 gf_error_code_t gf_platform_is_window_drag (gf_display_t display,
                                             gf_native_window_t window,
                                             gf_rect_t *geometry);
-gf_window_id_t gf_platform_active_window (gf_display_t display);
+gf_native_window_t gf_platform_active_window (gf_display_t display);
 gf_error_code_t gf_platform_minimize_window (gf_display_t display,
                                              gf_native_window_t window);
 gf_error_code_t gf_platform_unminimize_window (gf_display_t display,
@@ -58,8 +58,10 @@ void gf_platform_add_border (gf_platform_interface_t *platform, gf_native_window
                              gf_color_t color, int thickness);
 void gf_platform_update_borders (gf_platform_interface_t *platform);
 void gf_platform_cleanup_borders (gf_platform_interface_t *platform);
-bool
-gf_platform_window_hidden(gf_display_t display, gf_native_window_t window);
-void
-gf_platform_remove_border(gf_platform_interface_t *platform, gf_native_window_t window);
+bool gf_platform_window_hidden (gf_display_t display, gf_native_window_t window);
+void gf_platform_remove_border (gf_platform_interface_t *platform,
+                                gf_native_window_t window);
+bool gf_platform_is_window_maximized (gf_display_t display, gf_native_window_t window);
+void gf_platform_set_dock_autohide (gf_platform_interface_t *platform);
+void gf_platform_restore_dock (gf_platform_interface_t *platform);
 #endif // GF_PLATFORM_WINDOWS_H

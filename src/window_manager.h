@@ -16,7 +16,7 @@ typedef struct
     time_t last_scan_time;
     time_t last_cleanup_time;
     uint32_t loop_counter;
-    gf_window_id_t last_active_window;
+    gf_native_window_t last_active_window;
     gf_workspace_id_t last_active_workspace;
     bool initialized;
     bool dock_hidden;
@@ -66,7 +66,7 @@ void gf_window_manager_get_window_name (const gf_window_manager_t *m,
                                         gf_native_window_t handle, char *buffer,
                                         size_t size);
 gf_error_code_t gf_window_manager_move_window (gf_window_manager_t *m,
-                                               gf_window_id_t window_id,
+                                               gf_native_window_t window_id,
                                                gf_workspace_id_t target_workspace);
 
 gf_error_code_t gf_window_manager_lock_workspace (gf_window_manager_t *m,
