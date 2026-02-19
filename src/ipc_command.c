@@ -42,7 +42,7 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
         gf_window_info_t *w = &windows->items[i];
         if (!w->name[0])
         {
-            platform->get_window_name_info (display, w->native_handle, w->name,
+            platform->get_window_name_info (display, w->id, w->name,
                                             sizeof (w->name) - 1);
         }
     }
@@ -112,12 +112,12 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
 {
     gf_window_manager_t *m = (gf_window_manager_t *)user_data;
 
-    uint32_t window_id = 0;
+    gf_window_id_t window_id = 0;
     int target_workspace = -1;
 
     gf_command_response_t resp;
 
-    if (!args || sscanf (args, "%u %d", &window_id, &target_workspace) != 2)
+    if (!args || sscanf (args, "%p %d", (void **)&window_id, &target_workspace) != 2)
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
@@ -136,11 +136,12 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
     switch (result)
     {
     case GF_SUCCESS:
-        snprintf (resp.message, sizeof (resp.message), "Moved window %u to workspace %d",
-                  window_id, target_workspace);
+        snprintf (resp.message, sizeof (resp.message), "Moved window %p to workspace %d",
+                  (void *)window_id, target_workspace);
         break;
     case GF_ERROR_INVALID_PARAMETER:
-        snprintf (resp.message, sizeof (resp.message), "Window %u not found", window_id);
+        snprintf (resp.message, sizeof (resp.message), "Window %p not found",
+                  (void *)window_id);
         break;
     case GF_ERROR_WORKSPACE_LOCKED:
         snprintf (resp.message, sizeof (resp.message), "Workspace %d is locked",

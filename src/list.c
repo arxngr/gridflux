@@ -78,8 +78,8 @@ gf_window_list_add (gf_window_list_t *list, const gf_window_info_t *window)
     list->count++;
     gf_window_list_mark_all_needs_update (list, &window->workspace_id);
 
-    GF_LOG_DEBUG ("Added window %llu to workspace %d (total: %u)",
-                  (unsigned long long)window->id, window->workspace_id, list->count);
+    GF_LOG_DEBUG ("Added window %p to workspace %d (total: %u)", (void *)window->id,
+                  window->workspace_id, list->count);
     return GF_SUCCESS;
 }
 
@@ -105,9 +105,8 @@ gf_window_list_remove (gf_window_list_t *list, gf_window_id_t window_id)
             memset (&list->items[list->count], 0, sizeof (list->items[0]));
             gf_window_list_mark_all_needs_update (list, &workspace_id);
             GF_LOG_DEBUG (
-                "Removed window %llu with status %d from workspace %d (total: %u)",
-                (unsigned long long)window_id, list->items[i].is_valid, workspace_id,
-                list->count);
+                "Removed window %p with status %d from workspace %d (total: %u)",
+                (void *)window_id, list->items[i].is_valid, workspace_id, list->count);
             return GF_SUCCESS;
         }
     }
