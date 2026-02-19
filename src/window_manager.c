@@ -881,8 +881,6 @@ _find_maximized_index (gf_window_info_t *windows, uint32_t count,
     return -1;
 }
 
-#define GF_SWIPE_THRESHOLD_PX 200.0
-
 static void
 gf_window_manager_gesture_event (gf_window_manager_t *m)
 {
@@ -932,8 +930,7 @@ gf_window_manager_gesture_event (gf_window_manager_t *m)
                             platform->set_unminimize_window (display, next_win);
 
                         GF_LOG_INFO ("Gesture swipe %s: switched to window %lu",
-                                     swipe_left ? "left" : "right",
-                                     (unsigned long)next_win);
+                                     swipe_left ? "left" : "right", next_win);
                     }
                 }
                 gf_free (max_wins);

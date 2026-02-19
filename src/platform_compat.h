@@ -1,5 +1,6 @@
 #ifndef PLATFORM_COMPAT_H
 #define PLATFORM_COMPAT_H
+#define GF_SWIPE_THRESHOLD_PX 200.0
 
 #ifdef _WIN32
 #include <sys/stat.h>
