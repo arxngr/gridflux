@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 static gf_workspace_info_t *
 _get_workspace (gf_workspace_list_t *workspaces, gf_workspace_id_t id)
@@ -1123,6 +1122,9 @@ _handle_fullscreen_windows (gf_window_manager_t *m)
     {
         for (uint32_t i = 0; i < windows->count; i++)
         {
+            if (windows->items[i].id == active_win_id)
+                continue;
+
             m->platform->set_minimize_window (m->display, windows->items[i].id);
             windows->items[i].is_minimized = true;
         }
@@ -1481,7 +1483,7 @@ gf_window_manager_event (gf_window_manager_t *m)
                 = gf_workspace_list_find_by_id (workspaces, old_ws_id);
             if (old_ws && old_ws->has_maximized_state)
             {
-                old_ws->has_maximized_state = false;
+                old_ws->has_maximized_state = true;
                 old_ws->max_windows = m->config->max_windows_per_workspace;
                 old_ws->available_space = m->config->max_windows_per_workspace;
                 GF_LOG_DEBUG ("Cleared maximized state from empty workspace %d",
