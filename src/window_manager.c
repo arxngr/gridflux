@@ -1471,28 +1471,10 @@ gf_window_manager_event (gf_window_manager_t *m)
 
         _move_window_between_workspaces (m, focused, normal_ws);
 
-        // Only clear maximized state and restore dock if no other
-        // maximized windows remain in the original workspace.
-        uint32_t remaining = gf_window_list_count_by_workspace (windows, old_ws_id);
-        if (remaining == 0)
+        if (m->state.dock_hidden && platform->restore_dock)
         {
-            gf_workspace_info_t *old_ws
-                = gf_workspace_list_find_by_id (workspaces, old_ws_id);
-            if (old_ws && old_ws->has_maximized_state)
-            {
-                old_ws->has_maximized_state = true;
-                old_ws->max_windows = m->config->max_windows_per_workspace;
-                old_ws->available_space = m->config->max_windows_per_workspace;
-                GF_LOG_DEBUG ("Cleared maximized state from empty workspace %d",
-                              old_ws->id);
-            }
-
-            // Restore dock when no maximized windows remain
-            if (m->state.dock_hidden && platform->restore_dock)
-            {
-                platform->restore_dock (platform);
-                m->state.dock_hidden = false;
-            }
+            platform->restore_dock (platform);
+            m->state.dock_hidden = false;
         }
     }
 
