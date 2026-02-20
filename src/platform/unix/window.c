@@ -1,10 +1,10 @@
-#include "internal.h"
+#include "../../core/layout.h"
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
-#include "../../core/layout.h"
 #include "atoms.h"
-#include <X11/Xutil.h>
+#include "internal.h"
 #include <X11/Xatom.h>
+#include <X11/Xutil.h>
 #include <string.h>
 #include <time.h>
 
@@ -60,8 +60,7 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
     else
     {
         // Resize to actual count
-        *windows
-            = gf_realloc (filtered_windows, filtered_count * sizeof (gf_win_info_t));
+        *windows = gf_realloc (filtered_windows, filtered_count * sizeof (gf_win_info_t));
         if (!*windows)
         {
             gf_free (filtered_windows);
@@ -73,10 +72,8 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
     return GF_SUCCESS;
 }
 
-
 gf_err_t
-gf_window_get_geometry (gf_display_t display, gf_handle_t window,
-                                 gf_rect_t *geometry)
+gf_window_get_geometry (gf_display_t display, gf_handle_t window, gf_rect_t *geometry)
 {
     if (!display || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
@@ -129,8 +126,8 @@ gf_window_is_gui (gf_display_t display, gf_handle_t window)
         if (data && nitems > 0)
         {
             // GridFlux GUI class is usually "gridflux-gui" or based on app-id
-            if (strcmp ((char *)data, "gridflux-gui") == 0 ||
-                strstr ((char *)data, "com.gridflux.gui") != NULL)
+            if (strcmp ((char *)data, "gridflux-gui") == 0
+                || strstr ((char *)data, "com.gridflux.gui") != NULL)
             {
                 XFree (data);
                 return true;
@@ -180,13 +177,12 @@ gf_window_is_fullscreen (gf_display_t display, gf_handle_t window)
 {
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     return gf_platform_window_has_state (display, (Window)window,
-                                          atoms->net_wm_state_fullscreen);
+                                         atoms->net_wm_state_fullscreen);
 }
 
 gf_err_t
-gf_window_set_geometry (gf_display_t dpy, gf_handle_t win,
-                                 const gf_rect_t *geometry, gf_geom_flags_t flags,
-                                 gf_config_t *cfg)
+gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geometry,
+                        gf_geom_flags_t flags, gf_config_t *cfg)
 {
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
 
@@ -350,15 +346,14 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
                          CurrentTime, 0, 0, 0 };
 
         gf_platform_send_client_message (display, window, atoms->net_active_window, data,
-                                          5);
+                                         5);
     }
 
     return GF_SUCCESS;
 }
 
 void
-gf_window_get_name (gf_display_t dpy, gf_handle_t win, char *buffer,
-                             size_t bufsize)
+gf_window_get_name (gf_display_t dpy, gf_handle_t win, char *buffer, size_t bufsize)
 {
     if (!dpy || win == None || !buffer || bufsize == 0)
         return;
@@ -431,7 +426,7 @@ gf_window_is_maximized (gf_display_t display, gf_handle_t window)
         return false;
 
     return gf_platform_window_has_state (display, window,
-                                          atoms->net_wm_state_maximized_vert)
+                                         atoms->net_wm_state_maximized_vert)
            && gf_platform_window_has_state (display, window,
-                                             atoms->net_wm_state_maximized_horz);
+                                            atoms->net_wm_state_maximized_horz);
 }

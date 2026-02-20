@@ -8,9 +8,9 @@
 typedef struct gf_layout_engine gf_layout_engine_t;
 struct gf_layout_engine
 {
-    void (*apply_layout) (const gf_layout_engine_t *engine,
-                          const gf_win_info_t *windows, uint32_t count,
-                          const gf_rect_t *workspace_bounds, gf_rect_t *out_rects);
+    void (*apply_layout) (const gf_layout_engine_t *engine, const gf_win_info_t *windows,
+                          uint32_t count, const gf_rect_t *workspace_bounds,
+                          gf_rect_t *out_rects);
 
     void (*set_padding) (gf_layout_engine_t *engine, uint32_t padding);
     void (*set_min_size) (gf_layout_engine_t *engine, uint32_t min_size);
@@ -21,12 +21,14 @@ struct gf_layout_engine
 
 // --- Engine Lifecycle ---
 gf_layout_engine_t *gf_layout_engine_create (const gf_config_t *config);
-gf_layout_engine_t *gf_layout_engine_create_grid (uint32_t columns, const gf_config_t *config);
+gf_layout_engine_t *gf_layout_engine_create_grid (uint32_t columns,
+                                                  const gf_config_t *config);
 void gf_layout_engine_destroy (gf_layout_engine_t *engine);
 
 // --- Rect Geometry Operations ---
 void gf_rect_apply_padding (gf_rect_t *rect, uint32_t padding);
-gf_rect_t gf_rect_create (gf_coordinate_t x, gf_coordinate_t y, gf_dimension_t width, gf_dimension_t height);
+gf_rect_t gf_rect_create (gf_coordinate_t x, gf_coordinate_t y, gf_dimension_t width,
+                          gf_dimension_t height);
 void gf_rect_ensure_minimum_size (gf_rect_t *rect, uint32_t min_size);
 bool gf_rect_equals (const gf_rect_t *a, const gf_rect_t *b);
 int gf_rect_intersection_area (const gf_rect_t *a, const gf_rect_t *b);

@@ -1,5 +1,5 @@
-#include "internal.h"
 #include "../../utils/logger.h"
+#include "internal.h"
 #include <X11/Xatom.h>
 
 gf_ws_id_t
@@ -51,7 +51,6 @@ gf_workspace_get_count (gf_display_t display)
 
     return 1; // Default to 1 workspace
 }
-
 
 gf_err_t
 gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
@@ -125,7 +124,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
         if ((XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 4096, False,
                                  XA_WINDOW, &actual_type, &actual_format, &clients_count,
                                  &bytes_after, &clients_data)
-              == Success)
+             == Success)
             && clients_data)
         {
             Window *clients = (Window *)clients_data;

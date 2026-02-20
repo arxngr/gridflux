@@ -5,7 +5,6 @@
 #include "platform.h"
 #include <X11/Xatom.h>
 
-
 // --- Shell & Background ---
 void _run_bg_command (const char *cmd, char *const argv[]);
 

@@ -7,7 +7,6 @@ gf_workspace_get_count (gf_display_t display)
     return 1;
 }
 
-
 gf_err_t
 gf_screen_get_bounds (gf_display_t display, gf_rect_t *bounds)
 {

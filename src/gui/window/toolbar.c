@@ -9,8 +9,10 @@ static void
 on_lock_clicked (GtkButton *btn, gpointer data)
 {
     gf_app_state_t *app = data;
-    GtkStringObject *item = GTK_STRING_OBJECT (gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->ws_dropdown)));
-    if (!item) return;
+    GtkStringObject *item = GTK_STRING_OBJECT (
+        gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->ws_dropdown)));
+    if (!item)
+        return;
 
     char command[64];
     snprintf (command, sizeof (command), "lock %s", gtk_string_object_get_string (item));
@@ -21,11 +23,14 @@ static void
 on_unlock_clicked (GtkButton *btn, gpointer data)
 {
     gf_app_state_t *app = data;
-    GtkStringObject *item = GTK_STRING_OBJECT (gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->ws_dropdown)));
-    if (!item) return;
+    GtkStringObject *item = GTK_STRING_OBJECT (
+        gtk_drop_down_get_selected_item (GTK_DROP_DOWN (app->ws_dropdown)));
+    if (!item)
+        return;
 
     char command[64];
-    snprintf (command, sizeof (command), "unlock %s", gtk_string_object_get_string (item));
+    snprintf (command, sizeof (command), "unlock %s",
+              gtk_string_object_get_string (item));
     platform_run_command (app, command, TRUE, FALSE);
 }
 
