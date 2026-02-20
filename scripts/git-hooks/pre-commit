@@ -1,0 +1,20 @@
+#!/bin/sh
+# Git pre-commit hook to run clang-format on staged C/H files.
+
+# Find staged files with .c or .h extension
+FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(c|h)$')
+
+if [ -z "$FILES" ]; then
+    exit 0
+fi
+
+echo "Running clang-format on staged files..."
+
+for FILE in $FILES; do
+    if [ -f "$FILE" ]; then
+        clang-format -i "$FILE"
+        git add "$FILE"
+    fi
+done
+
+exit 0
