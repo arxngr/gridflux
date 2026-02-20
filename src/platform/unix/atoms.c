@@ -1,12 +1,12 @@
 #include <X11/Xlib.h>
 #ifdef __linux__
-#include "../../logger.h"
+#include "../../utils/logger.h"
 #include "atoms.h"
 #include <X11/Xatom.h>
 
 static gf_platform_atoms_t g_atoms = { 0 };
 
-gf_error_code_t
+gf_err_t
 gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
 {
     if (!display || !atoms)
@@ -79,6 +79,7 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
     atoms->net_wm_name = XInternAtom (display, "_NET_WM_NAME", False);
     atoms->utf8_string = XInternAtom (display, "UTF8_STRING", False);
     atoms->net_workarea = XInternAtom (display, "_NET_WORKAREA", False);
+    atoms->net_wm_window_opacity = XInternAtom (display, "_NET_WM_WINDOW_OPACITY", False);
 
     g_atoms = *atoms;
     GF_LOG_DEBUG ("Platform atoms initialized successfully");

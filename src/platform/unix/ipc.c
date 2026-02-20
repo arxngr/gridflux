@@ -1,4 +1,4 @@
-#include "ipc.h"
+#include "../../ipc/ipc.h"
 #ifdef __unix__
 
 #include <errno.h>
