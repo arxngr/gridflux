@@ -1,8 +1,8 @@
 #include "ipc_command.h"
 #include "../core/internal.h"
-#include "ipc.h"
-#include "../utils/memory.h"
 #include "../core/wm.h"
+#include "../utils/memory.h"
+#include "ipc.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,8 +42,7 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
         gf_win_info_t *w = &windows->items[i];
         if (!w->name[0])
         {
-            platform->window_get_name (display, w->id, w->name,
-                                            sizeof (w->name) - 1);
+            platform->window_get_name (display, w->id, w->name, sizeof (w->name) - 1);
         }
     }
 
@@ -128,8 +127,7 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
     }
 
     // Just call the window manager API
-    gf_err_t result
-        = gf_wm_window_move (m, window_id, target_workspace);
+    gf_err_t result = gf_wm_window_move (m, window_id, target_workspace);
 
     resp.type = (result == GF_SUCCESS) ? 0 : 1;
 

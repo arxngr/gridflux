@@ -2,10 +2,10 @@
 #define GF_APP_STATE_H
 
 #include "../config/config.h"
+#include "../core/types.h"
 #include "../ipc/ipc.h"
 #include "../ipc/ipc_command.h"
 #include "../utils/list.h"
-#include "../core/types.h"
 #include <gtk/gtk.h>
 
 typedef struct

@@ -1,11 +1,11 @@
-#include "wm.h"
 #include "../config/config.h"
-#include "internal.h"
-#include "layout.h"
 #include "../utils/list.h"
 #include "../utils/logger.h"
 #include "../utils/memory.h"
+#include "internal.h"
+#include "layout.h"
 #include "types.h"
+#include "wm.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -107,4 +107,3 @@ gf_wm_debug_stats (const gf_wm_t *m)
 
     gf_free (workspace_counts);
 }
-

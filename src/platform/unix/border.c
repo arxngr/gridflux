@@ -5,7 +5,6 @@
 #include <limits.h>
 #include <string.h>
 
-
 static bool
 _rect_intersect (const gf_rect_t *a, const gf_rect_t *b, XRectangle *res)
 {
@@ -395,10 +394,10 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         {
             for (int k = 0; k < intersect_count; k++)
             {
-                if (intersections[k].x != b->last_intersections[k].x ||
-                    intersections[k].y != b->last_intersections[k].y ||
-                    intersections[k].width != b->last_intersections[k].width ||
-                    intersections[k].height != b->last_intersections[k].height)
+                if (intersections[k].x != b->last_intersections[k].x
+                    || intersections[k].y != b->last_intersections[k].y
+                    || intersections[k].width != b->last_intersections[k].width
+                    || intersections[k].height != b->last_intersections[k].height)
                 {
                     shape_changed = true;
                     break;

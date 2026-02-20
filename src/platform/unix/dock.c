@@ -1,5 +1,5 @@
-#include "internal.h"
 #include "../../utils/logger.h"
+#include "internal.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -102,7 +102,7 @@ gf_dock_hide (gf_platform_t *platform)
                 data->saved_dock_windows[data->saved_dock_count++] = children[i];
                 XUnmapWindow (dpy, children[i]);
                 GF_LOG_DEBUG ("Hidden dock window (root child) %lu",
-                               (unsigned long)children[i]);
+                              (unsigned long)children[i]);
             }
         }
         if (children)

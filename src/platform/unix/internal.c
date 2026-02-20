@@ -1,7 +1,7 @@
 #include "internal.h"
 #include "../../utils/logger.h"
-#include <X11/Xutil.h>
 #include <X11/Xatom.h>
+#include <X11/Xutil.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
@@ -217,11 +217,11 @@ _process_window_for_list (Display *display, Window window, gf_platform_atoms_t *
         = (workspace_id != NULL) ? *workspace_id : GF_FIRST_WORKSPACE_ID;
 
     *info = (gf_win_info_t){ .id = window,
-                                .workspace_id = resolved_workspace,
-                                .geometry = geometry,
-                                .is_maximized = is_maximized,
-                                .needs_update = false,
-                                .is_valid = !is_excluded,
-                                .last_modified = time (NULL) };
+                             .workspace_id = resolved_workspace,
+                             .geometry = geometry,
+                             .is_maximized = is_maximized,
+                             .needs_update = false,
+                             .is_valid = !is_excluded,
+                             .last_modified = time (NULL) };
     return true;
 }

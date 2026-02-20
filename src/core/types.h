@@ -102,6 +102,8 @@ typedef struct
     int thickness;
 #if defined(_WIN32)
     RECT last_rect;
+    int last_intersect_count;
+    RECT last_intersections[16];
 #elif defined(__linux__)
     gf_rect_t last_rect;
     int last_intersect_count;

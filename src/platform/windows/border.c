@@ -30,7 +30,7 @@ _create_border_overlay (HWND target)
 }
 
 void
-_update_border (gf_border_t *b)
+_update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
 {
     if (!b || !b->target || !b->overlay)
         return;
@@ -51,38 +51,80 @@ _update_border (gf_border_t *b)
         || GetWindowRect (b->target, &rect))
     {
         int t = b->thickness;
-        MoveWindow (b->overlay, rect.left - t, rect.top - t,
-                    (rect.right - rect.left) + 2 * t, (rect.bottom - rect.top) + 2 * t,
-                    TRUE);
+        int win_x = rect.left - t;
+        int win_y = rect.top - t;
+        int win_w = (rect.right - rect.left) + 2 * t;
+        int win_h = (rect.bottom - rect.top) + 2 * t;
+
+        RECT border_rect = { win_x, win_y, win_x + win_w, win_y + win_h };
+
+        // Find intersections with GUI windows
+        RECT intersections[16];
+        int intersect_count = 0;
+
+        for (int i = 0; i < gui_count && intersect_count < 16; i++)
+        {
+            RECT intersect;
+            if (IntersectRect (&intersect, &border_rect, &gui_rects[i]))
+            {
+                intersections[intersect_count++] = intersect;
+            }
+        }
+
+        bool geom_changed = memcmp (&rect, &b->last_rect, sizeof (RECT)) != 0;
+        bool shape_changed = geom_changed || (intersect_count != b->last_intersect_count);
+
+        if (!shape_changed && intersect_count > 0)
+        {
+            for (int k = 0; k < intersect_count; k++)
+            {
+                if (memcmp (&intersections[k], &b->last_intersections[k], sizeof (RECT))
+                    != 0)
+                {
+                    shape_changed = true;
+                    break;
+                }
+            }
+        }
+
+        if (shape_changed)
+        {
+            MoveWindow (b->overlay, win_x, win_y, win_w, win_h, TRUE);
+
+            // Apply region to exclude intersections
+            HRGN full_rgn = CreateRectRgn (0, 0, win_w, win_h);
+
+            // Subtract middle (the target window itself)
+            HRGN hollow_rgn = CreateRectRgn (t, t, win_w - t, win_h - t);
+            CombineRgn (full_rgn, full_rgn, hollow_rgn, RGN_DIFF);
+            DeleteObject (hollow_rgn);
+
+            // Subtract GUI intersections
+            for (int i = 0; i < intersect_count; i++)
+            {
+                HRGN intersect_rgn = CreateRectRgn (
+                    intersections[i].left - win_x, intersections[i].top - win_y,
+                    intersections[i].right - win_x, intersections[i].bottom - win_y);
+                CombineRgn (full_rgn, full_rgn, intersect_rgn, RGN_DIFF);
+                DeleteObject (intersect_rgn);
+            }
+
+            SetWindowRgn (b->overlay, full_rgn, TRUE);
+
+            b->last_rect = rect;
+            b->last_intersect_count = intersect_count;
+            if (intersect_count > 0)
+            {
+                memcpy (b->last_intersections, intersections,
+                        intersect_count * sizeof (RECT));
+            }
+        }
 
         if (!IsWindowVisible (b->overlay))
             ShowWindow (b->overlay, SW_SHOWNOACTIVATE);
 
         InvalidateRect (b->overlay, NULL, TRUE);
     }
-
-    if (memcmp (&rect, &b->last_rect, sizeof (RECT)) == 0)
-        return;
-
-    int width = rect.right - rect.left;
-    int height = rect.bottom - rect.top;
-
-    if (width <= 0 || height <= 0)
-        return;
-
-    if (IsIconic (b->target))
-    {
-        ShowWindow (b->overlay, SW_HIDE);
-    }
-    else
-    {
-        ShowWindow (b->overlay, SW_SHOWNA);
-
-        // NEVER use HWND_TOPMOST - always relative positioning
-        SetWindowPos (b->overlay, b->target, rect.left, rect.top, width, height,
-                      SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-    }
-    b->last_rect = rect;
 }
 
 LRESULT CALLBACK
@@ -203,7 +245,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     GF_LOG_INFO ("Added border for window %p (color=0x%08X, thickness=%d, count=%d)",
                  window, color, thickness, data->border_count);
 
-    _update_border (b);
+    _update_border (b, NULL, 0);
 }
 
 void
@@ -211,6 +253,25 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
 {
     if (!platform || !platform->platform_data || !config)
         return;
+
+    // Find all GUI windows geometries
+    RECT gui_rects[16];
+    int gui_count = 0;
+
+    HWND hwnd = GetTopWindow (NULL);
+    while (hwnd && gui_count < 16)
+    {
+        if (gf_window_is_gui (NULL, hwnd))
+        {
+            if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                                  &gui_rects[gui_count], sizeof (RECT)))
+                || GetWindowRect (hwnd, &gui_rects[gui_count]))
+            {
+                gui_count++;
+            }
+        }
+        hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);
+    }
 
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
@@ -244,7 +305,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
                     InvalidateRect (b->overlay, NULL, TRUE);
                 }
             }
-            _update_border (b);
+            _update_border (b, gui_rects, gui_count);
             i++;
         }
     }

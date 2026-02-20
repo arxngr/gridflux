@@ -1,9 +1,9 @@
 #include "config.h"
+#include "../core/types.h"
+#include "../platform/platform_compat.h"
 #include "../utils/file.h"
 #include "../utils/logger.h"
 #include "../utils/memory.h"
-#include "../platform/platform_compat.h"
-#include "../core/types.h"
 #include <json-c/json.h>
 #include <limits.h>
 #include <stdio.h>
