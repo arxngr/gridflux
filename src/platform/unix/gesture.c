@@ -1,14 +1,14 @@
 
 #include "gesture.h"
-#include "../../logger.h"
+#include "../../utils/logger.h"
 #include "platform.h"
 
 #include <X11/Xlib.h>
 #include <X11/extensions/XInput2.h>
 #include <string.h>
 
-gf_error_code_t
-gf_gesture_init (gf_platform_interface_t *platform, gf_display_t display)
+gf_err_t
+gf_gesture_init (gf_platform_t *platform, gf_display_t display)
 {
     if (!platform || !platform->platform_data || !display)
         return GF_ERROR_INVALID_PARAMETER;
@@ -60,7 +60,7 @@ gf_gesture_init (gf_platform_interface_t *platform, gf_display_t display)
 }
 
 void
-gf_gesture_cleanup (gf_platform_interface_t *platform)
+gf_gesture_cleanup (gf_platform_t *platform)
 {
     if (!platform || !platform->platform_data)
         return;
@@ -70,8 +70,8 @@ gf_gesture_cleanup (gf_platform_interface_t *platform)
 }
 
 bool
-gf_gesture_poll (gf_platform_interface_t *platform, gf_display_t display,
-                 void *event_out)
+gf_gesture_poll (gf_platform_t *platform, gf_display_t display,
+                 gf_gesture_event_t *event_out)
 {
     if (!platform || !platform->platform_data || !display || !event_out)
         return false;

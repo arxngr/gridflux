@@ -22,9 +22,13 @@ set(CPACK_SET_DESTDIR TRUE)
 
 include_directories(src)
 
-file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS "src/*.c")
-list(REMOVE_ITEM COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/client.c")
-list(REMOVE_ITEM COMMON_SOURCES "${CMAKE_SOURCE_DIR}/src/gui.c")
+file(GLOB COMMON_SOURCES CONFIGURE_DEPENDS
+    "src/core/*.c"
+    "src/utils/*.c"
+    "src/config/*.c"
+    "src/ipc/*.c"
+)
+list(APPEND COMMON_SOURCES "src/server/main.c")
 
 
 if(WIN32)
@@ -146,15 +150,20 @@ add_executable(gridflux
 )
 
 add_executable(gridflux-cli
-    src/client.c
-    src/ipc_command.c
-    src/window_manager.c
-    src/list.c
-    src/memory.c
-    src/logger.c
-    src/config.c
-    src/layout.c
-    src/file.c
+    src/cli/main.c
+    src/ipc/ipc_command.c
+    src/core/wm.c
+    src/core/arrange.c
+    src/core/workspace.c
+    src/core/window.c
+    src/core/events.c
+    src/core/debug.c
+    src/utils/list.c
+    src/utils/memory.c
+    src/utils/logger.c
+    src/config/config.c
+    src/core/layout.c
+    src/utils/file.c
 )
 
 if(UNIX AND NOT APPLE)
@@ -166,15 +175,30 @@ endif()
 
 if(GTK4_FOUND)
     add_executable(gridflux-gui
-        src/gui.c
-        src/ipc_command.c
-        src/window_manager.c
-        src/list.c
-        src/memory.c
-        src/config.c
-        src/logger.c
-        src/layout.c
-        src/file.c
+        src/gui/gui.c
+        src/gui/window/main_window.c
+        src/gui/window/toolbar.c
+        src/gui/window/statusbar.c
+        src/gui/panels/workspace_panel.c
+        src/gui/panels/window_panel.c
+        src/gui/panels/settings_panel.c
+        src/gui/widgets/workspace_card.c
+        src/gui/bridge/ipc_client.c
+        src/gui/bridge/refresh.c
+        src/gui/platform/async.c
+        src/ipc/ipc_command.c
+        src/core/wm.c
+        src/core/arrange.c
+        src/core/workspace.c
+        src/core/window.c
+        src/core/events.c
+        src/core/debug.c
+        src/utils/list.c
+        src/utils/memory.c
+        src/config/config.c
+        src/utils/logger.c
+        src/core/layout.c
+        src/utils/file.c
         ${PLATFORM_SOURCES}
     )
 

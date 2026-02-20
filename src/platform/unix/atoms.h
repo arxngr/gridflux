@@ -1,7 +1,7 @@
 #ifndef GF_PLATFORM_LINUX_ATOMS_H
 #define GF_PLATFORM_LINUX_ATOMS_H
 #ifdef __linux__
-#include "../../types.h"
+#include "../../core/types.h"
 #include <X11/Xlib.h>
 
 // Platform atoms
@@ -50,10 +50,11 @@ typedef struct
     Atom net_wm_name;
     Atom utf8_string;
     Atom net_workarea;
+    Atom net_wm_window_opacity;
 } gf_platform_atoms_t;
 
 // Atoms management
-gf_error_code_t gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms);
+gf_err_t gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms);
 gf_platform_atoms_t *gf_platform_atoms_get_global (void);
 
 #endif // __linux__

@@ -1,6 +1,6 @@
 #ifdef _WIN32
 
-#include "ipc.h"
+#include "../../ipc/ipc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,10 +19,10 @@ typedef struct
     DWORD bytes_read;
     BOOL pending_io;
     BOOL connected;
-} pipe_instance_t;
+} gf_pipe_t;
 
 static char pipe_name[256] = { 0 };
-static pipe_instance_t *pipe_instances = NULL;
+static gf_pipe_t *pipe_instances = NULL;
 static int num_instances = 0;
 
 static SECURITY_ATTRIBUTES *
@@ -85,7 +85,7 @@ create_pipe_instance (void)
 }
 
 static BOOL
-connect_to_client (pipe_instance_t *instance)
+connect_to_client (gf_pipe_t *instance)
 {
     BOOL connected = ConnectNamedPipe (instance->pipe, &instance->overlapped);
 
@@ -122,7 +122,7 @@ gf_ipc_server_create (void)
     const char *pipe_path = gf_ipc_get_socket_path ();
 
     // Allocate pipe instances array
-    pipe_instances = calloc (MAX_PIPE_INSTANCES, sizeof (pipe_instance_t));
+    pipe_instances = calloc (MAX_PIPE_INSTANCES, sizeof (gf_pipe_t));
     if (!pipe_instances)
     {
         fprintf (stderr, "Failed to allocate pipe instances\n");
@@ -203,7 +203,7 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
 
     for (int i = 0; i < num_instances; i++)
     {
-        pipe_instance_t *inst = &pipe_instances[i];
+        gf_pipe_t *inst = &pipe_instances[i];
         DWORD bytes_transferred;
         BOOL success;
 
