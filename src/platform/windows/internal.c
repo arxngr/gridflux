@@ -56,8 +56,8 @@ _is_excluded_class (const char *class_name, const char *title)
             "Windows.UI.Composition.DesktopWindowContentBridge",
             "Xaml",
             "Overflow",
-            "SDL_app",
-            "ApplicationFrameWindow" };
+            "ApplicationFrameWindow",
+            "vgui_test_shell" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
     {
@@ -238,6 +238,24 @@ _window_it_self (gf_display_t display, gf_handle_t window)
             return true;
         }
     }
+
+    return false;
+}
+
+BOOL
+_window_excluded_border (HWND hwnd)
+{
+    if (!_validate_window (hwnd))
+        return true;
+
+    char class_name[MAX_CLASS_NAME_LENGTH] = { 0 };
+    char title[MAX_TITLE_LENGTH] = { 0 };
+
+    GetClassNameA (hwnd, class_name, sizeof (class_name));
+    GetWindowTextA (hwnd, title, sizeof (title));
+
+    if (_is_excluded_class (class_name, title))
+        return true;
 
     return false;
 }

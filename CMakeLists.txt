@@ -149,6 +149,17 @@ add_executable(gridflux
     ${PLATFORM_SOURCES}
 )
 
+if(WIN32)
+    add_executable(gridflux-launcher WIN32
+        src/launcher/win32.c
+        src/launcher/gridflux-launcher.rc
+    )
+    target_link_libraries(gridflux-launcher PRIVATE kernel32 user32 shell32)
+    if(NOT GF_DEV_MODE)
+        install(TARGETS gridflux-launcher DESTINATION bin)
+    endif()
+endif()
+
 add_executable(gridflux-cli
     src/cli/main.c
     src/ipc/ipc_command.c

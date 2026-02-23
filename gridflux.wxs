@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
   <Product Id="*" Name="GridFlux Window Manager" Manufacturer="Ardi Nugraha"
            Version="0.1.0" Language="1033"
@@ -13,6 +14,18 @@
 
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
     <UIRef Id="WixUI_InstallDir" />
+
+    <!-- Kill running processes before uninstall removes files -->
+    <util:CloseApplication Id="CloseGridFlux"
+                           Target="gridflux.exe"
+                           CloseMessage="yes"
+                           RebootPrompt="no"
+                           TerminateProcess="5" />
+    <util:CloseApplication Id="CloseGridFluxLauncher"
+                           Target="gridflux-launcher.exe"
+                           CloseMessage="yes"
+                           RebootPrompt="no"
+                           TerminateProcess="5" />
 
     <WixVariable Id="WixUILicenseRtf" Value="LICENSE.rtf" />
     <Icon Id="GridFluxIcon.ico" SourceFile="icons\gridflux.ico" />
@@ -61,8 +74,8 @@
         <File Source="build\gridflux-cli.exe" />
       </Component>
 
-      <Component Id="LauncherScript" Guid="{44444444-4444-4444-4444-444444444444}" Win64="yes">
-        <File Source="gridflux-launcher.vbs" />
+      <Component Id="LauncherExe" Guid="{44444444-4444-4444-4444-444444444444}" Win64="yes">
+        <File Source="build\gridflux-launcher.exe" />
       </Component>
 
       <Component Id="Registry" Guid="{88888888-8888-8888-8888-888888888888}" Win64="yes">
@@ -91,7 +104,7 @@
       <ComponentRef Id="GridFluxExe"/>
       <ComponentRef Id="GridFluxGui"/>
       <ComponentRef Id="GridFluxCli"/>
-      <ComponentRef Id="LauncherScript"/>
+      <ComponentRef Id="LauncherExe"/>
       <ComponentRef Id="Icons"/>
       <ComponentRef Id="DefaultConfig"/>
       <ComponentRef Id="Registry"/>
@@ -104,7 +117,7 @@
         <RegistryValue Root="HKCU"
                        Key="Software\Microsoft\Windows\CurrentVersion\Run"
                        Name="GridFlux"
-                       Value="wscript.exe &quot;[INSTALLDIR]gridflux-launcher.vbs&quot;"
+                       Value="&quot;[INSTALLDIR]gridflux-launcher.exe&quot;"
                        Type="string"
                        KeyPath="yes"/>
       </Component>
