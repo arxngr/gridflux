@@ -21,7 +21,7 @@ typedef struct
     char message[GF_IPC_MSG_SIZE];
 } gf_ipc_response_t;
 
-typedef int gf_ipc_handle_t;
+typedef intptr_t gf_ipc_handle_t;
 
 // --- Server Operations ---
 gf_ipc_handle_t gf_ipc_server_create (void);
