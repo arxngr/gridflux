@@ -174,7 +174,7 @@ endif()
 
 
 if(GTK4_FOUND)
-    add_executable(gridflux-gui
+    add_executable(gridflux-gui WIN32
         src/gui/gui.c
         src/gui/window/main_window.c
         src/gui/window/toolbar.c
