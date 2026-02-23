@@ -57,7 +57,11 @@ _is_excluded_class (const char *class_name, const char *title)
             "Xaml",
             "Overflow",
             "ApplicationFrameWindow",
-            "vgui_test_shell" };
+            "vgui_test_shell",
+            "tooltips_class32",
+            "Valve001",
+            "Steam",
+            "#32770" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
     {
@@ -248,14 +252,21 @@ _window_excluded_border (HWND hwnd)
     if (!_validate_window (hwnd))
         return true;
 
-    char class_name[MAX_CLASS_NAME_LENGTH] = { 0 };
-    char title[MAX_TITLE_LENGTH] = { 0 };
-
-    GetClassNameA (hwnd, class_name, sizeof (class_name));
-    GetWindowTextA (hwnd, title, sizeof (title));
-
-    if (_is_excluded_class (class_name, title))
+    if (_window_it_self (NULL, hwnd))
         return true;
+
+    char class_name[MAX_CLASS_NAME_LENGTH];
+    if (GetClassNameA (hwnd, class_name, sizeof (class_name)))
+    {
+        static const char *excluded_classes[] = { "#32770", "TaskManagerWindow" };
+
+        for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]);
+             i++)
+        {
+            if (strcmp (class_name, excluded_classes[i]) == 0)
+                return true;
+        }
+    }
 
     return false;
 }
