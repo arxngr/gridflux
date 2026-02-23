@@ -2,6 +2,7 @@
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "atoms.h"
+#include "core/types.h"
 #include "internal.h"
 #include <X11/Xatom.h>
 #include <X11/Xutil.h>
@@ -103,7 +104,22 @@ gf_window_is_valid (gf_display_t display, gf_handle_t window)
 }
 
 bool
-gf_window_is_gui (gf_display_t display, gf_handle_t window)
+_window_excluded_border (gf_display_t display, gf_handle_t window)
+{
+    if (_window_it_self (display, window))
+        return true;
+
+    if (_window_screenshot_app (display, window))
+        return true;
+
+    if (_window_has_excluded_state (display, window))
+        return true;
+
+    return false;
+}
+
+bool
+_window_it_self (gf_display_t display, gf_handle_t window)
 {
     if (!display || window == None)
         return false;
@@ -146,10 +162,10 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (!display || window == None)
         return true;
 
-    if (gf_window_is_gui (display, window))
+    if (_window_it_self (display, window))
         return true;
 
-    if (_is_screenshot_app (display, window))
+    if (_window_screenshot_app (display, window))
         return true;
 
     /* Exclude fullscreen OR maximized NORMAL windows */

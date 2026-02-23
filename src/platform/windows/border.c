@@ -261,7 +261,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     HWND hwnd = GetTopWindow (NULL);
     while (hwnd && gui_count < 16)
     {
-        if (gf_window_is_gui (NULL, hwnd))
+        if (_window_it_self (NULL, hwnd))
         {
             if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
                                                   &gui_rects[gui_count], sizeof (RECT)))

@@ -45,6 +45,10 @@ gf_gui_toolbar_new (gf_app_state_t *app)
 {
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
 
+    GtkWidget *ws_label = gtk_label_new ("Workspaces:");
+    gtk_widget_set_valign (ws_label, GTK_ALIGN_CENTER);
+    gtk_box_append (GTK_BOX (box), ws_label);
+
     app->ws_model = gtk_string_list_new (NULL);
     app->ws_dropdown = gtk_drop_down_new (G_LIST_MODEL (app->ws_model), NULL);
     gtk_widget_set_size_request (app->ws_dropdown, 140, -1);

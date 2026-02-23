@@ -9,7 +9,7 @@
 void _run_bg_command (const char *cmd, char *const argv[]);
 
 // --- Window Identification & State ---
-bool _is_screenshot_app (gf_display_t display, gf_handle_t window);
+bool _window_screenshot_app (gf_display_t display, gf_handle_t window);
 bool _process_window_for_list (Display *display, Window window,
                                gf_platform_atoms_t *atoms, gf_ws_id_t *workspace_id,
                                gf_win_info_t *info);
@@ -17,7 +17,8 @@ bool _window_has_excluded_state (gf_display_t display, gf_handle_t window);
 bool _window_has_excluded_type (gf_display_t display, gf_handle_t window);
 bool _window_has_type (gf_display_t display, gf_handle_t window, Atom type);
 bool _window_name_matches (const char *name, const char *list[], size_t count);
-bool gf_window_is_gui (gf_display_t display, gf_handle_t window);
+bool _window_it_self (gf_display_t display, gf_handle_t window);
+bool _window_excluded_border (gf_display_t display, gf_handle_t window);
 
 // --- Border Management ---
 void gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,

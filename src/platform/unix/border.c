@@ -305,7 +305,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         Window *clients = (Window *)prop_data;
         for (unsigned long i = 0; i < nitems && gui_count < 16; i++)
         {
-            if (gf_window_is_gui (dpy, clients[i]))
+            if (_window_excluded_border (dpy, clients[i]))
             {
                 if (_get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
                 {
