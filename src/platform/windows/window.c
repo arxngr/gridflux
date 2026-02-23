@@ -32,6 +32,7 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
                 && !GetWindowRect (hwnd, &rect))
                 continue;
 
+            window_list[found_count].name[0] = '\0';
             window_list[found_count].id = (gf_handle_t)hwnd;
             window_list[found_count].workspace_id = GF_FIRST_WORKSPACE_ID;
             window_list[found_count].geometry.x = rect.left;
@@ -162,33 +163,6 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     {
         if (_is_excluded_class (class_name, title))
             return true;
-    }
-
-    return false;
-}
-
-bool
-gf_window_is_gui (gf_display_t display, gf_handle_t window)
-{
-    (void)display;
-    if (!_validate_window (window))
-        return false;
-
-    char title[MAX_TITLE_LENGTH];
-    _get_window_name (display, window, title, sizeof (title));
-
-    // EXACT match for GridFlux GUI
-    if (strcmp (title, "GridFlux") == 0)
-        return true;
-
-    char class_name[MAX_CLASS_NAME_LENGTH];
-    if (GetClassNameA (window, class_name, sizeof (class_name)))
-    {
-        // GridFlux GUI class
-        if (strcmp (class_name, "GridFluxGUI") == 0)
-        {
-            return true;
-        }
     }
 
     return false;

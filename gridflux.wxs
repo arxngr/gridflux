@@ -77,6 +77,7 @@
         <File Source="icons\gridflux-32.png" />
         <File Source="icons\gridflux-48.png" />
         <File Source="icons\gridflux.ico" />
+        <File Source="icons\gf_logo.png" />
       </Component>
     </DirectoryRef>    
 

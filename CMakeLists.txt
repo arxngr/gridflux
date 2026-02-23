@@ -174,7 +174,7 @@ endif()
 
 
 if(GTK4_FOUND)
-    add_executable(gridflux-gui
+    add_executable(gridflux-gui WIN32
         src/gui/gui.c
         src/gui/window/main_window.c
         src/gui/window/toolbar.c
@@ -211,6 +211,11 @@ if(GTK4_FOUND)
         ${GTK4_LIBRARIES}
         ${PLATFORM_LIBRARIES}
     )
+
+    # Embed icon resource on Windows (taskbar, alt-tab, explorer)
+    if(WIN32)
+        target_sources(gridflux-gui PRIVATE ${CMAKE_SOURCE_DIR}/gridflux.rc)
+    endif()
 endif()
 
 
