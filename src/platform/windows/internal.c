@@ -214,3 +214,30 @@ _get_taskbar_dimensions (int *left, int *right, int *top, int *bottom)
         }
     }
 }
+
+bool
+_window_it_self (gf_display_t display, gf_handle_t window)
+{
+    (void)display;
+    if (!_validate_window (window))
+        return false;
+
+    char title[MAX_TITLE_LENGTH];
+    _get_window_name (display, window, title, sizeof (title));
+
+    // EXACT match for GridFlux GUI
+    if (strcmp (title, "GridFlux") == 0)
+        return true;
+
+    char class_name[MAX_CLASS_NAME_LENGTH];
+    if (GetClassNameA (window, class_name, sizeof (class_name)))
+    {
+        // GridFlux GUI class
+        if (strcmp (class_name, "GridFluxGUI") == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
