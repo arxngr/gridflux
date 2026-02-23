@@ -91,7 +91,7 @@ build_and_install() {
     [ -f CMakeCache.txt ] && rm -f CMakeCache.txt
 
     # Build
-    if ! cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release .; then
+    if ! cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local .; then
         log_error "CMake configuration failed"
         exit 1
     fi
@@ -298,13 +298,28 @@ install_icons() {
     echo "Installing icons..."
     ICON_DIR="$HOME/.local/share/icons/hicolor"
 
-    for size in 16 32 48; do
+    for size in 16 32 48 128 256; do
         if [ -f "icons/gridflux-${size}.png" ]; then
             mkdir -p "$ICON_DIR/${size}x${size}/apps"
             cp "icons/gridflux-${size}.png" "$ICON_DIR/${size}x${size}/apps/gridflux.png"
             log_info "${size}x${size} icon installed"
+        elif [ -f "icons/hicolor/${size}x${size}/apps/gridflux.png" ]; then
+            mkdir -p "$ICON_DIR/${size}x${size}/apps"
+            cp "icons/hicolor/${size}x${size}/apps/gridflux.png" "$ICON_DIR/${size}x${size}/apps/gridflux.png"
+            log_info "${size}x${size} icon installed (from hicolor)"
         fi
     done
+
+    # Install application logo for GUI runtime use
+    DATA_DIR="$HOME/.local/share/gridflux/icons"
+    SYSTEM_DATA_DIR="/usr/local/share/gridflux/icons"
+    mkdir -p "$DATA_DIR"
+    if [ -f "icons/gf_logo.png" ]; then
+        cp "icons/gf_logo.png" "$DATA_DIR/gf_logo.png"
+        sudo mkdir -p "$SYSTEM_DATA_DIR"
+        sudo cp "icons/gf_logo.png" "$SYSTEM_DATA_DIR/gf_logo.png"
+        log_info "Application logo installed"
+    fi
 
     # Update icon cache
     if command -v gtk-update-icon-cache >/dev/null 2>&1; then

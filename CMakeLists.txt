@@ -235,6 +235,14 @@ if(GF_DEV_MODE)
     if(TARGET gridflux-gui)
         target_compile_definitions(gridflux-gui PRIVATE GF_DEV_MODE)
     endif()
+else()
+    # Pass install paths as compile definitions for production builds
+    if(TARGET gridflux-gui)
+        target_compile_definitions(gridflux-gui PRIVATE
+            GF_DATADIR="${CMAKE_INSTALL_PREFIX}/share/gridflux"
+            GF_ICONDIR="${CMAKE_INSTALL_PREFIX}/share/icons"
+        )
+    endif()
 endif()
 
 
@@ -254,8 +262,11 @@ if(NOT GF_DEV_MODE)
         )
         install(FILES "${CMAKE_BINARY_DIR}/gridflux-gui.desktop" DESTINATION share/applications)
         
-        # Install icons
+        # Install icons to system icon theme for window manager integration
         install(DIRECTORY icons/hicolor/ DESTINATION share/icons/hicolor)
+
+        # Install application data (logo used by GUI at runtime)
+        install(FILES icons/gf_logo.png DESTINATION share/gridflux/icons)
     endif()
 endif()
 
