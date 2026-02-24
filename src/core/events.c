@@ -111,11 +111,6 @@ gf_wm_watch (gf_wm_t *m)
 
             if (!win->is_valid || wm_is_excluded (m, win->id))
             {
-                if (win->is_valid && wm_is_excluded (m, win->id))
-                {
-                    if (platform->border_remove)
-                        platform->border_remove (platform, win->id);
-                }
                 continue;
             }
 
@@ -135,9 +130,6 @@ gf_wm_watch (gf_wm_t *m)
                 win->is_minimized = existing->is_minimized;
                 gf_window_list_update (windows, win);
             }
-
-            if (win->is_maximized && platform->border_remove)
-                platform->border_remove (platform, win->id);
         }
 
         gf_free (ws_windows);

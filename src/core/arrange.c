@@ -85,7 +85,7 @@ gf_wm_layout_apply (gf_wm_t *m)
 
         for (uint32_t j = 0; j < ws_window_count; j++)
         {
-            if (!ws_windows[j].is_minimized)
+            if (!ws_windows[j].is_minimized && !wm_is_excluded (m, ws_windows[j].id))
             {
                 non_minimized_windows[non_minimized_count++] = ws_windows[j];
             }
@@ -196,6 +196,9 @@ gf_wm_apply_layout (gf_wm_t *m, gf_win_info_t *windows, gf_rect_t *geometry,
 
     for (uint32_t i = 0; i < window_count; i++)
     {
+        if (wm_is_excluded (m, windows[i].id))
+            continue;
+
         if (windows[i].is_minimized || !windows[i].needs_update && !windows[i].is_valid)
             continue;
 
@@ -226,6 +229,8 @@ gf_wm_layout_rebalance (gf_wm_t *m)
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_ws_info_t *src_ws = &workspaces->items[i];
+        if (src_ws->has_maximized_state)
+            continue;
 
         if (src_ws->window_count <= max_per_ws)
             continue;

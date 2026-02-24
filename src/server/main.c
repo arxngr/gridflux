@@ -26,9 +26,24 @@ signal_handler (int sig)
     exit (0);
 }
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <shellscalingapi.h>
+#include <windows.h>
+
+#pragma comment(lib, "Shcore.lib")
+#endif
+
 int
 main ()
 {
+#ifdef _WIN32
+    // Use System DPI awareness as a baseline for consistent coordinate
+    // calculations across monitors. While not as advanced as Per-Monitor V2,
+    // it is highly compatible across different build environments.
+    SetProcessDPIAware ();
+#endif
+
     gf_log_init (GF_LOG_DEBUG);
     signal (SIGINT, signal_handler);
     signal (SIGTERM, signal_handler);
