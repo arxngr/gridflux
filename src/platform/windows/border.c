@@ -1,6 +1,7 @@
 #include "../../utils/logger.h"
 #include "internal.h"
 #include "platform.h"
+#include "platform/unix/internal.h"
 #include <stdlib.h>
 
 HWND
@@ -262,7 +263,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     HWND hwnd = GetTopWindow (NULL);
     while (hwnd && gui_count < 16)
     {
-        if (_window_it_self (NULL, hwnd) || _window_excluded_border (hwnd))
+        if (_window_excluded_border (hwnd))
         {
             if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
                                                   &gui_rects[gui_count], sizeof (RECT)))
@@ -282,7 +283,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     {
         gf_border_t *b = data->borders[i];
 
-        if (!b->target || !IsWindow (b->target))
+        if (!b->target || !IsWindow (b->target) || _window_excluded_border (b->target))
         {
             if (b->overlay && IsWindow (b->overlay))
             {

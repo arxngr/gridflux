@@ -226,6 +226,8 @@ gf_wm_layout_rebalance (gf_wm_t *m)
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_ws_info_t *src_ws = &workspaces->items[i];
+        if (src_ws->has_maximized_state)
+            continue;
 
         if (src_ws->window_count <= max_per_ws)
             continue;

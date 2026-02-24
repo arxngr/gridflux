@@ -319,7 +319,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     for (int i = 0; i < data->border_count;)
     {
         gf_border_t *b = data->borders[i];
-        if (!b)
+        if (!b || _window_excluded_border (dpy, b->target))
         {
             i++;
             continue;

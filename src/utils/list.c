@@ -347,7 +347,7 @@ gf_workspace_list_find_free (gf_ws_list_t *ws)
     for (uint32_t i = 0; i < ws->count; i++)
     {
         gf_ws_info_t *info = &ws->items[i];
-        if (info->available_space > 0 && !info->is_locked)
+        if (info->available_space > 0 && !info->is_locked && !info->has_maximized_state)
             return info->id;
     }
 
