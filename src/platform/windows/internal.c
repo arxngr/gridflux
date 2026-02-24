@@ -56,7 +56,6 @@ _is_excluded_class (const char *class_name, const char *title)
             "Windows.UI.Composition.DesktopWindowContentBridge",
             "Xaml",
             "Overflow",
-            "ApplicationFrameWindow",
             "vgui_test_shell",
             "tooltips_class32",
             "Valve001",
