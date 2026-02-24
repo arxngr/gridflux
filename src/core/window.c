@@ -31,10 +31,6 @@ _remove_stale_windows (gf_wm_t *m, gf_win_list_t *windows)
         if (m->platform->window_is_hidden)
         {
             hidden = m->platform->window_is_hidden (m->display, win->id);
-            if (m->platform->border_remove && hidden)
-            {
-                m->platform->border_remove (m->platform, win->id);
-            }
         }
 
         if (excluded || invalid || hidden)
@@ -96,10 +92,6 @@ _minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_i
         if (wm_is_excluded (m, win->id))
             continue;
 
-        // Remove border before minimizing
-        if (m->config->enable_borders && platform->border_remove)
-            platform->border_remove (platform, win->id);
-
         platform->window_minimize (display, win->id);
         win->is_minimized = true;
     }
@@ -112,6 +104,9 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
     gf_display_t display = *wm_display (m);
     gf_win_list_t *windows = wm_windows (m);
 
+    gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
+    bool is_maximized_ws = (ws && ws->has_maximized_state);
+
     // First pass: unminimize all non-active windows in target workspace
     // Iterate backwards to maintain stacking order
     for (int32_t i = (int32_t)windows->count - 1; i >= 0; i--)
@@ -119,6 +114,12 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
         gf_win_info_t *win = &windows->items[i];
 
         if (win->workspace_id != ws_id)
+            continue;
+
+        // For maximized workspaces, we ONLY want one window visible at a time.
+        // We skip unminimizing non-active windows in this pass if it's a maximized
+        // workspace.
+        if (is_maximized_ws)
             continue;
 
         if (wm_is_excluded (m, win->id))
@@ -157,6 +158,22 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
                 {
                     platform->border_add (platform, win->id, m->config->border_color, 3);
                 }
+                break;
+            }
+        }
+    }
+    else if (is_maximized_ws && windows->count > 0)
+    {
+        // If it's a maximized workspace but no active window was specified,
+        // unminimize at least the first one we find in this workspace
+        // to avoid having an empty-looking screen.
+        for (uint32_t i = 0; i < windows->count; i++)
+        {
+            gf_win_info_t *win = &windows->items[i];
+            if (win->workspace_id == ws_id && !wm_is_excluded (m, win->id))
+            {
+                platform->window_unminimize (display, win->id);
+                win->is_minimized = false;
                 break;
             }
         }
@@ -203,8 +220,7 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
 
     if (wm_is_excluded (m, window))
     {
-        if (m->platform->border_remove)
-            m->platform->border_remove (m->platform, window);
+
         return GF_SUCCESS;
     }
 
