@@ -1,7 +1,7 @@
 #include "../../utils/logger.h"
 #include "internal.h"
 #include "platform.h"
-#include "platform/unix/internal.h"
+#include "platform/windows/internal.h"
 #include <stdlib.h>
 
 HWND
