@@ -20,6 +20,8 @@ on_config_save_clicked (GtkButton *btn, gpointer data)
         = g_object_get_data (G_OBJECT (config_window), "min_window_size_spin");
     GtkWidget *border_color_btn
         = g_object_get_data (G_OBJECT (config_window), "border_color_btn");
+    GtkWidget *enable_borders_switch
+        = g_object_get_data (G_OBJECT (config_window), "enable_borders_switch");
 
     config.max_windows_per_workspace
         = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (max_windows_spin));
@@ -29,6 +31,8 @@ on_config_save_clicked (GtkButton *btn, gpointer data)
         = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (default_padding_spin));
     config.min_window_size
         = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (min_window_size_spin));
+
+    config.enable_borders = gtk_switch_get_active (GTK_SWITCH (enable_borders_switch));
 
     GdkRGBA color;
     gtk_color_chooser_get_rgba (GTK_COLOR_CHOOSER (border_color_btn), &color);
@@ -98,8 +102,27 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     rgba.alpha = 1.0;
     GtkWidget *color_btn = gtk_color_button_new_with_rgba (&rgba);
     gtk_widget_set_halign (color_btn, GTK_ALIGN_START);
+    gtk_widget_set_sensitive (color_btn, config.enable_borders);
     g_object_set_data (G_OBJECT (config_window), "border_color_btn", color_btn);
     gtk_box_append (GTK_BOX (form), color_btn);
+
+    /* Enable Borders toggle */
+    GtkWidget *border_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_box_append (GTK_BOX (form), border_row);
+
+    GtkWidget *border_label = gtk_label_new ("Enable Borders:");
+    gtk_widget_set_halign (border_label, GTK_ALIGN_START);
+    gtk_widget_set_hexpand (border_label, TRUE);
+    gtk_box_append (GTK_BOX (border_row), border_label);
+
+    GtkWidget *border_switch = gtk_switch_new ();
+    gtk_switch_set_active (GTK_SWITCH (border_switch), config.enable_borders);
+    gtk_widget_set_halign (border_switch, GTK_ALIGN_END);
+    g_object_set_data (G_OBJECT (config_window), "enable_borders_switch", border_switch);
+    /* Gray out color picker when borders are disabled */
+    g_object_bind_property (border_switch, "active", color_btn, "sensitive",
+                            G_BINDING_SYNC_CREATE);
+    gtk_box_append (GTK_BOX (border_row), border_switch);
 
     GtkWidget *bb = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append (GTK_BOX (main), bb);

@@ -303,6 +303,32 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     {
         gf_cmd_unlock_workspace (args, response, user_data);
     }
+    else if (strcmp (command, "toggle-borders") == 0)
+    {
+        gf_wm_t *m = (gf_wm_t *)user_data;
+        if (!m || !m->config)
+        {
+            response->status = GF_IPC_ERROR_INVALID_COMMAND;
+            gf_command_response_t resp;
+            resp.type = 1;
+            snprintf (resp.message, sizeof (resp.message), "WM not initialized");
+            memcpy (response->message, &resp, sizeof (resp));
+        }
+        else
+        {
+            m->config->enable_borders = !m->config->enable_borders;
+            const char *path = gf_config_get_path ();
+            if (path)
+                gf_config_save (path, m->config);
+
+            response->status = GF_IPC_SUCCESS;
+            gf_command_response_t resp;
+            resp.type = 0;
+            snprintf (resp.message, sizeof (resp.message), "Borders %s",
+                      m->config->enable_borders ? "enabled" : "disabled");
+            memcpy (response->message, &resp, sizeof (resp));
+        }
+    }
     else
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;

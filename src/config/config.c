@@ -24,6 +24,25 @@ static const gf_config_t DEFAULT_CONFIG
         .enable_borders = true,
         .locked_workspaces_count = 0 };
 
+/**
+ * Detect whether we are running under a GNOME session.
+ * Borders are unreliable on GNOME/Mutter (override-redirect compositing
+ * issues), so we default them to off on first run.
+ */
+static bool
+_is_csd_session (void)
+{
+#ifdef __linux__
+    const char *desktop = getenv ("XDG_CURRENT_DESKTOP");
+    if (desktop && (strstr (desktop, "GNOME") || strstr (desktop, "gnome")))
+        return true;
+    const char *session = getenv ("DESKTOP_SESSION");
+    if (session && (strstr (session, "gnome") || strstr (session, "GNOME")))
+        return true;
+#endif
+    return false;
+}
+
 const char *
 gf_config_get_path (void)
 {
@@ -202,6 +221,11 @@ load_or_create_config (const char *filename)
     char *data = read_file (filename);
     if (!data)
     {
+        if (_is_csd_session ())
+        {
+            cfg.enable_borders = false;
+            GF_LOG_INFO ("GNOME session detected, borders disabled by default");
+        }
         gf_config_save (filename, &cfg);
         return cfg;
     }
@@ -211,6 +235,8 @@ load_or_create_config (const char *filename)
 
     if (!json)
     {
+        if (_is_csd_session ())
+            cfg.enable_borders = false;
         gf_config_save (filename, &cfg);
         return cfg;
     }
@@ -230,7 +256,7 @@ load_or_create_config (const char *filename)
     struct json_object *border_obj = NULL;
     if (!json_object_object_get_ex (json, "enable_borders", &border_obj))
     {
-        cfg.enable_borders = DEFAULT_CONFIG.enable_borders;
+        cfg.enable_borders = _is_csd_session () ? false : DEFAULT_CONFIG.enable_borders;
         changed = true;
     }
     else
