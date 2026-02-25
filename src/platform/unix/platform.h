@@ -27,6 +27,7 @@ typedef struct
 
     // Keymap state
     bool keymap_initialized;
+    int xi_opcode;
 } gf_linux_platform_data_t;
 
 // Platform interface (Linux implementation)
