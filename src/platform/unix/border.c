@@ -1,6 +1,8 @@
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "internal.h"
+#include "platform/unix/platform.h"
+#include <X11/X.h>
 #include <X11/extensions/shape.h>
 #include <limits.h>
 #include <string.h>
@@ -36,7 +38,12 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
     }
 
     if (w <= 2 * thickness || h <= 2 * thickness)
+    {
+        GF_LOG_WARN (
+            "_apply_shape_mask: window too small, skipping (w=%d h=%d thickness=%d)", w,
+            h, thickness);
         return;
+    }
 
     XRectangle hollow_rect;
     hollow_rect.x = thickness;
@@ -47,15 +54,15 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
     XShapeCombineMask (dpy, overlay, ShapeBounding, 0, 0, None, ShapeSet);
     XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, &hollow_rect, 1,
                              ShapeSubtract, Unsorted);
-
     if (sub_count > 0 && sub_rects)
     {
         XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0,
                                  (XRectangle *)sub_rects, sub_count, ShapeSubtract,
                                  Unsorted);
     }
-
-    XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+    XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, &hollow_rect, ShapeBounding,
+                             ShapeSet, Unsorted);
+    XSync (dpy, False);
 }
 
 void
@@ -338,7 +345,8 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
             continue;
         }
 
-        if (attrs.map_state == IsUnmapped || gf_window_is_minimized (dpy, b->target))
+        if (attrs.map_state == IsUnmapped || gf_window_is_minimized (dpy, b->target)
+            || gf_window_is_maximized (dpy, b->target))
         {
             XUnmapWindow (dpy, b->overlay);
             i++;
