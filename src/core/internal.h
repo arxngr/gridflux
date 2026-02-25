@@ -85,7 +85,7 @@ gf_err_t gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows,
 gf_err_t gf_wm_layout_rebalance (gf_wm_t *m);
 
 // --- Misc & Debugging ---
-void gf_wm_gesture_event (gf_wm_t *m);
+void gf_wm_keymap_event (gf_wm_t *m);
 void _print_window_info (uint32_t window_id, const char *name);
 void _print_workspace_header (gf_ws_id_t id, bool is_locked, uint32_t count,
                               uint32_t max_windows, int32_t available);

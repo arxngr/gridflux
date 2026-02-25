@@ -344,6 +344,10 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
         return GF_ERROR_PLATFORM_ERROR;
     }
 
+    /* Map the window first — XIconifyWindow unmaps it, so we need to
+     * re-map before any focus requests can succeed. */
+    XMapRaised (display, window);
+
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     if (!atoms)
         return GF_ERROR_PLATFORM_ERROR;
@@ -358,12 +362,17 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
 
     if (atoms->net_active_window != None)
     {
-        long data[5] = { 0, /* source: application */
+        long data[5] = { 2, /* source: pager/task-switcher (authoritative) */
                          CurrentTime, 0, 0, 0 };
 
         gf_platform_send_client_message (display, window, atoms->net_active_window, data,
                                          5);
     }
+
+    /* Force focus transfer — _NET_ACTIVE_WINDOW is advisory, this is
+     * required so gf_wm_event sees the correct focused window. */
+    XSetInputFocus (display, window, RevertToPointerRoot, CurrentTime);
+    XFlush (display);
 
     return GF_SUCCESS;
 }
