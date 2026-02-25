@@ -3,7 +3,6 @@
 
 #include "../platform.h"
 #include "atoms.h"
-#include "gesture.h"
 #include <X11/Xlib.h>
 #include <stdbool.h>
 
@@ -26,8 +25,8 @@ typedef struct
     int saved_dock_count;
     bool dock_hidden;
 
-    // Gesture state
-    gf_gesture_state_t gesture;
+    // Keymap state
+    bool keymap_initialized;
 } gf_linux_platform_data_t;
 
 // Platform interface (Linux implementation)
@@ -86,5 +85,10 @@ bool gf_window_is_maximized (gf_display_t display, gf_handle_t window);
 
 void gf_dock_hide (gf_platform_t *platform);
 void gf_dock_restore (gf_platform_t *platform);
+
+// --- Keymap Support ---
+gf_err_t gf_keymap_init (gf_platform_t *platform, gf_display_t display);
+void gf_keymap_cleanup (gf_platform_t *platform);
+gf_key_action_t gf_keymap_poll (gf_platform_t *platform, gf_display_t display);
 
 #endif // GF_PLATFORM_LINUX_H

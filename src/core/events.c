@@ -13,67 +13,88 @@
 #include <string.h>
 #include <time.h>
 
+
+
 void
-gf_wm_gesture_event (gf_wm_t *m)
+gf_wm_keymap_event (gf_wm_t *m)
 {
     gf_platform_t *platform = wm_platform (m);
 
-    if (!m->state.gesture_initialized || !platform->gesture_poll)
+    if (!m->state.keymap_initialized || !platform->keymap_poll)
         return;
 
-    gf_gesture_event_t gev;
+    gf_display_t display = *wm_display (m);
+    gf_key_action_t action = platform->keymap_poll (platform, display);
 
-    while (platform->gesture_poll (platform, *wm_display (m), &gev))
+    if (action == GF_KEY_NONE)
+        return;
+
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+
+    if (workspaces->count < 2)
     {
-        if (gev.fingers != 3)
-            continue;
+        GF_LOG_DEBUG ("Keymap: only %u workspace(s), nothing to switch", workspaces->count);
+        return;
+    }
 
-        gf_display_t display = *wm_display (m);
-
-        if (gev.type == GF_GESTURE_SWIPE_END)
+    /* Find the index of the currently active workspace. */
+    int current_idx = -1;
+    for (uint32_t i = 0; i < workspaces->count; i++)
+    {
+        if (workspaces->items[i].id == workspaces->active_workspace)
         {
-            if (gev.total_dx > GF_SWIPE_THRESHOLD_PX
-                || gev.total_dx < -GF_SWIPE_THRESHOLD_PX)
-            {
-                bool swipe_left = (gev.total_dx < 0);
-
-                gf_handle_t active = 0;
-                if (platform->window_get_focused)
-                    active = platform->window_get_focused (display);
-
-                gf_win_info_t *max_wins = NULL;
-                uint32_t max_count = _get_maximized_windows (m, &max_wins);
-
-                if (max_count >= 2 && max_wins)
-                {
-                    int current_idx = _find_maximized_index (max_wins, max_count, active);
-
-                    if (current_idx >= 0)
-                    {
-                        int next_idx = swipe_left ? (current_idx + 1) % (int)max_count
-                                                  : (current_idx - 1 + (int)max_count)
-                                                        % (int)max_count;
-
-                        gf_handle_t next_win = max_wins[next_idx].id;
-
-                        if (platform->window_minimize)
-                            platform->window_minimize (display, active);
-                        if (platform->window_unminimize)
-                            platform->window_unminimize (display, next_win);
-
-                        GF_LOG_INFO ("Gesture swipe %s: switched to window %lu",
-                                     swipe_left ? "left" : "right", next_win);
-                    }
-                }
-                gf_free (max_wins);
-            }
-            else
-            {
-                GF_LOG_DEBUG ("Gesture swipe too short (%.1f px), ignoring",
-                              gev.total_dx);
-            }
+            current_idx = (int)i;
+            break;
         }
     }
+
+    if (current_idx < 0)
+        return;
+
+    /* Scan in the requested direction, skipping empty workspaces. */
+    int step = (action == GF_KEY_WORKSPACE_PREV) ? -1 : 1;
+    int n = (int)workspaces->count;
+    int target_idx = -1;
+
+    for (int offset = 1; offset < n; offset++)
+    {
+        int idx = (current_idx + step * offset + n) % n;
+        if (workspaces->items[idx].window_count > 0)
+        {
+            target_idx = idx;
+            break;
+        }
+    }
+
+    if (target_idx < 0)
+        return; /* no non-empty workspace to switch to */
+
+    gf_ws_id_t target_ws = workspaces->items[target_idx].id;
+
+    if (target_ws == workspaces->active_workspace)
+        return;
+
+    /* Switch workspace — this minimizes other workspaces & unminimizes target. */
+    _handle_workspace_switch (m, target_ws);
+
+    workspaces->active_workspace = target_ws;
+    m->state.last_active_workspace = target_ws;
+
+    /* Raise and focus the first valid window in the target workspace. */
+    gf_win_list_t *windows = wm_windows (m);
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        if (windows->items[i].workspace_id == target_ws && windows->items[i].is_valid)
+        {
+            if (platform->window_unminimize)
+                platform->window_unminimize (display, windows->items[i].id);
+            m->state.last_active_window = windows->items[i].id;
+            break;
+        }
+    }
+
+
+    GF_LOG_INFO ("Keymap: switched to workspace %d", target_ws);
 }
 
 void
@@ -215,4 +236,5 @@ gf_wm_event (gf_wm_t *m)
 
     m->state.last_active_window = curr_win_id;
     m->state.last_active_workspace = current_workspace;
+    workspaces->active_workspace = current_workspace;
 }

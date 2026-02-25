@@ -70,16 +70,17 @@ gf_wm_init (gf_wm_t *m)
     m->state.last_cleanup_time = time (NULL);
     m->state.initialized = true;
 
-    if (platform->gesture_init)
+
+    if (platform->keymap_init)
     {
-        if (platform->gesture_init (platform, *wm_display (m)) == GF_SUCCESS)
+        if (platform->keymap_init (platform, *wm_display (m)) == GF_SUCCESS)
         {
-            m->state.gesture_initialized = true;
-            GF_LOG_INFO ("Gesture support enabled");
+            m->state.keymap_initialized = true;
+            GF_LOG_INFO ("Keymap support enabled");
         }
         else
         {
-            GF_LOG_WARN ("Gesture support not available");
+            GF_LOG_WARN ("Keymap support not available");
         }
     }
 
@@ -118,11 +119,12 @@ gf_wm_cleanup (gf_wm_t *m)
     m->state.last_active_window = 0;
     m->state.last_active_workspace = 0;
 
-    // Cleanup gestures
-    if (m->state.gesture_initialized && platform->gesture_cleanup)
+
+    // Cleanup keymap
+    if (m->state.keymap_initialized && platform->keymap_cleanup)
     {
-        platform->gesture_cleanup (platform);
-        m->state.gesture_initialized = false;
+        platform->keymap_cleanup (platform);
+        m->state.keymap_initialized = false;
     }
 
     // Restore dock if it was hidden (critical for program termination)
@@ -290,11 +292,14 @@ gf_wm_run (gf_wm_t *m)
         gf_wm_load_cfg (m);
         gf_wm_watch (m);
 
-        gf_wm_gesture_event (m);
-
         gf_wm_layout_apply (m);
         gf_wm_layout_rebalance (m);
         gf_wm_event (m);
+
+        /* Keymap must run AFTER gf_wm_event so that our workspace switch
+         * is not immediately undone by gf_wm_event reading the old focused
+         * window and switching back. */
+        gf_wm_keymap_event (m);
 
         if (m->config->enable_borders && m->platform->border_update)
             m->platform->border_update (m->platform, m->config);
