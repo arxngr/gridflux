@@ -51,17 +51,28 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
     hollow_rect.width = frame_w;
     hollow_rect.height = frame_h;
 
-    XShapeCombineMask (dpy, overlay, ShapeBounding, 0, 0, None, ShapeSet);
+    /* Use an explicit full-window rectangle for ShapeSet instead of
+     * XShapeCombineMask(..., None, ...) which can be unreliable on some
+     * compositors. */
+    XRectangle full_rect = { 0, 0, (unsigned short)w, (unsigned short)h };
+    XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, &full_rect, 1, ShapeSet,
+                             Unsorted);
+
+    /* Carve out the interior so only the border ring remains. */
     XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, &hollow_rect, 1,
                              ShapeSubtract, Unsorted);
+
+    /* Remove the regions covered by excluded/always-on-top windows. */
     if (sub_count > 0 && sub_rects)
     {
         XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0,
                                  (XRectangle *)sub_rects, sub_count, ShapeSubtract,
                                  Unsorted);
     }
-    XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, &hollow_rect, ShapeBounding,
-                             ShapeSet, Unsorted);
+
+    /* Make the entire overlay click-through (empty input region). */
+    XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, &full_rect, 0, ShapeSet,
+                             Unsorted);
     XSync (dpy, False);
 }
 
@@ -312,7 +323,11 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         Window *clients = (Window *)prop_data;
         for (unsigned long i = 0; i < nitems && gui_count < 16; i++)
         {
-            if (_window_excluded_border (dpy, clients[i]))
+            if (_window_excluded_border (dpy, clients[i])
+                && !_window_has_type (dpy, clients[i],
+                                     atoms->net_wm_window_type_desktop)
+                && !_window_has_type (dpy, clients[i],
+                                     atoms->net_wm_window_type_dock))
             {
                 if (_get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
                 {
