@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE MinSizeRel)
 endif()
 
 option(GF_DEV_MODE "Enable development mode (read config from current dir)" OFF)
@@ -175,6 +175,7 @@ add_executable(gridflux-cli
     src/config/config.c
     src/core/layout.c
     src/utils/file.c
+    src/config/rules.c
 )
 
 if(UNIX AND NOT APPLE)
@@ -193,6 +194,7 @@ if(GTK4_FOUND)
         src/gui/panels/workspace_panel.c
         src/gui/panels/window_panel.c
         src/gui/panels/settings_panel.c
+        src/gui/panels/rules_panel.c
         src/gui/widgets/workspace_card.c
         src/gui/bridge/ipc_client.c
         src/gui/bridge/refresh.c
@@ -210,8 +212,15 @@ if(GTK4_FOUND)
         src/utils/logger.c
         src/core/layout.c
         src/utils/file.c
+        src/config/rules.c
         ${PLATFORM_SOURCES}
     )
+
+    if(WIN32)
+        target_sources(gridflux-gui PRIVATE src/gui/platform/windows/gui_platform.c)
+    elseif(UNIX AND NOT APPLE)
+        target_sources(gridflux-gui PRIVATE src/gui/platform/unix/gui_platform.c)
+    endif()
 
     target_include_directories(gridflux-gui PRIVATE
         ${GTK4_INCLUDE_DIRS}

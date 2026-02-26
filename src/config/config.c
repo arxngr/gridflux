@@ -22,7 +22,8 @@ static const gf_config_t DEFAULT_CONFIG
         .min_window_size = GF_MIN_WINDOW_SIZE,
         .border_color = 0x00F49D2A,
         .enable_borders = true,
-        .locked_workspaces_count = 0 };
+        .locked_workspaces_count = 0,
+        .window_rules_count = 0 };
 
 
 const char *
@@ -158,6 +159,19 @@ gf_config_save (const char *filename, const gf_config_t *cfg)
     }
     json_object_object_add (json, "locked_workspaces", arr);
 
+    // Serialize window rules
+    struct json_object *rules_arr = json_object_new_array ();
+    for (uint32_t i = 0; i < cfg->window_rules_count; i++)
+    {
+        struct json_object *rule_obj = json_object_new_object ();
+        json_object_object_add (rule_obj, "wm_class",
+                                json_object_new_string (cfg->window_rules[i].wm_class));
+        json_object_object_add (rule_obj, "workspace_id",
+                                json_object_new_int (cfg->window_rules[i].workspace_id));
+        json_object_array_add (rules_arr, rule_obj);
+    }
+    json_object_object_add (json, "window_rules", rules_arr);
+
     const char *out = json_object_to_json_string_ext (json, JSON_C_TO_STRING_PRETTY);
     write_file (filename, out);
 
@@ -175,7 +189,8 @@ gf_config_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
             || old_cfg->min_window_size != new_cfg->min_window_size
             || old_cfg->border_color != new_cfg->border_color
             || old_cfg->enable_borders != new_cfg->enable_borders
-            || old_cfg->locked_workspaces_count != new_cfg->locked_workspaces_count);
+            || old_cfg->locked_workspaces_count != new_cfg->locked_workspaces_count
+            || old_cfg->window_rules_count != new_cfg->window_rules_count);
 }
 
 static void
@@ -268,6 +283,40 @@ load_or_create_config (const char *filename)
     {
         cfg.locked_workspaces_count = 0;
         changed = true;
+    }
+
+    // Parse window rules
+    struct json_object *rules_obj = NULL;
+    if (json_object_object_get_ex (json, "window_rules", &rules_obj)
+        && json_object_is_type (rules_obj, json_type_array))
+    {
+        size_t rules_len = json_object_array_length (rules_obj);
+        cfg.window_rules_count = 0;
+
+        for (size_t i = 0; i < rules_len && cfg.window_rules_count < GF_MAX_RULES; i++)
+        {
+            struct json_object *rule_item = json_object_array_get_idx (rules_obj, i);
+            struct json_object *class_obj = NULL;
+            struct json_object *ws_obj = NULL;
+
+            if (json_object_object_get_ex (rule_item, "wm_class", &class_obj)
+                && json_object_object_get_ex (rule_item, "workspace_id", &ws_obj))
+            {
+                const char *cls = json_object_get_string (class_obj);
+                int ws = json_object_get_int (ws_obj);
+
+                if (cls && cls[0] != '\0' && ws >= GF_FIRST_WORKSPACE_ID)
+                {
+                    strncpy (cfg.window_rules[cfg.window_rules_count].wm_class, cls,
+                             GF_RULE_CLASS_MAX - 1);
+                    cfg.window_rules[cfg.window_rules_count]
+                        .wm_class[GF_RULE_CLASS_MAX - 1]
+                        = '\0';
+                    cfg.window_rules[cfg.window_rules_count].workspace_id = ws;
+                    cfg.window_rules_count++;
+                }
+            }
+        }
     }
 
     json_object_put (json);

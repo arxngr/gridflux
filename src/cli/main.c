@@ -12,16 +12,24 @@ print_usage (const char *prog)
     printf ("  query windows [WORKSPACE_ID]    List windows\n");
     printf ("  query workspaces                List workspaces\n");
     printf ("  query count [WORKSPACE_ID]      Count windows\n");
+    printf ("  query apps                      List running application classes\n");
     printf ("  move <WINDOW_ID> <WORKSPACE_ID> Move window to workspace\n");
     printf ("  lock <WORKSPACE_ID>             Lock workspace (prevent new windows)\n");
     printf ("  unlock <WORKSPACE_ID>           Unlock workspace\n");
+    printf ("  rule add <WM_CLASS> <WS_ID>     Add a window rule\n");
+    printf ("  rule remove <WM_CLASS>          Remove a window rule\n");
+    printf ("  rule list                       List all window rules\n");
     printf ("\nExamples:\n");
     printf ("  %s query windows              # List all windows\n", prog);
     printf ("  %s query workspaces           # List all workspaces\n", prog);
+    printf ("  %s query apps                 # List running app classes\n", prog);
     printf ("  %s move 0x12345 2               # Move window 0x12345 to workspace 2\n",
             prog);
     printf ("  %s lock 3                     # Lock workspace 3\n", prog);
     printf ("  %s unlock 3                   # Unlock workspace 3\n", prog);
+    printf ("  %s rule add firefox 3         # Assign Firefox to workspace 3\n", prog);
+    printf ("  %s rule remove firefox        # Remove Firefox rule\n", prog);
+    printf ("  %s rule list                  # Show all rules\n", prog);
 }
 
 int

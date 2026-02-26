@@ -3,6 +3,10 @@
 #include "internal.h"
 #include <string.h>
 
+extern gf_err_t gf_keymap_init (gf_platform_t *platform, gf_display_t display);
+extern void gf_keymap_cleanup (gf_platform_t *platform);
+extern gf_key_action_t gf_keymap_poll (gf_platform_t *platform, gf_display_t display);
+
 gf_platform_t *
 gf_platform_create (void)
 {
@@ -54,6 +58,11 @@ gf_platform_create (void)
     // --- Dock Management ---
     platform->dock_hide = gf_dock_hide;
     platform->dock_restore = gf_dock_restore;
+
+    // --- Keymap Support ---
+    platform->keymap_init = gf_keymap_init;
+    platform->keymap_cleanup = gf_keymap_cleanup;
+    platform->keymap_poll = gf_keymap_poll;
 
     platform->platform_data = data;
 

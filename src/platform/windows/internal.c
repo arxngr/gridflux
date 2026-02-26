@@ -1,6 +1,26 @@
 #include "internal.h"
 #include <minwindef.h>
 
+void
+_get_window_name (gf_display_t display, HWND window, char *buffer, size_t bufsize)
+{
+    (void)display;
+
+    if (!window || !buffer || bufsize == 0)
+        return;
+
+    buffer[0] = '\0';
+
+    if (!_validate_window (window))
+        return;
+
+    int len = GetWindowTextA (window, buffer, (int)bufsize - 1);
+    if (len > 0)
+        buffer[len] = '\0';
+    else
+        buffer[0] = '\0';
+}
+
 BOOL
 _is_app_window (HWND hwnd)
 {
@@ -201,6 +221,13 @@ _window_it_self (gf_display_t display, gf_handle_t window)
     (void)display;
     if (!_validate_window (window))
         return false;
+
+    char title[MAX_TITLE_LENGTH];
+    _get_window_name (display, window, title, sizeof (title));
+
+    // EXACT match for GridFlux GUI
+    if (strcmp (title, "GridFlux") == 0)
+        return true;
 
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (window, class_name, sizeof (class_name)))
