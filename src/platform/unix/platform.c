@@ -51,7 +51,7 @@ gf_platform_create (void)
     // --- Window Enumeration & Info ---
     platform->window_enumerate = gf_platform_get_windows;
     platform->window_get_focused = gf_window_get_focused;
-    platform->window_get_name = gf_window_get_name;
+    platform->window_get_class = gf_window_get_class;
 
     // --- Window Geometry & State ---
     platform->window_get_geometry = gf_window_get_geometry;

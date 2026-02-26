@@ -13,13 +13,13 @@ void _get_window_geometry (HWND hwnd, gf_rect_t *rect);
 BOOL _is_app_window (HWND hwnd);
 BOOL _validate_window (HWND hwnd);
 bool _window_it_self (gf_display_t display, gf_handle_t window);
-BOOL _is_excluded_class (const char *class_name, const char *title);
+BOOL _is_excluded_class (const char *class_name);
 BOOL _window_excluded_border (HWND hwnd);
 BOOL _is_excluded_style (HWND hwnd);
 BOOL _is_fullscreen_window (HWND hwnd);
 BOOL _is_cloaked_window (HWND hwnd);
 BOOL _is_notification_center (HWND hwnd);
-void _get_window_name (gf_display_t display, HWND window, char *buffer, size_t bufsize);
+void gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer, size_t bufsize);
 
 // --- Workspace & System ---
 void _get_taskbar_dimensions (int *left, int *right, int *top, int *bottom);

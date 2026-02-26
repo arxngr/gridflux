@@ -28,8 +28,8 @@ struct gf_platform
     gf_err_t (*window_enumerate) (gf_display_t display, gf_ws_id_t *workspace_id,
                                   gf_win_info_t **windows, uint32_t *count);
     gf_handle_t (*window_get_focused) (gf_display_t display);
-    void (*window_get_name) (gf_display_t display, gf_handle_t win, char *buffer,
-                             size_t bufsize);
+    void (*window_get_class) (gf_display_t display, gf_handle_t win, char *buffer,
+                              size_t bufsize);
 
     // --- Window Geometry & State ---
     gf_err_t (*window_get_geometry) (gf_display_t display, gf_handle_t window,

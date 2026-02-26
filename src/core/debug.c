@@ -99,7 +99,7 @@ gf_wm_debug_stats (const gf_wm_t *m)
             if (win->workspace_id != i)
                 continue;
 
-            gf_wm_window_name (m, win->id, win_name, sizeof (win_name));
+            gf_wm_window_class (m, win->id, win_name, sizeof (win_name));
 
             GF_LOG_INFO ("   %p  %s", (void *)win->id, win_name);
         }

@@ -18,28 +18,8 @@ _is_app_window (HWND hwnd)
 
     return TRUE;
 }
-void
-_get_window_name (gf_display_t display, HWND window, char *buffer, size_t bufsize)
-{
-    (void)display;
-
-    if (!window || !buffer || bufsize == 0)
-        return;
-
-    buffer[0] = '\0';
-
-    if (!_validate_window (window))
-        return;
-
-    int len = GetWindowTextA (window, buffer, (int)bufsize - 1);
-    if (len > 0)
-        buffer[len] = '\0';
-    else
-        buffer[0] = '\0';
-}
-
 BOOL
-_is_excluded_class (const char *class_name, const char *title)
+_is_excluded_class (const char *class_name)
 {
     static const char *excluded_classes[]
         = { "Shell_TrayWnd",
@@ -139,10 +119,7 @@ _is_notification_center (HWND hwnd)
     LONG exstyle = GetWindowLongA (hwnd, GWL_EXSTYLE);
     if (exstyle & WS_EX_NOACTIVATE)
     {
-        char title[MAX_TITLE_LENGTH];
-        GetWindowTextA (hwnd, title, sizeof (title));
-        if (title[0] == '\0' || strstr (title, "Notification"))
-            return true;
+        return true;
     }
 
     return false;
@@ -156,10 +133,10 @@ _is_excluded_style (HWND hwnd)
     if (exstyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE))
         return true;
 
-    char title[MAX_TITLE_LENGTH];
-    _get_window_name (NULL, hwnd, title, sizeof (title));
+    char class_name[MAX_CLASS_NAME_LENGTH] = { 0 };
+    GetClassNameA (hwnd, class_name, sizeof (class_name));
 
-    if ((exstyle & WS_EX_TOPMOST) && title[0] == '\0')
+    if ((exstyle & WS_EX_TOPMOST) && class_name[0] == '\0')
         return true;
 
     return false;
@@ -224,13 +201,6 @@ _window_it_self (gf_display_t display, gf_handle_t window)
     (void)display;
     if (!_validate_window (window))
         return false;
-
-    char title[MAX_TITLE_LENGTH];
-    _get_window_name (display, window, title, sizeof (title));
-
-    // EXACT match for GridFlux GUI
-    if (strcmp (title, "GridFlux") == 0)
-        return true;
 
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (window, class_name, sizeof (class_name)))

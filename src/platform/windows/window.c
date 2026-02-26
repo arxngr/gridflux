@@ -147,21 +147,22 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (_is_notification_center (window))
         return true;
 
+    if (_window_it_self (display, window))
+        return true;
+
     char title[MAX_TITLE_LENGTH];
-    _get_window_name (display, window, title, sizeof (title));
-
-    static const char *excluded_titles[] = { "GridFlux", "DWM Notification Window" };
-
-    for (size_t i = 0; i < sizeof (excluded_titles) / sizeof (excluded_titles[0]); i++)
+    int len = GetWindowTextA (window, title, sizeof (title) - 1);
+    if (len > 0)
     {
-        if (strcmp (title, excluded_titles[i]) == 0)
+        title[len] = '\0';
+        if (strcmp (title, "DWM Notification Window") == 0)
             return true;
     }
 
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (window, class_name, sizeof (class_name)))
     {
-        if (_is_excluded_class (class_name, title))
+        if (_is_excluded_class (class_name))
             return true;
     }
 
@@ -236,8 +237,8 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
 }
 
 void
-gf_window_get_name (gf_display_t display, gf_handle_t window, char *buffer,
-                    size_t bufsize)
+gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
+                     size_t bufsize)
 {
     (void)display;
 
@@ -249,11 +250,15 @@ gf_window_get_name (gf_display_t display, gf_handle_t window, char *buffer,
     if (!_validate_window (window))
         return;
 
-    int len = GetWindowTextA (window, buffer, (int)bufsize - 1);
-    if (len > 0)
-        buffer[len] = '\0';
+    // Use GetClassNameA to get the window class
+    if (GetClassNameA ((HWND)window, buffer, (int)bufsize))
+    {
+        buffer[bufsize - 1] = '\0';
+    }
     else
+    {
         buffer[0] = '\0';
+    }
 }
 
 bool

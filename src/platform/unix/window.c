@@ -124,33 +124,13 @@ _window_it_self (gf_display_t display, gf_handle_t window)
     if (!display || window == None)
         return false;
 
-    char name[256] = { 0 };
-    gf_window_get_name (display, window, name, sizeof (name));
+    char class_name[256] = { 0 };
+    gf_window_get_class (display, window, class_name, sizeof (class_name));
 
-    // EXACT match for the title we set in main_window.c
-    if (strcmp (name, "GridFlux") == 0)
-        return true;
-
-    // WM_CLASS check - be more specific to avoid matching "gridflux : nvim" etc.
-    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
-    unsigned char *data = NULL;
-    unsigned long nitems = 0;
-    if (gf_platform_get_window_property (display, (Window)window, atoms->wm_class,
-                                         XA_STRING, &data, &nitems)
-        == GF_SUCCESS)
+    if (strcmp (class_name, "gridflux-gui") == 0
+        || strstr (class_name, "com.gridflux.gui") != NULL)
     {
-        if (data && nitems > 0)
-        {
-            // GridFlux GUI class is usually "gridflux-gui" or based on app-id
-            if (strcmp ((char *)data, "gridflux-gui") == 0
-                || strstr ((char *)data, "com.gridflux.gui") != NULL)
-            {
-                XFree (data);
-                return true;
-            }
-        }
-        if (data)
-            XFree (data);
+        return true;
     }
 
     return false;
@@ -378,47 +358,27 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
 }
 
 void
-gf_window_get_name (gf_display_t dpy, gf_handle_t win, char *buffer, size_t bufsize)
+gf_window_get_class (gf_display_t dpy, gf_handle_t win, char *buffer, size_t bufsize)
 {
     if (!dpy || win == None || !buffer || bufsize == 0)
         return;
 
-    buffer[0] = '\0'; // default empty
-
-    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
-    if (!atoms)
-        return;
-
-    Atom actual;
-    int format;
-    unsigned long nitems, bytes_after;
-    unsigned char *data = NULL;
-
-    if (XGetWindowProperty (dpy, win, atoms->net_wm_name, 0, (~0L), False,
-                            atoms->utf8_string, &actual, &format, &nitems, &bytes_after,
-                            &data)
-            == Success
-        && data && nitems > 0)
-    {
-        strncpy (buffer, (char *)data, bufsize - 1);
-        buffer[bufsize - 1] = '\0';
-        XFree (data);
-        return;
-    }
-
-    if (data)
-        XFree (data);
-
-    char *legacy_name = NULL;
-    if (XFetchName (dpy, win, &legacy_name) > 0 && legacy_name)
-    {
-        strncpy (buffer, legacy_name, bufsize - 1);
-        buffer[bufsize - 1] = '\0';
-        XFree (legacy_name);
-        return;
-    }
-
     buffer[0] = '\0';
+
+    XClassHint class_hint;
+    if (XGetClassHint (dpy, win, &class_hint))
+    {
+        if (class_hint.res_name)
+        {
+            strncpy (buffer, class_hint.res_name, bufsize - 1);
+            buffer[bufsize - 1] = '\0';
+            XFree (class_hint.res_name);
+        }
+        if (class_hint.res_class)
+        {
+            XFree (class_hint.res_class);
+        }
+    }
 }
 
 bool

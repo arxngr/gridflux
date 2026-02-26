@@ -331,7 +331,7 @@ _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
     }
 
     char name[256];
-    gf_wm_window_name (m, win->id, name, sizeof (name));
+    gf_wm_window_class (m, win->id, name, sizeof (name));
     GF_LOG_INFO ("New window %p → workspace %u (%s)", (void *)win->id, win->workspace_id,
                  name);
 }

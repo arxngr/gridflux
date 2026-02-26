@@ -42,7 +42,7 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
         gf_win_info_t *w = &windows->items[i];
         if (!w->name[0])
         {
-            platform->window_get_name (display, w->id, w->name, sizeof (w->name) - 1);
+            gf_wm_window_class (m, w->id, w->name, sizeof (w->name) - 1);
         }
     }
 

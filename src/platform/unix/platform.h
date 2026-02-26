@@ -57,9 +57,6 @@ gf_err_t gf_platform_is_window_drag (gf_display_t display, gf_handle_t window,
 gf_handle_t gf_window_get_focused (gf_display_t dpy);
 gf_err_t gf_window_minimize (gf_display_t display, gf_handle_t window);
 gf_err_t gf_window_unminimize (gf_display_t display, gf_handle_t window);
-void gf_window_get_name (gf_display_t display, gf_handle_t win, char *buffer,
-                         size_t bufsize);
-
 gf_err_t gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds);
 
 gf_err_t gf_window_set_geometry (gf_display_t display, gf_handle_t window,

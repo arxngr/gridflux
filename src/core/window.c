@@ -62,11 +62,11 @@ _remove_stale_windows (gf_wm_t *m, gf_win_list_t *windows)
 }
 
 void
-gf_wm_window_name (const gf_wm_t *m, gf_handle_t handle, char *buffer, size_t size)
+gf_wm_window_class (const gf_wm_t *m, gf_handle_t handle, char *buffer, size_t size)
 {
-    if (m->platform && m->platform->window_get_name)
+    if (m->platform && m->platform->window_get_class)
     {
-        m->platform->window_get_name (m->display, handle, buffer, size);
+        m->platform->window_get_class (m->display, handle, buffer, size);
     }
     else
     {

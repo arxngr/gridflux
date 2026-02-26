@@ -60,7 +60,7 @@ gf_err_t gf_wm_layout_rebalance (gf_wm_t *m);
 void gf_wm_prune (gf_wm_t *manager);
 gf_err_t gf_wm_window_move (gf_wm_t *m, gf_handle_t window_id,
                             gf_ws_id_t target_workspace);
-void gf_wm_window_name (const gf_wm_t *m, gf_handle_t handle, char *buffer, size_t size);
+void gf_wm_window_class (const gf_wm_t *m, gf_handle_t handle, char *buffer, size_t size);
 gf_err_t gf_wm_window_sync (gf_wm_t *manager, gf_handle_t window,
                             gf_ws_id_t workspace_id);
 
