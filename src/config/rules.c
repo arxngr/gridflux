@@ -1,6 +1,6 @@
-#include "config.h"
 #include "rules.h"
 #include "../utils/logger.h"
+#include "config.h"
 #include <ctype.h>
 #include <string.h>
 
@@ -10,23 +10,33 @@ class_matches (const char *rule_class, const char *window_class)
     if (!rule_class || !window_class)
         return false;
 
-    // Case-insensitive comparison
     size_t rule_len = strlen (rule_class);
     size_t win_len = strlen (window_class);
 
     if (rule_len == 0 || win_len == 0)
         return false;
 
-    if (rule_len != win_len)
+    if (rule_len > win_len)
         return false;
 
-    for (size_t i = 0; i < rule_len; i++)
+    // Custom case-insensitive substring search
+    for (size_t i = 0; i <= win_len - rule_len; i++)
     {
-        if (tolower ((unsigned char)rule_class[i]) != tolower ((unsigned char)window_class[i]))
-            return false;
+        bool match = true;
+        for (size_t j = 0; j < rule_len; j++)
+        {
+            if (tolower ((unsigned char)window_class[i + j])
+                != tolower ((unsigned char)rule_class[j]))
+            {
+                match = false;
+                break;
+            }
+        }
+        if (match)
+            return true;
     }
 
-    return true;
+    return false;
 }
 
 gf_err_t

@@ -263,7 +263,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     HWND hwnd = GetTopWindow (NULL);
     while (hwnd && gui_count < 16)
     {
-        if (_window_excluded_border (hwnd))
+        if (IsWindowVisible (hwnd) && _window_it_self (NULL, hwnd))
         {
             if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
                                                   &gui_rects[gui_count], sizeof (RECT)))
@@ -283,36 +283,21 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     {
         gf_border_t *b = data->borders[i];
 
-        if (!b->target || !IsWindow (b->target) || _window_excluded_border (b->target))
+        if (b->color != config->border_color)
         {
+            b->color = config->border_color;
             if (b->overlay && IsWindow (b->overlay))
             {
-                DestroyWindow (b->overlay);
+                SetPropA (b->overlay, "BorderColor", (HANDLE)(INT_PTR)b->color);
+                InvalidateRect (b->overlay, NULL, TRUE);
             }
-            free (b);
-
-            for (int j = i; j < data->border_count - 1; j++)
-                data->borders[j] = data->borders[j + 1];
-
-            data->border_count--;
         }
-        else
-        {
-            if (b->color != config->border_color)
-            {
-                b->color = config->border_color;
-                if (b->overlay && IsWindow (b->overlay))
-                {
-                    SetPropA (b->overlay, "BorderColor", (HANDLE)(INT_PTR)b->color);
-                    InvalidateRect (b->overlay, NULL, TRUE);
-                }
-            }
-            _update_border (b, gui_rects, gui_count);
-            i++;
-        }
+        _update_border (b, gui_rects, gui_count);
+        i++;
     }
 
     // Process messages for border windows (they are created on this thread)
+    // Limit to 10 messages per poll to avoid infinite spinning
     MSG msg;
     while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
     {

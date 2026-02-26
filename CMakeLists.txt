@@ -213,6 +213,7 @@ if(GTK4_FOUND)
         src/core/layout.c
         src/utils/file.c
         src/config/rules.c
+        src/gui/utils/icon_win32.c
         ${PLATFORM_SOURCES}
     )
 

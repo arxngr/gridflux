@@ -1,7 +1,9 @@
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "internal.h"
+#include <stdio.h>
 #include <time.h>
+
 
 #define MAX_WINDOWS 1024
 
@@ -32,7 +34,16 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
                 && !GetWindowRect (hwnd, &rect))
                 continue;
 
-            window_list[found_count].name[0] = '\0';
+            if (GetWindowTextA (hwnd, window_list[found_count].name,
+                                sizeof (window_list[found_count].name)))
+            {
+                window_list[found_count].name[sizeof (window_list[found_count].name) - 1]
+                    = '\0';
+            }
+            else
+            {
+                window_list[found_count].name[0] = '\0';
+            }
             window_list[found_count].id = (gf_handle_t)hwnd;
             window_list[found_count].workspace_id = GF_FIRST_WORKSPACE_ID;
             window_list[found_count].geometry.x = rect.left;
@@ -155,7 +166,8 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (len > 0)
     {
         title[len] = '\0';
-        if (strcmp (title, "DWM Notification Window") == 0)
+        if (strcmp (title, "DWM Notification Window") == 0
+            || strcmp (title, "GridFlux") == 0)
             return true;
     }
 
@@ -251,9 +263,39 @@ gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
         return;
 
     // Use GetClassNameA to get the window class
-    if (GetClassNameA ((HWND)window, buffer, (int)bufsize))
+    char class_name[128] = { 0 };
+    if (GetClassNameA ((HWND)window, class_name, sizeof (class_name)))
     {
-        buffer[bufsize - 1] = '\0';
+        // Get the executable name so rules can match against the .exe
+        char exe_name[MAX_PATH] = { 0 };
+        DWORD pid = 0;
+        GetWindowThreadProcessId ((HWND)window, &pid);
+        HANDLE hProcess = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (hProcess)
+        {
+            char process_path[MAX_PATH] = { 0 };
+            DWORD size = MAX_PATH;
+            if (QueryFullProcessImageNameA (hProcess, 0, process_path, &size))
+            {
+                char *filename = strrchr (process_path, '\\');
+                if (filename)
+                    filename++;
+                else
+                    filename = process_path;
+                strncpy (exe_name, filename, sizeof (exe_name) - 1);
+            }
+            CloseHandle (hProcess);
+        }
+
+        if (exe_name[0] != '\0')
+        {
+            snprintf (buffer, bufsize, "%s|%s", class_name, exe_name);
+        }
+        else
+        {
+            strncpy (buffer, class_name, bufsize - 1);
+            buffer[bufsize - 1] = '\0';
+        }
     }
     else
     {
