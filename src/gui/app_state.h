@@ -6,6 +6,7 @@
 #include "../ipc/ipc.h"
 #include "../ipc/ipc_command.h"
 #include "../utils/list.h"
+#include "platform/gui_platform.h"
 #include <gtk/gtk.h>
 
 typedef struct
@@ -18,6 +19,7 @@ typedef struct
     GtkStringList *window_model;
     GtkWidget *target_ws_dropdown;
     GtkStringList *target_ws_model;
+    gf_gui_platform_t *platform;
 #ifdef _WIN32
     gboolean operation_in_progress;
 #endif

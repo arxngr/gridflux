@@ -4,10 +4,9 @@
 #include "../panels/rules_panel.h"
 #include "../panels/settings_panel.h"
 #include "../platform/async.h"
-#include "../utils/icon_win32.h"
+#include "../platform/gui_platform.h"
 #include <stdio.h>
 #include <string.h>
-
 
 static void
 on_window_dropdown_changed (GtkDropDown *dropdown, GParamSpec *pspec, gpointer data)
@@ -114,8 +113,7 @@ window_dropdown_bind (GtkListItemFactory *factory, GtkListItem *list_item, gpoin
 
     gf_win_info_t *win = &g_array_index (window_data, gf_win_info_t, pos);
 
-#ifdef _WIN32
-    GdkPaintable *paintable = gf_get_hwnd_icon ((HWND)win->id);
+    GdkPaintable *paintable = app->platform->get_window_icon (app->platform, win->id);
     if (paintable)
     {
         gtk_image_set_from_paintable (GTK_IMAGE (image), paintable);
@@ -125,9 +123,6 @@ window_dropdown_bind (GtkListItemFactory *factory, GtkListItem *list_item, gpoin
     {
         gtk_image_set_from_icon_name (GTK_IMAGE (image), "application-x-executable");
     }
-#else
-    gtk_image_set_from_icon_name (GTK_IMAGE (image), "application-x-executable");
-#endif
 }
 
 GtkWidget *

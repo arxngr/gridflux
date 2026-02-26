@@ -213,9 +213,14 @@ if(GTK4_FOUND)
         src/core/layout.c
         src/utils/file.c
         src/config/rules.c
-        src/gui/utils/icon_win32.c
         ${PLATFORM_SOURCES}
     )
+
+    if(WIN32)
+        target_sources(gridflux-gui PRIVATE src/gui/platform/windows/gui_platform.c)
+    elseif(UNIX AND NOT APPLE)
+        target_sources(gridflux-gui PRIVATE src/gui/platform/unix/gui_platform.c)
+    endif()
 
     target_include_directories(gridflux-gui PRIVATE
         ${GTK4_INCLUDE_DIRS}
