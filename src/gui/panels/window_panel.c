@@ -1,6 +1,8 @@
 #include "window_panel.h"
 #include "../bridge/ipc_client.h"
 #include "../bridge/refresh.h"
+#include "../panels/rules_panel.h"
+#include "../panels/settings_panel.h"
 #include "../platform/async.h"
 #include <stdio.h>
 #include <string.h>
@@ -89,6 +91,11 @@ gf_gui_window_panel_new (gf_app_state_t *app)
     GtkWidget *move_btn = gtk_button_new_with_label ("Move Window");
     gtk_box_append (GTK_BOX (box), move_btn);
     g_signal_connect (move_btn, "clicked", G_CALLBACK (on_move_clicked), app);
+
+    GtkWidget *rules_btn = gtk_button_new_with_label ("📋 Rules");
+    gtk_box_append (GTK_BOX (box), rules_btn);
+    g_signal_connect (rules_btn, "clicked",
+                      G_CALLBACK (on_rules_button_clicked), app);
 
     return box;
 }

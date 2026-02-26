@@ -113,7 +113,7 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
 
     widgets->window = gtk_application_window_new (app);
     gtk_window_set_title (GTK_WINDOW (widgets->window), "GridFlux");
-    gtk_window_set_default_size (GTK_WINDOW (widgets->window), 700, 500);
+    gtk_window_set_default_size (GTK_WINDOW (widgets->window), 900, 600);
     gtk_window_set_icon_name (GTK_WINDOW (widgets->window), "gridflux");
 
     /* Add icon theme search path so gtk_window_set_icon_name("gridflux")

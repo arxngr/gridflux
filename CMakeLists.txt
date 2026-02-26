@@ -175,6 +175,7 @@ add_executable(gridflux-cli
     src/config/config.c
     src/core/layout.c
     src/utils/file.c
+    src/config/rules.c
 )
 
 if(UNIX AND NOT APPLE)
@@ -193,6 +194,7 @@ if(GTK4_FOUND)
         src/gui/panels/workspace_panel.c
         src/gui/panels/window_panel.c
         src/gui/panels/settings_panel.c
+        src/gui/panels/rules_panel.c
         src/gui/widgets/workspace_card.c
         src/gui/bridge/ipc_client.c
         src/gui/bridge/refresh.c
@@ -210,6 +212,7 @@ if(GTK4_FOUND)
         src/utils/logger.c
         src/core/layout.c
         src/utils/file.c
+        src/config/rules.c
         ${PLATFORM_SOURCES}
     )
 
