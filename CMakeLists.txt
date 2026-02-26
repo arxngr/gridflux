@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE MinSizeRel)
 endif()
 
 option(GF_DEV_MODE "Enable development mode (read config from current dir)" OFF)
