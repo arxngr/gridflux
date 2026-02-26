@@ -1,5 +1,4 @@
 #include "../gui_platform.h"
-#include "../../utils/logger.h"
 #include <dirent.h>
 #include <gtk/gtk.h>
 #include <stdio.h>
