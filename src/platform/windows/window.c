@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <time.h>
 
-
 #define MAX_WINDOWS 1024
 
 gf_err_t

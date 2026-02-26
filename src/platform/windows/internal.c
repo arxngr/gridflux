@@ -60,6 +60,7 @@ _is_excluded_class (const char *class_name)
             "tooltips_class32",
             "Valve001",
             "Steam",
+            "TaskManagerWindow",
             "#32770" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
@@ -254,7 +255,8 @@ _window_excluded_border (HWND hwnd)
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (hwnd, class_name, sizeof (class_name)))
     {
-        static const char *excluded_classes[] = { "#32770", "TaskManagerWindow" };
+        static const char *excluded_classes[]
+            = { "#32770", "TaskManagerWindow", "NotifyIconOverflowWindow" };
 
         for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]);
              i++)

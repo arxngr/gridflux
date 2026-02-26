@@ -58,8 +58,8 @@ gf_ws_id_t _find_or_create_maximized_ws (gf_wm_t *m);
 gf_ws_id_t _find_or_create_ws (gf_wm_t *m);
 gf_ws_info_t *_get_workspace (gf_ws_list_t *workspaces, gf_ws_id_t id);
 void _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace);
-void _rebuild_workspace_stats (gf_ws_list_t *workspaces, gf_win_list_t *windows,
-                               uint32_t max_per_ws);
+void _rebuild_workspace_stats (gf_wm_t *m, gf_ws_list_t *workspaces,
+                               gf_win_list_t *windows, uint32_t max_per_ws);
 void _sync_workspaces (gf_wm_t *m);
 bool _workspace_has_capacity (gf_ws_info_t *ws, uint32_t max_per_ws);
 bool _workspace_is_valid (gf_ws_list_t *workspaces, gf_ws_id_t id);

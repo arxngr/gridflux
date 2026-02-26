@@ -135,7 +135,8 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
         platform->window_unminimize (display, win->id);
         win->is_minimized = false;
 
-        if (m->config->enable_borders && !win->is_maximized && platform->border_add)
+        if (m->config->enable_borders && !win->is_maximized && platform->border_add
+            && !wm_is_excluded (m, win->id))
         {
             platform->border_add (platform, win->id, m->config->border_color, 3);
         }
@@ -154,7 +155,7 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
                 win->is_minimized = false;
 
                 if (m->config->enable_borders && !win->is_maximized
-                    && platform->border_add)
+                    && platform->border_add && !wm_is_excluded (m, win->id))
                 {
                     platform->border_add (platform, win->id, m->config->border_color, 3);
                 }
@@ -228,17 +229,30 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
     if (platform->window_get_geometry (display, window, &geom) != GF_SUCCESS)
         return GF_ERROR_PLATFORM_ERROR;
 
+    gf_win_info_t *existing = gf_window_list_find_by_window_id (windows, id);
+
+    bool is_min_state = existing ? existing->is_minimized
+                                 : (platform->window_is_minimized
+                                        ? platform->window_is_minimized (display, window)
+                                        : false);
+    bool is_max_state = existing ? existing->is_maximized : false;
+
     gf_win_info_t info = {
         .id = window,
         .workspace_id = workspace_id,
         .geometry = geom,
-        .is_minimized = true,
+        .is_minimized = is_min_state,
+        .is_maximized = is_max_state,
         .is_valid = true,
         .needs_update = true,
         .last_modified = time (NULL),
     };
 
-    gf_win_info_t *existing = gf_window_list_find_by_window_id (windows, id);
+    if (existing)
+    {
+        strncpy (info.name, existing->name, sizeof (info.name) - 1);
+        info.name[sizeof (info.name) - 1] = '\0';
+    }
 
     return existing ? gf_window_list_update (windows, &info)
                     : gf_window_list_add (windows, &info);
@@ -299,7 +313,8 @@ gf_wm_window_move (gf_wm_t *m, gf_handle_t window_id, gf_ws_id_t target_workspac
 
     win->workspace_id = target_workspace;
 
-    _rebuild_workspace_stats (workspaces, windows, m->config->max_windows_per_workspace);
+    _rebuild_workspace_stats (m, workspaces, windows,
+                              m->config->max_windows_per_workspace);
     _sync_workspaces (m);
 
     return GF_SUCCESS;

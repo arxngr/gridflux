@@ -79,7 +79,7 @@ _evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id)
             GF_LOG_INFO ("Evicting window %p (%s) from workspace %d to %d for rule",
                          (void *)win->id, name, ws_id, dst_id);
             win->workspace_id = dst_id;
-            _rebuild_workspace_stats (workspaces, windows, max_per_ws);
+            _rebuild_workspace_stats (m, workspaces, windows, max_per_ws);
         }
         return;
     }
@@ -141,7 +141,7 @@ _workspace_has_capacity (gf_ws_info_t *ws, uint32_t max_per_ws)
 }
 
 void
-_rebuild_workspace_stats (gf_ws_list_t *workspaces, gf_win_list_t *windows,
+_rebuild_workspace_stats (gf_wm_t *m, gf_ws_list_t *workspaces, gf_win_list_t *windows,
                           uint32_t max_per_ws)
 {
     for (uint32_t i = 0; i < workspaces->count; i++)
@@ -152,7 +152,7 @@ _rebuild_workspace_stats (gf_ws_list_t *workspaces, gf_win_list_t *windows,
 
     for (uint32_t i = 0; i < windows->count; i++)
     {
-        if (windows->items[i].is_valid)
+        if (windows->items[i].is_valid && !wm_is_excluded (m, windows->items[i].id))
         {
             gf_ws_id_t ws_id = windows->items[i].workspace_id;
             gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, ws_id);
@@ -333,7 +333,7 @@ _build_workspace_candidate (gf_wm_t *m)
     }
 
     // Rebuild workspace stats
-    _rebuild_workspace_stats (workspaces, windows, max_per_ws);
+    _rebuild_workspace_stats (m, workspaces, windows, max_per_ws);
 
     if (workspaces->active_workspace >= workspaces->count)
         workspaces->active_workspace = GF_FIRST_WORKSPACE_ID;
@@ -405,7 +405,7 @@ _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
 
     char class_name[256];
     gf_wm_window_class (m, win->id, class_name, sizeof (class_name));
-    
+
     // Check if this window is initially maximized
     if (platform->window_is_maximized && platform->window_is_maximized (display, win->id))
     {
@@ -488,7 +488,7 @@ gf_wm_workspace_lock (gf_wm_t *m, gf_ws_id_t workspace_id)
 
     gf_config_workspace_lock (m->config, workspace_id);
 
-    _rebuild_workspace_stats (workspaces, wm_windows (m),
+    _rebuild_workspace_stats (m, workspaces, wm_windows (m),
                               m->config->max_windows_per_workspace);
     _sync_workspaces (m);
 
@@ -519,7 +519,7 @@ gf_wm_workspace_unlock (gf_wm_t *m, gf_ws_id_t workspace_id)
 
     gf_config_workspace_unlock (m->config, workspace_id);
 
-    _rebuild_workspace_stats (workspaces, wm_windows (m),
+    _rebuild_workspace_stats (m, workspaces, wm_windows (m),
                               m->config->max_windows_per_workspace);
     _sync_workspaces (m);
 

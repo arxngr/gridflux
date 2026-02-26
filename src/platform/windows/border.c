@@ -38,10 +38,18 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
         return;
 
     if (!IsWindow (b->target) || !IsWindow (b->overlay))
+    {
+        if (b->overlay && IsWindow (b->overlay))
+            ShowWindow (b->overlay, SW_HIDE);
         return;
+    }
 
-    // Hide border if target is not visible, minimized, or maximized
-    if (!IsWindowVisible (b->target) || IsIconic (b->target) || IsZoomed (b->target))
+    int cloaked = 0;
+    DwmGetWindowAttribute (b->target, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
+
+    // Hide border if target is not visible, cloaked, minimized, or maximized
+    if (!IsWindowVisible (b->target) || cloaked || IsIconic (b->target)
+        || IsZoomed (b->target))
     {
         ShowWindow (b->overlay, SW_HIDE);
         return;
@@ -263,13 +271,17 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     HWND hwnd = GetTopWindow (NULL);
     while (hwnd && gui_count < 16)
     {
-        if (IsWindowVisible (hwnd) && _window_it_self (NULL, hwnd))
+        if (IsWindowVisible (hwnd))
         {
-            if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                                  &gui_rects[gui_count], sizeof (RECT)))
-                || GetWindowRect (hwnd, &gui_rects[gui_count]))
+            if (_window_excluded_border (hwnd))
             {
-                gui_count++;
+                if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                                      &gui_rects[gui_count],
+                                                      sizeof (RECT)))
+                    || GetWindowRect (hwnd, &gui_rects[gui_count]))
+                {
+                    gui_count++;
+                }
             }
         }
         hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);
