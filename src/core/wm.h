@@ -2,7 +2,6 @@
 #define GF_CORE_WINDOW_MANAGER_H
 
 #include "layout.h"
-#define GLOB_CFG "config.json"
 
 #include "../config/config.h"
 #include "../ipc/ipc.h"
