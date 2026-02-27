@@ -39,7 +39,3 @@ gridflux-cli
 gridflux-gui
 packages/
 GridFlux-*
-
-# Private Build Scripts
-gridflux.wxs
-scripts/binary_builder.bat

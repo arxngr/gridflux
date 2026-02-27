@@ -250,7 +250,7 @@ if(GTK4_FOUND)
 
     # Embed icon resource on Windows (taskbar, alt-tab, explorer)
     if(WIN32)
-        target_sources(gridflux-gui PRIVATE ${CMAKE_SOURCE_DIR}/gridflux.rc)
+        target_sources(gridflux-gui PRIVATE ${CMAKE_SOURCE_DIR}/gridflux-gui.rc)
     endif()
 endif()
 
