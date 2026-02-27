@@ -62,7 +62,15 @@ main ()
         return 1;
     }
 
-    *config = load_or_create_config (GLOB_CFG);
+    const char *cfg_path = gf_config_get_path ();
+    if (!cfg_path)
+    {
+        GF_LOG_ERROR ("Failed to determine config file path");
+        gf_free (config);
+        return 1;
+    }
+
+    *config = load_or_create_config (cfg_path);
     GF_LOG_INFO ("Configuration loaded:");
     GF_LOG_INFO ("  max_windows_per_workspace: %u", config->max_windows_per_workspace);
     GF_LOG_INFO ("  max_workspaces: %u", config->max_workspaces);

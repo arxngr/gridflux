@@ -18,7 +18,10 @@ set(CPACK_PACKAGE_DESCRIPTION "Virtual workspace & Window management tool for ar
 set(CPACK_PACKAGE_VENDOR "GridFlux Project")
 set(CPACK_PACKAGE_CONTACT "0x4rd1@gmail.com")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/arxngr/gridflux")
-set(CPACK_SET_DESTDIR TRUE)
+
+if(UNIX AND NOT WIN32)
+    set(CPACK_SET_DESTDIR TRUE)
+endif()
 
 include_directories(src)
 
@@ -48,6 +51,18 @@ if(WIN32)
     set(CPACK_NSIS_PACKAGE_NAME "GridFlux")
     set(CPACK_NSIS_CONTACT "0x4rd1@gmail.com")
     set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/arxngr/gridflux")
+    
+    # NSIS Branding & Icons (The Setup.exe icon itself)
+    string(REPLACE "/" "\\\\" CPACK_NSIS_ICON_PATH "${CMAKE_SOURCE_DIR}/icons/gridflux.ico")
+    string(REPLACE "/" "\\\\" CPACK_NSIS_BANNER_PATH "${CMAKE_SOURCE_DIR}/icons/banner.bmp")
+    string(REPLACE "/" "\\\\" CPACK_NSIS_DIALOG_PATH "${CMAKE_SOURCE_DIR}/icons/dialog.bmp")
+    
+    set(CPACK_NSIS_MUI_ICON ${CPACK_NSIS_ICON_PATH})
+    set(CPACK_NSIS_MUI_UNIICON ${CPACK_NSIS_ICON_PATH})
+    
+    # NSIS Internal UI Graphics
+    set(CPACK_PACKAGE_ICON ${CPACK_NSIS_BANNER_PATH})
+    set(CPACK_NSIS_MUI_HEADERIMAGE ${CPACK_NSIS_BANNER_PATH})
 
 endif()
 
@@ -150,6 +165,7 @@ add_executable(gridflux
 )
 
 if(WIN32)
+    target_sources(gridflux PRIVATE ${CMAKE_SOURCE_DIR}/gridflux.rc)
     add_executable(gridflux-launcher WIN32
         src/launcher/win32.c
         src/launcher/gridflux-launcher.rc

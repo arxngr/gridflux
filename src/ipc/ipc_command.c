@@ -150,6 +150,11 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
         snprintf (resp.message, sizeof (resp.message), "Workspace %d is full",
                   target_workspace);
         break;
+    case GF_ERROR_WORKSPACE_MAXIMIZED:
+        snprintf (resp.message, sizeof (resp.message),
+                  "Workspace %d is maximized, only maximized windows allowed",
+                  target_workspace);
+        break;
     default:
         snprintf (resp.message, sizeof (resp.message), "Unknown error");
         break;
@@ -275,7 +280,8 @@ gf_cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
         return;
     }
 
-    gf_ws_info_t *target_ws = gf_workspace_list_find_by_id (wm_workspaces (m), workspace_id);
+    gf_ws_info_t *target_ws
+        = gf_workspace_list_find_by_id (wm_workspaces (m), workspace_id);
     if (target_ws && target_ws->has_maximized_state)
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
@@ -313,11 +319,11 @@ gf_cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
     resp.type = (result == GF_SUCCESS) ? 0 : 1;
 
     if (result == GF_SUCCESS)
-        snprintf (resp.message, sizeof (resp.message),
-                  "Rule added: %s -> workspace %d", wm_class, workspace_id);
+        snprintf (resp.message, sizeof (resp.message), "Rule added: %s -> workspace %d",
+                  wm_class, workspace_id);
     else
-        snprintf (resp.message, sizeof (resp.message),
-                  "Failed to add rule (error %d)", result);
+        snprintf (resp.message, sizeof (resp.message), "Failed to add rule (error %d)",
+                  result);
 
     memcpy (response->message, &resp, sizeof (resp));
 }
@@ -334,8 +340,7 @@ gf_cmd_rule_remove (const char *args, gf_ipc_response_t *response, void *user_da
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
-        snprintf (resp.message, sizeof (resp.message),
-                  "Usage: rule remove <wm_class>");
+        snprintf (resp.message, sizeof (resp.message), "Usage: rule remove <wm_class>");
         memcpy (response->message, &resp, sizeof (resp));
         return;
     }
@@ -346,8 +351,7 @@ gf_cmd_rule_remove (const char *args, gf_ipc_response_t *response, void *user_da
     if (result == GF_SUCCESS)
         snprintf (resp.message, sizeof (resp.message), "Rule removed: %s", wm_class);
     else
-        snprintf (resp.message, sizeof (resp.message),
-                  "No rule found for: %s", wm_class);
+        snprintf (resp.message, sizeof (resp.message), "No rule found for: %s", wm_class);
 
     memcpy (response->message, &resp, sizeof (resp));
 }
@@ -371,15 +375,15 @@ gf_cmd_rule_list (const char *args, gf_ipc_response_t *response, void *user_data
     size_t pos = 0;
     pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
                      "Window Rules (%u):\n", count);
-    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
-                     "%-30s %s\n", "WM Class", "Workspace");
-    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
-                     "%-30s %s\n", "------------------------------", "---------");
+    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %s\n",
+                     "WM Class", "Workspace");
+    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %s\n",
+                     "------------------------------", "---------");
 
     for (uint32_t i = 0; i < count && pos < sizeof (resp.message) - 50; i++)
     {
-        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
-                         "%-30s %d\n", m->config->window_rules[i].wm_class,
+        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %d\n",
+                         m->config->window_rules[i].wm_class,
                          m->config->window_rules[i].workspace_id);
     }
 
@@ -436,8 +440,8 @@ gf_cmd_query_apps (const char *args, gf_ipc_response_t *response, void *user_dat
     size_t pos = 0;
     for (uint32_t i = 0; i < class_count && pos < sizeof (resp.message) - 130; i++)
     {
-        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
-                         "%s\n", classes[i]);
+        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%s\n",
+                         classes[i]);
     }
 
     memcpy (response->message, &resp, sizeof (resp));
@@ -545,8 +549,8 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
             response->status = GF_IPC_ERROR_INVALID_COMMAND;
             gf_command_response_t resp;
             resp.type = 1;
-            snprintf (resp.message, sizeof (resp.message),
-                      "Unknown rule command: %s", subcommand);
+            snprintf (resp.message, sizeof (resp.message), "Unknown rule command: %s",
+                      subcommand);
             memcpy (response->message, &resp, sizeof (resp));
         }
     }

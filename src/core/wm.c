@@ -70,7 +70,6 @@ gf_wm_init (gf_wm_t *m)
     m->state.last_cleanup_time = time (NULL);
     m->state.initialized = true;
 
-
     if (platform->keymap_init)
     {
         if (platform->keymap_init (platform, *wm_display (m)) == GF_SUCCESS)
@@ -118,7 +117,6 @@ gf_wm_cleanup (gf_wm_t *m)
     // Reset state
     m->state.last_active_window = 0;
     m->state.last_active_workspace = 0;
-
 
     // Cleanup keymap
     if (m->state.keymap_initialized && platform->keymap_cleanup)
@@ -228,7 +226,7 @@ gf_wm_load_cfg (gf_wm_t *m)
 
                             if (m->platform->border_add)
                                 m->platform->border_add (m->platform, win->id,
-                                                         m->config->border_color, 5);
+                                                         m->config->border_color, 3);
                         }
                         else
                         {

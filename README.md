@@ -39,13 +39,16 @@ https://github.com/user-attachments/assets/f7800812-4ac9-4d3d-bac0-943632cb2f20
 - **Auto workspace assignment** — new windows land in the right workspace automatically, no keyboard shortcuts required
 - **Grid layout engine** — windows tile cleanly without overlapping, with configurable padding
 - **Virtual workspaces** — workspaces are created and destroyed on demand as your window count changes
-- **Workspace locking** — pin a workspace so no windows can be moved in or out
-- **3-finger swipe gestures** — cycle through maximised windows on Linux without touching the keyboard
-- **Window border highlights** — coloured borders make the focused window obvious at a glance
+- **Workspace Rules** — define precise rules for apps to always open on specific workspaces or be excluded from management
+- **Hotkeys for Workspaces** — use `Ctrl + Win + Left/Right` to switch between workspaces seamlessly
+- **Workspace locking** — pin a workspace so no windows can be moved in or out (`lock`/`unlock` via CLI/GUI)
+- **Move windows easily** — instantly send windows to different workspaces via CLI, GUI, or auto-rules
+- **Window border highlights** — customisable coloured borders make the focused window obvious at a glance
 - **Hot-reload config** — change settings in `config.json` and they apply immediately, no restart
 - **Three interfaces** — daemon, CLI, and GUI — use whichever fits your workflow
 
 ---
+
 
 ## Platform support
 
@@ -53,7 +56,8 @@ https://github.com/user-attachments/assets/f7800812-4ac9-4d3d-bac0-943632cb2f20
 |----------|--------|-------|
 | Linux (X11) | ✅ Stable | Full feature support, production ready |
 | Windows 10/11 | ✅ Stable | Core features work, some UWP limitations |
-| macOS | 🚧 Planned | Not available yet |
+| Linux (Wayland) | ❌ Unsupported | Wayland protocols (GNOME/KDE) use built-in compositors |
+| macOS | ❌ Not Supported | Not available yet |
 
 ---
 
@@ -122,6 +126,15 @@ Start the daemon, then use the CLI or GUI to interact with it:
 
 ---
 
+## Default Keybindings
+
+| Shortcut | Action | Platform |
+|----------|--------|----------|
+| `Ctrl + Win + Left` | Switch to Previous Workspace | Linux & Windows |
+| `Ctrl + Win + Right` | Switch to Next Workspace | Linux & Windows |
+
+---
+
 ## CLI reference
 
 ```bash
@@ -129,11 +142,12 @@ Start the daemon, then use the CLI or GUI to interact with it:
 gridflux-cli query workspaces       # list all workspaces and their state
 gridflux-cli lock 2                 # lock workspace 2 (no windows in or out)
 gridflux-cli unlock 2               # unlock workspace 2
+gridflux-cli swipe left             # swipe to the workspace on the left
+gridflux-cli swipe right            # swipe to the workspace on the right
 
 # Windows
 gridflux-cli query windows          # list all tracked windows
 gridflux-cli query windows 2        # list windows in workspace 2
-gridflux-cli query count 2          # count windows in workspace 2
 gridflux-cli move 0x1a2b3c 2        # move window by ID to workspace 2
 ```
 
@@ -152,7 +166,11 @@ gridflux-cli move 0x1a2b3c 2        # move window by ID to workspace 2
   "min_window_size": 100,
   "border_color": 16031786,
   "enable_borders": true,
-  "locked_workspaces": []
+  "locked_workspaces": [],
+  "window_rules": [
+    { "wm_class": "Steam", "workspace_id": 4 },
+    { "wm_class": "Spotify", "workspace_id": 5 }
+  ]
 }
 ```
 
@@ -165,6 +183,7 @@ gridflux-cli move 0x1a2b3c 2        # move window by ID to workspace 2
 | `border_color` | orange | Active window border colour (RGB integer) |
 | `enable_borders` | `true` | Show coloured borders on managed windows |
 | `locked_workspaces` | `[]` | List of workspace IDs to lock on startup |
+| `window_rules` | `[]` | List of `{ "wm_class": "...", "workspace_id": N }` to pin apps |
 
 Changes to this file are picked up immediately — no restart needed.
 
