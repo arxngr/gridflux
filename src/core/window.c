@@ -308,6 +308,9 @@ gf_wm_window_move (gf_wm_t *m, gf_handle_t window_id, gf_ws_id_t target_workspac
     if (target_ws->is_locked)
         return GF_ERROR_WORKSPACE_LOCKED;
 
+    if (target_ws->has_maximized_state && !win->is_maximized)
+        return GF_ERROR_WORKSPACE_MAXIMIZED;
+
     if (target_ws->window_count >= m->config->max_windows_per_workspace)
         return GF_ERROR_WORKSPACE_FULL;
 

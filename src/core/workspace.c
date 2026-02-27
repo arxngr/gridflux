@@ -300,8 +300,8 @@ _build_workspace_candidate (gf_wm_t *m)
             gf_ws_info_t *check_ws = gf_workspace_list_find_by_id (workspaces, ws_id);
             bool is_rule_reserved = _workspace_is_rule_target (m->config, ws_id);
 
-            if (!check_ws || check_ws->is_locked || is_rule_reserved
-                || slot >= max_per_ws)
+            if (!check_ws || check_ws->is_locked || check_ws->has_maximized_state
+                || is_rule_reserved || slot >= max_per_ws)
             {
                 if (slot >= max_per_ws)
                 {
@@ -382,7 +382,7 @@ _assign_workspace_for_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *curr
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    if (current_ws && current_ws->available_space > 0)
+    if (current_ws && !current_ws->has_maximized_state && current_ws->available_space > 0)
         return current_ws->id;
 
     if (platform->window_is_maximized && platform->window_is_maximized (display, win->id))
