@@ -3,7 +3,7 @@
      xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
   <Product Id="*" Name="GridFlux Window Manager" Manufacturer="Ardi Nugraha"
-           Version="0.1.0" Language="1033"
+           Version="1.0.0" Language="1033"
            UpgradeCode="f47ac10b-58cc-4372-a567-0e02b2c3d479">
 
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64" />
@@ -126,7 +126,7 @@
   <Fragment>
     <DirectoryRef Id="INSTALLDIR">
       <Component Id="RunOnLogin" Guid="{99999999-9999-9999-9999-999999999999}" Win64="yes">
-        <RegistryValue Root="HKCU"
+        <RegistryValue Root="HKLM"
                        Key="Software\Microsoft\Windows\CurrentVersion\Run"
                        Name="GridFlux"
                        Value="&quot;[INSTALLDIR]gridflux-launcher.exe&quot;"
