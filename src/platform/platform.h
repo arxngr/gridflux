@@ -13,22 +13,10 @@ typedef struct gf_platform gf_platform_t;
 
 typedef enum
 {
-    GF_GESTURE_NONE = 0,
-    GF_GESTURE_SWIPE_BEGIN,
-    GF_GESTURE_SWIPE_UPDATE,
-    GF_GESTURE_SWIPE_END,
-    GF_GESTURE_SWIPE_CANCEL,
-} gf_gesture_type_t;
-
-typedef struct
-{
-    gf_gesture_type_t type;
-    double dx;
-    double dy;
-    double total_dx;
-    double total_dy;
-    int fingers;
-} gf_gesture_event_t;
+    GF_KEY_NONE = 0,
+    GF_KEY_WORKSPACE_PREV,
+    GF_KEY_WORKSPACE_NEXT,
+} gf_key_action_t;
 
 struct gf_platform
 {
@@ -40,8 +28,8 @@ struct gf_platform
     gf_err_t (*window_enumerate) (gf_display_t display, gf_ws_id_t *workspace_id,
                                   gf_win_info_t **windows, uint32_t *count);
     gf_handle_t (*window_get_focused) (gf_display_t display);
-    void (*window_get_name) (gf_display_t display, gf_handle_t win, char *buffer,
-                             size_t bufsize);
+    void (*window_get_class) (gf_display_t display, gf_handle_t win, char *buffer,
+                              size_t bufsize);
 
     // --- Window Geometry & State ---
     gf_err_t (*window_get_geometry) (gf_display_t display, gf_handle_t window,
@@ -73,11 +61,10 @@ struct gf_platform
     void (*dock_hide) (gf_platform_t *platform);
     void (*dock_restore) (gf_platform_t *platform);
 
-    // --- Gesture Support ---
-    void (*gesture_cleanup) (gf_platform_t *platform);
-    gf_err_t (*gesture_init) (gf_platform_t *platform, gf_display_t display);
-    bool (*gesture_poll) (gf_platform_t *platform, gf_display_t display,
-                          gf_gesture_event_t *event_out);
+    // --- Keymap Support ---
+    gf_err_t (*keymap_init) (gf_platform_t *platform, gf_display_t display);
+    void (*keymap_cleanup) (gf_platform_t *platform);
+    gf_key_action_t (*keymap_poll) (gf_platform_t *platform, gf_display_t display);
 
     void *platform_data;
 };

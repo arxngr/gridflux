@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE MinSizeRel)
 endif()
 
 option(GF_DEV_MODE "Enable development mode (read config from current dir)" OFF)
@@ -18,7 +18,10 @@ set(CPACK_PACKAGE_DESCRIPTION "Virtual workspace & Window management tool for ar
 set(CPACK_PACKAGE_VENDOR "GridFlux Project")
 set(CPACK_PACKAGE_CONTACT "0x4rd1@gmail.com")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/arxngr/gridflux")
-set(CPACK_SET_DESTDIR TRUE)
+
+if(UNIX AND NOT WIN32)
+    set(CPACK_SET_DESTDIR TRUE)
+endif()
 
 include_directories(src)
 
@@ -48,6 +51,18 @@ if(WIN32)
     set(CPACK_NSIS_PACKAGE_NAME "GridFlux")
     set(CPACK_NSIS_CONTACT "0x4rd1@gmail.com")
     set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/arxngr/gridflux")
+    
+    # NSIS Branding & Icons (The Setup.exe icon itself)
+    string(REPLACE "/" "\\\\" CPACK_NSIS_ICON_PATH "${CMAKE_SOURCE_DIR}/icons/gridflux.ico")
+    string(REPLACE "/" "\\\\" CPACK_NSIS_BANNER_PATH "${CMAKE_SOURCE_DIR}/icons/banner.bmp")
+    string(REPLACE "/" "\\\\" CPACK_NSIS_DIALOG_PATH "${CMAKE_SOURCE_DIR}/icons/dialog.bmp")
+    
+    set(CPACK_NSIS_MUI_ICON ${CPACK_NSIS_ICON_PATH})
+    set(CPACK_NSIS_MUI_UNIICON ${CPACK_NSIS_ICON_PATH})
+    
+    # NSIS Internal UI Graphics
+    set(CPACK_PACKAGE_ICON ${CPACK_NSIS_BANNER_PATH})
+    set(CPACK_NSIS_MUI_HEADERIMAGE ${CPACK_NSIS_BANNER_PATH})
 
 endif()
 
@@ -150,6 +165,7 @@ add_executable(gridflux
 )
 
 if(WIN32)
+    target_sources(gridflux PRIVATE ${CMAKE_SOURCE_DIR}/gridflux.rc)
     add_executable(gridflux-launcher WIN32
         src/launcher/win32.c
         src/launcher/gridflux-launcher.rc
@@ -175,6 +191,7 @@ add_executable(gridflux-cli
     src/config/config.c
     src/core/layout.c
     src/utils/file.c
+    src/config/rules.c
 )
 
 if(UNIX AND NOT APPLE)
@@ -193,6 +210,7 @@ if(GTK4_FOUND)
         src/gui/panels/workspace_panel.c
         src/gui/panels/window_panel.c
         src/gui/panels/settings_panel.c
+        src/gui/panels/rules_panel.c
         src/gui/widgets/workspace_card.c
         src/gui/bridge/ipc_client.c
         src/gui/bridge/refresh.c
@@ -210,8 +228,15 @@ if(GTK4_FOUND)
         src/utils/logger.c
         src/core/layout.c
         src/utils/file.c
+        src/config/rules.c
         ${PLATFORM_SOURCES}
     )
+
+    if(WIN32)
+        target_sources(gridflux-gui PRIVATE src/gui/platform/windows/gui_platform.c)
+    elseif(UNIX AND NOT APPLE)
+        target_sources(gridflux-gui PRIVATE src/gui/platform/unix/gui_platform.c)
+    endif()
 
     target_include_directories(gridflux-gui PRIVATE
         ${GTK4_INCLUDE_DIRS}
@@ -225,7 +250,7 @@ if(GTK4_FOUND)
 
     # Embed icon resource on Windows (taskbar, alt-tab, explorer)
     if(WIN32)
-        target_sources(gridflux-gui PRIVATE ${CMAKE_SOURCE_DIR}/gridflux.rc)
+        target_sources(gridflux-gui PRIVATE ${CMAKE_SOURCE_DIR}/gridflux-gui.rc)
     endif()
 endif()
 

@@ -1,7 +1,6 @@
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "../platform_compat.h"
-#include "gesture.h"
 #include "internal.h"
 
 #include <X11/Xatom.h>
@@ -52,7 +51,7 @@ gf_platform_create (void)
     // --- Window Enumeration & Info ---
     platform->window_enumerate = gf_platform_get_windows;
     platform->window_get_focused = gf_window_get_focused;
-    platform->window_get_name = gf_window_get_name;
+    platform->window_get_class = gf_window_get_class;
 
     // --- Window Geometry & State ---
     platform->window_get_geometry = gf_window_get_geometry;
@@ -80,10 +79,11 @@ gf_platform_create (void)
     platform->dock_hide = gf_dock_hide;
     platform->dock_restore = gf_dock_restore;
 
-    // --- Gesture Support ---
-    platform->gesture_cleanup = gf_gesture_cleanup;
-    platform->gesture_init = gf_gesture_init;
-    platform->gesture_poll = gf_gesture_poll;
+
+    // --- Keymap Support ---
+    platform->keymap_init = gf_keymap_init;
+    platform->keymap_cleanup = gf_keymap_cleanup;
+    platform->keymap_poll = gf_keymap_poll;
 
     platform->platform_data = data;
 

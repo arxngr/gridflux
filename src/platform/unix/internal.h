@@ -19,6 +19,7 @@ bool _window_has_type (gf_display_t display, gf_handle_t window, Atom type);
 bool _window_name_matches (const char *name, const char *list[], size_t count);
 bool _window_it_self (gf_display_t display, gf_handle_t window);
 bool _window_excluded_border (gf_display_t display, gf_handle_t window);
+void gf_window_get_class (gf_display_t dpy, gf_handle_t win, char *buffer, size_t bufsize);
 
 // --- Border Management ---
 void gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,

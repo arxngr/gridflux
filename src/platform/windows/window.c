@@ -1,6 +1,7 @@
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "internal.h"
+#include <stdio.h>
 #include <time.h>
 
 #define MAX_WINDOWS 1024
@@ -32,7 +33,16 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
                 && !GetWindowRect (hwnd, &rect))
                 continue;
 
-            window_list[found_count].name[0] = '\0';
+            if (GetWindowTextA (hwnd, window_list[found_count].name,
+                                sizeof (window_list[found_count].name)))
+            {
+                window_list[found_count].name[sizeof (window_list[found_count].name) - 1]
+                    = '\0';
+            }
+            else
+            {
+                window_list[found_count].name[0] = '\0';
+            }
             window_list[found_count].id = (gf_handle_t)hwnd;
             window_list[found_count].workspace_id = GF_FIRST_WORKSPACE_ID;
             window_list[found_count].geometry.x = rect.left;
@@ -147,21 +157,30 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (_is_notification_center (window))
         return true;
 
+    if (_window_it_self (display, window))
+        return true;
+
     char title[MAX_TITLE_LENGTH];
-    _get_window_name (display, window, title, sizeof (title));
-
-    static const char *excluded_titles[] = { "GridFlux", "DWM Notification Window" };
-
-    for (size_t i = 0; i < sizeof (excluded_titles) / sizeof (excluded_titles[0]); i++)
+    int len = GetWindowTextA (window, title, sizeof (title) - 1);
+    if (len > 0)
     {
-        if (strcmp (title, excluded_titles[i]) == 0)
+        title[len] = '\0';
+        if (strcmp (title, "DWM Notification Window") == 0
+            || strcmp (title, "GridFlux") == 0)
+            return true;
+
+        if (strstr (title, "Snipping Tool") != NULL)
+            return true;
+        if (strstr (title, "Game Bar") != NULL)
+            return true;
+        if (strstr (title, "Screen Sketch") != NULL)
             return true;
     }
 
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (window, class_name, sizeof (class_name)))
     {
-        if (_is_excluded_class (class_name, title))
+        if (_is_excluded_class (class_name))
             return true;
     }
 
@@ -236,8 +255,8 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
 }
 
 void
-gf_window_get_name (gf_display_t display, gf_handle_t window, char *buffer,
-                    size_t bufsize)
+gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
+                     size_t bufsize)
 {
     (void)display;
 
@@ -249,11 +268,45 @@ gf_window_get_name (gf_display_t display, gf_handle_t window, char *buffer,
     if (!_validate_window (window))
         return;
 
-    int len = GetWindowTextA (window, buffer, (int)bufsize - 1);
-    if (len > 0)
-        buffer[len] = '\0';
+    // Use GetClassNameA to get the window class
+    char class_name[128] = { 0 };
+    if (GetClassNameA ((HWND)window, class_name, sizeof (class_name)))
+    {
+        // Get the executable name so rules can match against the .exe
+        char exe_name[MAX_PATH] = { 0 };
+        DWORD pid = 0;
+        GetWindowThreadProcessId ((HWND)window, &pid);
+        HANDLE hProcess = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (hProcess)
+        {
+            char process_path[MAX_PATH] = { 0 };
+            DWORD size = MAX_PATH;
+            if (QueryFullProcessImageNameA (hProcess, 0, process_path, &size))
+            {
+                char *filename = strrchr (process_path, '\\');
+                if (filename)
+                    filename++;
+                else
+                    filename = process_path;
+                strncpy (exe_name, filename, sizeof (exe_name) - 1);
+            }
+            CloseHandle (hProcess);
+        }
+
+        if (exe_name[0] != '\0')
+        {
+            snprintf (buffer, bufsize, "%s|%s", class_name, exe_name);
+        }
+        else
+        {
+            strncpy (buffer, class_name, bufsize - 1);
+            buffer[bufsize - 1] = '\0';
+        }
+    }
     else
+    {
         buffer[0] = '\0';
+    }
 }
 
 bool

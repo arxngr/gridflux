@@ -38,10 +38,18 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
         return;
 
     if (!IsWindow (b->target) || !IsWindow (b->overlay))
+    {
+        if (b->overlay && IsWindow (b->overlay))
+            ShowWindow (b->overlay, SW_HIDE);
         return;
+    }
 
-    // Hide border if target is not visible, minimized, or maximized
-    if (!IsWindowVisible (b->target) || IsIconic (b->target) || IsZoomed (b->target))
+    int cloaked = 0;
+    DwmGetWindowAttribute (b->target, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
+
+    // Hide border if target is not visible, cloaked, minimized, or maximized
+    if (!IsWindowVisible (b->target) || cloaked || IsIconic (b->target)
+        || IsZoomed (b->target))
     {
         ShowWindow (b->overlay, SW_HIDE);
         return;
@@ -263,13 +271,17 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     HWND hwnd = GetTopWindow (NULL);
     while (hwnd && gui_count < 16)
     {
-        if (_window_excluded_border (hwnd))
+        if (IsWindowVisible (hwnd))
         {
-            if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                                  &gui_rects[gui_count], sizeof (RECT)))
-                || GetWindowRect (hwnd, &gui_rects[gui_count]))
+            if (_window_excluded_border (hwnd))
             {
-                gui_count++;
+                if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                                      &gui_rects[gui_count],
+                                                      sizeof (RECT)))
+                    || GetWindowRect (hwnd, &gui_rects[gui_count]))
+                {
+                    gui_count++;
+                }
             }
         }
         hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);
@@ -283,36 +295,21 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     {
         gf_border_t *b = data->borders[i];
 
-        if (!b->target || !IsWindow (b->target) || _window_excluded_border (b->target))
+        if (b->color != config->border_color)
         {
+            b->color = config->border_color;
             if (b->overlay && IsWindow (b->overlay))
             {
-                DestroyWindow (b->overlay);
+                SetPropA (b->overlay, "BorderColor", (HANDLE)(INT_PTR)b->color);
+                InvalidateRect (b->overlay, NULL, TRUE);
             }
-            free (b);
-
-            for (int j = i; j < data->border_count - 1; j++)
-                data->borders[j] = data->borders[j + 1];
-
-            data->border_count--;
         }
-        else
-        {
-            if (b->color != config->border_color)
-            {
-                b->color = config->border_color;
-                if (b->overlay && IsWindow (b->overlay))
-                {
-                    SetPropA (b->overlay, "BorderColor", (HANDLE)(INT_PTR)b->color);
-                    InvalidateRect (b->overlay, NULL, TRUE);
-                }
-            }
-            _update_border (b, gui_rects, gui_count);
-            i++;
-        }
+        _update_border (b, gui_rects, gui_count);
+        i++;
     }
 
     // Process messages for border windows (they are created on this thread)
+    // Limit to 10 messages per poll to avoid infinite spinning
     MSG msg;
     while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
     {

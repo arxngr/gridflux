@@ -1,23 +1,6 @@
 #include "internal.h"
 #include <minwindef.h>
 
-BOOL
-_is_app_window (HWND hwnd)
-{
-    if (!IsWindowVisible (hwnd))
-        return FALSE;
-
-    HWND owner = GetWindow (hwnd, GW_OWNER);
-    LONG exStyle = GetWindowLong (hwnd, GWL_EXSTYLE);
-
-    if ((exStyle & WS_EX_TOOLWINDOW) && !(exStyle & WS_EX_APPWINDOW))
-        return FALSE;
-
-    if (owner != NULL && !(exStyle & WS_EX_APPWINDOW))
-        return FALSE;
-
-    return TRUE;
-}
 void
 _get_window_name (gf_display_t display, HWND window, char *buffer, size_t bufsize)
 {
@@ -39,7 +22,24 @@ _get_window_name (gf_display_t display, HWND window, char *buffer, size_t bufsiz
 }
 
 BOOL
-_is_excluded_class (const char *class_name, const char *title)
+_is_app_window (HWND hwnd)
+{
+    if (!IsWindowVisible (hwnd))
+        return FALSE;
+
+    HWND owner = GetWindow (hwnd, GW_OWNER);
+    LONG exStyle = GetWindowLong (hwnd, GWL_EXSTYLE);
+
+    if ((exStyle & WS_EX_TOOLWINDOW) && !(exStyle & WS_EX_APPWINDOW))
+        return FALSE;
+
+    if (owner != NULL && !(exStyle & WS_EX_APPWINDOW))
+        return FALSE;
+
+    return TRUE;
+}
+BOOL
+_is_excluded_class (const char *class_name)
 {
     static const char *excluded_classes[]
         = { "Shell_TrayWnd",
@@ -60,13 +60,29 @@ _is_excluded_class (const char *class_name, const char *title)
             "tooltips_class32",
             "Valve001",
             "Steam",
-            "#32770" };
+            "TaskManagerWindow",
+            "#32770",
+            "ThumbnailDeviceHelperWnd",
+            "RecordingAreaIndicatorWindow",
+            "XamlExplorerHostIslandWindow_WASDK",
+            "XamlWindow" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
     {
         if (strcmp (class_name, excluded_classes[i]) == 0)
             return true;
     }
+
+    if (strstr (class_name, "SnippingTool") != NULL)
+        return true;
+    if (strstr (class_name, "ScreenClipping") != NULL)
+        return true;
+    if (strstr (class_name, "BcastDVR") != NULL)
+        return true;
+    if (strstr (class_name, "GameBar") != NULL)
+        return true;
+    if (strstr (class_name, "bcastdvr") != NULL)
+        return true;
 
     return false;
 }
@@ -139,10 +155,7 @@ _is_notification_center (HWND hwnd)
     LONG exstyle = GetWindowLongA (hwnd, GWL_EXSTYLE);
     if (exstyle & WS_EX_NOACTIVATE)
     {
-        char title[MAX_TITLE_LENGTH];
-        GetWindowTextA (hwnd, title, sizeof (title));
-        if (title[0] == '\0' || strstr (title, "Notification"))
-            return true;
+        return true;
     }
 
     return false;
@@ -156,10 +169,10 @@ _is_excluded_style (HWND hwnd)
     if (exstyle & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE))
         return true;
 
-    char title[MAX_TITLE_LENGTH];
-    _get_window_name (NULL, hwnd, title, sizeof (title));
+    char class_name[MAX_CLASS_NAME_LENGTH] = { 0 };
+    GetClassNameA (hwnd, class_name, sizeof (class_name));
 
-    if ((exstyle & WS_EX_TOPMOST) && title[0] == '\0')
+    if ((exstyle & WS_EX_TOPMOST) && class_name[0] == '\0')
         return true;
 
     return false;
@@ -257,7 +270,13 @@ _window_excluded_border (HWND hwnd)
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (hwnd, class_name, sizeof (class_name)))
     {
-        static const char *excluded_classes[] = { "#32770", "TaskManagerWindow" };
+        static const char *excluded_classes[] = { "#32770",
+                                                  "TaskManagerWindow",
+                                                  "NotifyIconOverflowWindow",
+                                                  "ThumbnailDeviceHelperWnd",
+                                                  "RecordingAreaIndicatorWindow",
+                                                  "XamlExplorerHostIslandWindow_WASDK",
+                                                  "XamlWindow" };
 
         for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]);
              i++)
@@ -266,6 +285,12 @@ _window_excluded_border (HWND hwnd)
                 return true;
         }
     }
+    if (strstr (class_name, "SnippingTool") != NULL)
+        return true;
+    if (strstr (class_name, "GameBar") != NULL)
+        return true;
+    if (strstr (class_name, "ScreenSketch") != NULL)
+        return true;
 
     return false;
 }

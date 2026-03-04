@@ -3,7 +3,6 @@
 
 #include "../platform.h"
 #include "atoms.h"
-#include "gesture.h"
 #include <X11/Xlib.h>
 #include <stdbool.h>
 
@@ -26,8 +25,9 @@ typedef struct
     int saved_dock_count;
     bool dock_hidden;
 
-    // Gesture state
-    gf_gesture_state_t gesture;
+    // Keymap state
+    bool keymap_initialized;
+    int xi_opcode;
 } gf_linux_platform_data_t;
 
 // Platform interface (Linux implementation)
@@ -57,9 +57,6 @@ gf_err_t gf_platform_is_window_drag (gf_display_t display, gf_handle_t window,
 gf_handle_t gf_window_get_focused (gf_display_t dpy);
 gf_err_t gf_window_minimize (gf_display_t display, gf_handle_t window);
 gf_err_t gf_window_unminimize (gf_display_t display, gf_handle_t window);
-void gf_window_get_name (gf_display_t display, gf_handle_t win, char *buffer,
-                         size_t bufsize);
-
 gf_err_t gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds);
 
 gf_err_t gf_window_set_geometry (gf_display_t display, gf_handle_t window,
@@ -86,5 +83,10 @@ bool gf_window_is_maximized (gf_display_t display, gf_handle_t window);
 
 void gf_dock_hide (gf_platform_t *platform);
 void gf_dock_restore (gf_platform_t *platform);
+
+// --- Keymap Support ---
+gf_err_t gf_keymap_init (gf_platform_t *platform, gf_display_t display);
+void gf_keymap_cleanup (gf_platform_t *platform);
+gf_key_action_t gf_keymap_poll (gf_platform_t *platform, gf_display_t display);
 
 #endif // GF_PLATFORM_LINUX_H

@@ -1,7 +1,10 @@
 #include "window_panel.h"
 #include "../bridge/ipc_client.h"
 #include "../bridge/refresh.h"
+#include "../panels/rules_panel.h"
+#include "../panels/settings_panel.h"
 #include "../platform/async.h"
+#include "../platform/gui_platform.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -68,6 +71,60 @@ on_move_clicked (GtkButton *btn, gpointer data)
     platform_run_command (app, cmd, TRUE, TRUE);
 }
 
+static void
+window_dropdown_setup (GtkListItemFactory *factory, GtkListItem *list_item, gpointer data)
+{
+    (void)factory;
+    (void)data;
+    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *image = gtk_image_new ();
+    GtkWidget *label = gtk_label_new ("");
+
+    gtk_image_set_pixel_size (GTK_IMAGE (image), 16);
+    gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_halign (label, GTK_ALIGN_START);
+
+    gtk_box_append (GTK_BOX (box), image);
+    gtk_box_append (GTK_BOX (box), label);
+    gtk_list_item_set_child (list_item, box);
+}
+
+static void
+window_dropdown_bind (GtkListItemFactory *factory, GtkListItem *list_item, gpointer data)
+{
+    (void)factory;
+    gf_app_state_t *app = data;
+    GtkStringObject *item = GTK_STRING_OBJECT (gtk_list_item_get_item (list_item));
+    GtkWidget *box = gtk_list_item_get_child (list_item);
+    GtkWidget *image = gtk_widget_get_first_child (box);
+    GtkWidget *label = gtk_widget_get_next_sibling (image);
+
+    const char *title = gtk_string_object_get_string (item);
+    gtk_label_set_text (GTK_LABEL (label), title);
+
+    GListModel *model = gtk_drop_down_get_model (GTK_DROP_DOWN (app->window_dropdown));
+    GArray *window_data = g_object_get_data (G_OBJECT (model), "window-data");
+    if (!window_data)
+        return;
+
+    guint pos = gtk_list_item_get_position (list_item);
+    if (pos >= window_data->len)
+        return;
+
+    gf_win_info_t *win = &g_array_index (window_data, gf_win_info_t, pos);
+
+    GdkPaintable *paintable = app->platform->get_window_icon (app->platform, win->id);
+    if (paintable)
+    {
+        gtk_image_set_from_paintable (GTK_IMAGE (image), paintable);
+        g_object_unref (paintable);
+    }
+    else
+    {
+        gtk_image_set_from_icon_name (GTK_IMAGE (image), "application-x-executable");
+    }
+}
+
 GtkWidget *
 gf_gui_window_panel_new (gf_app_state_t *app)
 {
@@ -75,6 +132,13 @@ gf_gui_window_panel_new (gf_app_state_t *app)
 
     app->window_model = gtk_string_list_new (NULL);
     app->window_dropdown = gtk_drop_down_new (G_LIST_MODEL (app->window_model), NULL);
+
+    // Set up custom factory for window list item (Icon + Label)
+    GtkListItemFactory *win_factory = gtk_signal_list_item_factory_new ();
+    g_signal_connect (win_factory, "setup", G_CALLBACK (window_dropdown_setup), app);
+    g_signal_connect (win_factory, "bind", G_CALLBACK (window_dropdown_bind), app);
+    gtk_drop_down_set_factory (GTK_DROP_DOWN (app->window_dropdown), win_factory);
+
     gtk_widget_set_size_request (app->window_dropdown, 200, -1);
     gtk_box_append (GTK_BOX (box), app->window_dropdown);
     g_signal_connect (app->window_dropdown, "notify::selected",
@@ -89,6 +153,10 @@ gf_gui_window_panel_new (gf_app_state_t *app)
     GtkWidget *move_btn = gtk_button_new_with_label ("Move Window");
     gtk_box_append (GTK_BOX (box), move_btn);
     g_signal_connect (move_btn, "clicked", G_CALLBACK (on_move_clicked), app);
+
+    GtkWidget *rules_btn = gtk_button_new_with_label ("📋 Rules");
+    gtk_box_append (GTK_BOX (box), rules_btn);
+    g_signal_connect (rules_btn, "clicked", G_CALLBACK (on_rules_button_clicked), app);
 
     return box;
 }

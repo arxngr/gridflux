@@ -2,7 +2,6 @@
 #define GF_CORE_WINDOW_MANAGER_H
 
 #include "layout.h"
-#define GLOB_CFG "config.json"
 
 #include "../config/config.h"
 #include "../ipc/ipc.h"
@@ -20,7 +19,7 @@ typedef struct
     gf_ws_id_t last_active_workspace;
     bool initialized;
     bool dock_hidden;
-    bool gesture_initialized;
+    bool keymap_initialized;
 } gf_wm_state_t;
 
 typedef struct
@@ -46,7 +45,7 @@ gf_err_t gf_wm_run (gf_wm_t *manager);
 // --- Event Handling ---
 void gf_wm_event (gf_wm_t *manager);
 void gf_wm_watch (gf_wm_t *m);
-void gf_wm_gesture_event (gf_wm_t *m);
+void gf_wm_keymap_event (gf_wm_t *m);
 
 // --- Layout Management ---
 void gf_wm_apply_layout (gf_wm_t *m, gf_win_info_t *windows, gf_rect_t *geometry,
@@ -60,7 +59,7 @@ gf_err_t gf_wm_layout_rebalance (gf_wm_t *m);
 void gf_wm_prune (gf_wm_t *manager);
 gf_err_t gf_wm_window_move (gf_wm_t *m, gf_handle_t window_id,
                             gf_ws_id_t target_workspace);
-void gf_wm_window_name (const gf_wm_t *m, gf_handle_t handle, char *buffer, size_t size);
+void gf_wm_window_class (const gf_wm_t *m, gf_handle_t handle, char *buffer, size_t size);
 gf_err_t gf_wm_window_sync (gf_wm_t *manager, gf_handle_t window,
                             gf_ws_id_t workspace_id);
 

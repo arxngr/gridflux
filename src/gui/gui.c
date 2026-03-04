@@ -1,11 +1,16 @@
 #include "bridge/ipc_client.h"
 #include "bridge/refresh.h"
+#include "platform/gui_platform.h"
 #include "window/main_window.h"
 
 static void
 gf_gtk_activate (GtkApplication *app, gpointer user_data)
 {
     gf_app_state_t *widgets = g_new0 (gf_app_state_t, 1);
+    widgets->platform = gf_gui_platform_create ();
+    if (widgets->platform->init)
+        widgets->platform->init (widgets->platform);
+
     gf_gui_main_window_init (widgets, app);
     gf_refresh_workspaces (widgets);
 }

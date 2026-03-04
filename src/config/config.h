@@ -2,6 +2,7 @@
 #define GF_CORE_CONFIG_H
 
 #include "../core/types.h"
+#include "rules.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <time.h>
@@ -23,6 +24,8 @@ struct gf_config
     time_t last_modified;
     uint32_t locked_workspaces[GF_MAX_LOCKED_WORKSPACES];
     uint32_t locked_workspaces_count;
+    gf_window_rule_t window_rules[GF_MAX_RULES];
+    uint32_t window_rules_count;
 };
 // --- Configuration Lifecycle ---
 const char *gf_config_get_path (void);

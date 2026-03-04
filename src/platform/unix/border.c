@@ -1,6 +1,8 @@
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "internal.h"
+#include "platform/unix/platform.h"
+#include <X11/X.h>
 #include <X11/extensions/shape.h>
 #include <limits.h>
 #include <string.h>
@@ -36,7 +38,12 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
     }
 
     if (w <= 2 * thickness || h <= 2 * thickness)
+    {
+        GF_LOG_WARN (
+            "_apply_shape_mask: window too small, skipping (w=%d h=%d thickness=%d)", w,
+            h, thickness);
         return;
+    }
 
     XRectangle hollow_rect;
     hollow_rect.x = thickness;
@@ -44,10 +51,18 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
     hollow_rect.width = frame_w;
     hollow_rect.height = frame_h;
 
-    XShapeCombineMask (dpy, overlay, ShapeBounding, 0, 0, None, ShapeSet);
+    /* Use an explicit full-window rectangle for ShapeSet instead of
+     * XShapeCombineMask(..., None, ...) which can be unreliable on some
+     * compositors. */
+    XRectangle full_rect = { 0, 0, (unsigned short)w, (unsigned short)h };
+    XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, &full_rect, 1, ShapeSet,
+                             Unsorted);
+
+    /* Carve out the interior so only the border ring remains. */
     XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, &hollow_rect, 1,
                              ShapeSubtract, Unsorted);
 
+    /* Remove the regions covered by excluded/always-on-top windows. */
     if (sub_count > 0 && sub_rects)
     {
         XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0,
@@ -55,7 +70,10 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
                                  Unsorted);
     }
 
-    XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+    /* Make the entire overlay click-through (empty input region). */
+    XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, &full_rect, 0, ShapeSet,
+                             Unsorted);
+    XSync (dpy, False);
 }
 
 void
@@ -305,7 +323,11 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         Window *clients = (Window *)prop_data;
         for (unsigned long i = 0; i < nitems && gui_count < 16; i++)
         {
-            if (_window_excluded_border (dpy, clients[i]))
+            if (_window_excluded_border (dpy, clients[i])
+                && !_window_has_type (dpy, clients[i],
+                                     atoms->net_wm_window_type_desktop)
+                && !_window_has_type (dpy, clients[i],
+                                     atoms->net_wm_window_type_dock))
             {
                 if (_get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
                 {
@@ -338,7 +360,8 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
             continue;
         }
 
-        if (attrs.map_state == IsUnmapped || gf_window_is_minimized (dpy, b->target))
+        if (attrs.map_state == IsUnmapped || gf_window_is_minimized (dpy, b->target)
+            || gf_window_is_maximized (dpy, b->target))
         {
             XUnmapWindow (dpy, b->overlay);
             i++;
