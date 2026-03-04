@@ -61,13 +61,28 @@ _is_excluded_class (const char *class_name)
             "Valve001",
             "Steam",
             "TaskManagerWindow",
-            "#32770" };
+            "#32770",
+            "ThumbnailDeviceHelperWnd",
+            "RecordingAreaIndicatorWindow",
+            "XamlExplorerHostIslandWindow_WASDK",
+            "XamlWindow" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
     {
         if (strcmp (class_name, excluded_classes[i]) == 0)
             return true;
     }
+
+    if (strstr (class_name, "SnippingTool") != NULL)
+        return true;
+    if (strstr (class_name, "ScreenClipping") != NULL)
+        return true;
+    if (strstr (class_name, "BcastDVR") != NULL)
+        return true;
+    if (strstr (class_name, "GameBar") != NULL)
+        return true;
+    if (strstr (class_name, "bcastdvr") != NULL)
+        return true;
 
     return false;
 }
@@ -255,8 +270,13 @@ _window_excluded_border (HWND hwnd)
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (hwnd, class_name, sizeof (class_name)))
     {
-        static const char *excluded_classes[]
-            = { "#32770", "TaskManagerWindow", "NotifyIconOverflowWindow" };
+        static const char *excluded_classes[] = { "#32770",
+                                                  "TaskManagerWindow",
+                                                  "NotifyIconOverflowWindow",
+                                                  "ThumbnailDeviceHelperWnd",
+                                                  "RecordingAreaIndicatorWindow",
+                                                  "XamlExplorerHostIslandWindow_WASDK",
+                                                  "XamlWindow" };
 
         for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]);
              i++)
@@ -265,6 +285,12 @@ _window_excluded_border (HWND hwnd)
                 return true;
         }
     }
+    if (strstr (class_name, "SnippingTool") != NULL)
+        return true;
+    if (strstr (class_name, "GameBar") != NULL)
+        return true;
+    if (strstr (class_name, "ScreenSketch") != NULL)
+        return true;
 
     return false;
 }
