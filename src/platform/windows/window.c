@@ -168,6 +168,13 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
         if (strcmp (title, "DWM Notification Window") == 0
             || strcmp (title, "GridFlux") == 0)
             return true;
+
+        if (strstr (title, "Snipping Tool") != NULL)
+            return true;
+        if (strstr (title, "Game Bar") != NULL)
+            return true;
+        if (strstr (title, "Screen Sketch") != NULL)
+            return true;
     }
 
     char class_name[MAX_CLASS_NAME_LENGTH];
