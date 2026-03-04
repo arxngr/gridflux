@@ -23,8 +23,8 @@ _window_name_matches (const char *name, const char *list[], size_t count)
 bool
 _window_screenshot_app (gf_display_t display, gf_handle_t window)
 {
-    const char *screenshot_classes[]
-        = { "flameshot", "Gnome-screenshot", "Spectacle", "Shutter", "Plasma" };
+    const char *screenshot_classes[] = { "flameshot", "Gnome-screenshot", "Spectacle",
+                                         "Shutter",   "Plasma",           "plasmashell" };
 
     XClassHint hint;
     if (XGetClassHint (display, window, &hint))
