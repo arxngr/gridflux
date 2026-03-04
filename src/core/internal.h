@@ -54,6 +54,8 @@ wm_is_excluded (gf_wm_t *m, gf_handle_t w)
 gf_ws_id_t _assign_workspace_for_window (gf_wm_t *m, gf_win_info_t *win,
                                          gf_ws_info_t *current_ws);
 void _build_workspace_candidate (gf_wm_t *m);
+void _cleanup_empty_maximized_ws (gf_wm_t *m, gf_ws_id_t ws_id);
+void _cleanup_unused_workspace (gf_wm_t *m, gf_ws_list_t *list, uint32_t index);
 gf_ws_id_t _find_or_create_maximized_ws (gf_wm_t *m);
 gf_ws_id_t _find_or_create_ws (gf_wm_t *m);
 gf_ws_info_t *_get_workspace (gf_ws_list_t *workspaces, gf_ws_id_t id);

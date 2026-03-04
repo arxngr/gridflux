@@ -215,6 +215,9 @@ gf_wm_event (gf_wm_t *m)
 
         _move_window_between_workspaces (m, focused, normal_ws);
 
+        // Clean up the now-empty maximized workspace
+        _cleanup_empty_maximized_ws (m, old_ws_id);
+
         if (m->state.dock_hidden && platform->dock_restore)
         {
             platform->dock_restore (platform);

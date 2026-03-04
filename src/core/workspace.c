@@ -346,9 +346,11 @@ _find_or_create_maximized_ws (gf_wm_t *m)
 {
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
+    // Find an existing free (empty) maximized workspace to reuse
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
-        if (workspaces->items[i].has_maximized_state)
+        if (workspaces->items[i].has_maximized_state
+            && workspaces->items[i].window_count == 0)
         {
             return workspaces->items[i].id;
         }
@@ -356,6 +358,31 @@ _find_or_create_maximized_ws (gf_wm_t *m)
 
     return gf_workspace_create (workspaces, m->config->max_windows_per_workspace, true,
                                 true);
+}
+
+void
+_cleanup_empty_maximized_ws (gf_wm_t *m, gf_ws_id_t ws_id)
+{
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+    gf_win_list_t *windows = wm_windows (m);
+
+    // Check if any windows still reference this workspace
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        if (windows->items[i].is_valid && windows->items[i].workspace_id == ws_id)
+            return; // Still has a window, don't clean up
+    }
+
+    // Find and remove the workspace from the list
+    for (uint32_t i = 0; i < workspaces->count; i++)
+    {
+        if (workspaces->items[i].id == ws_id && workspaces->items[i].has_maximized_state)
+        {
+            _cleanup_unused_workspace (m, workspaces, i);
+            GF_LOG_INFO ("Cleaned up empty maximized workspace %d", ws_id);
+            break;
+        }
+    }
 }
 
 gf_ws_id_t
