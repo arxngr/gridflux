@@ -28,7 +28,13 @@ No config language to learn. No layout rules to memorize. Just open apps and get
 
 ## See it in action
 
+## Linux (KDE)
 https://github.com/user-attachments/assets/f7800812-4ac9-4d3d-bac0-943632cb2f20
+
+## Windows
+
+https://github.com/user-attachments/assets/1ac112a4-67e5-44ca-81fc-7ccb828b82b4
+
 
 *Windows being automatically arranged across workspaces as applications open and close.*
 
