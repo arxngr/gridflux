@@ -42,10 +42,7 @@ _remove_stale_windows (gf_wm_t *m, gf_win_list_t *windows)
                     = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
                 if (ws && ws->has_maximized_state)
                 {
-                    ws->has_maximized_state = false;
-                    ws->max_windows = m->config->max_windows_per_workspace;
-                    ws->available_space = m->config->max_windows_per_workspace;
-                    GF_LOG_DEBUG ("Cleared maximized state from workspace %d", ws->id);
+                    _cleanup_empty_maximized_ws (m, ws->id);
                 }
             }
 
