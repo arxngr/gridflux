@@ -8,7 +8,7 @@
 
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64" />
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of GridFlux is already installed." />
+    <MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallExecute" DowngradeErrorMessage="A newer version of GridFlux is already installed." />
 
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
@@ -18,6 +18,16 @@
 
     <Property Id="WixShellExecTarget" Value="[INSTALLDIR]gridflux-launcher.exe" />
     <CustomAction Id="LaunchApplication" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" />
+
+    <CustomAction Id="InstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --install-task" Execute="deferred" Impersonate="no" Return="ignore" />
+    <CustomAction Id="UninstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --uninstall-task" Execute="deferred" Impersonate="no" Return="ignore" />
+    <CustomAction Id="LaunchAfterRepair" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot;" Execute="immediate" Impersonate="yes" Return="asyncNoWait" />
+
+    <InstallExecuteSequence>
+      <Custom Action="InstallTask" After="InstallFiles">NOT REMOVE="ALL"</Custom>
+      <Custom Action="UninstallTask" Before="RemoveFiles">REMOVE="ALL"</Custom>
+      <Custom Action="LaunchAfterRepair" After="InstallFinalize">REINSTALL</Custom>
+    </InstallExecuteSequence>
 
     <UI>
       <UIRef Id="WixUI_InstallDir" />
@@ -46,7 +56,6 @@
     <Feature Id="MainFeature" Title="GridFlux" Level="1">
       <ComponentGroupRef Id="GridFluxCore" />
       <ComponentGroupRef Id="Shortcuts" />
-      <ComponentGroupRef Id="Autostart" />
       <ComponentGroupRef Id="GtkRuntime" />
     </Feature>
   </Product>
@@ -120,23 +129,6 @@
       <ComponentRef Id="Icons"/>
       <ComponentRef Id="DefaultConfig"/>
       <ComponentRef Id="Registry"/>
-    </ComponentGroup>
-  </Fragment>
-
-  <Fragment>
-    <DirectoryRef Id="INSTALLDIR">
-      <Component Id="RunOnLogin" Guid="{99999999-9999-9999-9999-999999999999}" Win64="yes">
-        <RegistryValue Root="HKLM"
-                       Key="Software\Microsoft\Windows\CurrentVersion\Run"
-                       Name="GridFlux"
-                       Value="&quot;[INSTALLDIR]gridflux-launcher.exe&quot;"
-                       Type="string"
-                       KeyPath="yes"/>
-      </Component>
-    </DirectoryRef>
-
-    <ComponentGroup Id="Autostart">
-      <ComponentRef Id="RunOnLogin"/>
     </ComponentGroup>
   </Fragment>
 
