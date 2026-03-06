@@ -86,6 +86,7 @@ if(UNIX AND NOT APPLE)
         ${X11_LIBRARIES}
         Xext
         Xi
+        Xinerama
         m
         ${JSONC_LIBRARIES}
     )

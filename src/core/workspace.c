@@ -176,6 +176,7 @@ void
 _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
 {
     gf_ws_list_t *workspaces = wm_workspaces (m);
+    gf_monitor_id_t active_monitor = _get_active_monitor (m);
 
     GF_LOG_DEBUG ("Workspace changed from %d to %d", m->state.last_active_workspace,
                   current_workspace);
@@ -187,7 +188,7 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
         if (ws_id == current_workspace)
             continue;
 
-        _minimize_workspace_windows (m, ws_id, 0);
+        _minimize_workspace_windows (m, ws_id, 0, active_monitor);
     }
 
     gf_platform_t *platform = wm_platform (m);
@@ -198,7 +199,7 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
         active_window = platform->window_get_focused (*wm_display (m));
 
     // Unminimize windows in current workspace
-    _unminimize_workspace_windows (m, current_workspace, active_window);
+    _unminimize_workspace_windows (m, current_workspace, active_window, active_monitor);
 
     // Toggle dock based on target workspace type
     gf_ws_info_t *target_ws
@@ -484,7 +485,7 @@ _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
         if (ws_id == win->workspace_id)
             continue;
 
-        _minimize_workspace_windows (m, ws_id, 0);
+        _minimize_workspace_windows (m, ws_id, 0, win->monitor_id);
     }
 
     GF_LOG_INFO ("New window %p → workspace %u (%s)", (void *)win->id, win->workspace_id,

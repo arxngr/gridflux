@@ -71,8 +71,37 @@ gf_wm_window_class (const gf_wm_t *m, gf_handle_t handle, char *buffer, size_t s
     }
 }
 
+gf_monitor_id_t
+_get_active_monitor (gf_wm_t *m)
+{
+    gf_platform_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+    gf_win_list_t *windows = wm_windows (m);
+
+    gf_handle_t curr_win_id = platform->window_get_focused (display);
+    if (curr_win_id != 0)
+    {
+        gf_win_info_t *focused = gf_window_list_find_by_window_id (windows, curr_win_id);
+        if (focused)
+            return focused->monitor_id;
+
+        if (platform->monitor_from_window)
+            return platform->monitor_from_window (platform, curr_win_id);
+    }
+
+    // Fallback: Use the monitor of the first valid window (often primary monitor)
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        if (windows->items[i].is_valid)
+            return windows->items[i].monitor_id;
+    }
+
+    return 0; // Fallback
+}
+
 void
-_minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id)
+_minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id,
+                             gf_monitor_id_t active_monitor)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -89,13 +118,18 @@ _minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_i
         if (wm_is_excluded (m, win->id))
             continue;
 
+        // If active_monitor is not -1, filter by monitor
+        if (active_monitor != (gf_monitor_id_t)-1 && win->monitor_id != active_monitor)
+            continue;
+
         platform->window_minimize (display, win->id);
         win->is_minimized = true;
     }
 }
 
 void
-_unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window)
+_unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
+                               gf_monitor_id_t active_monitor)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -120,6 +154,9 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
             continue;
 
         if (wm_is_excluded (m, win->id))
+            continue;
+
+        if (active_monitor != (gf_monitor_id_t)-1 && win->monitor_id != active_monitor)
             continue;
 
         if (platform->window_is_hidden && platform->window_is_hidden (display, win->id))
@@ -148,6 +185,10 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
 
             if (win->workspace_id == ws_id && win->id == active_window)
             {
+                if (active_monitor != (gf_monitor_id_t)-1
+                    && win->monitor_id != active_monitor)
+                    continue;
+
                 platform->window_unminimize (display, win->id);
                 win->is_minimized = false;
 
@@ -170,6 +211,10 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
             gf_win_info_t *win = &windows->items[i];
             if (win->workspace_id == ws_id && !wm_is_excluded (m, win->id))
             {
+                if (active_monitor != (gf_monitor_id_t)-1
+                    && win->monitor_id != active_monitor)
+                    continue;
+
                 platform->window_unminimize (display, win->id);
                 win->is_minimized = false;
                 break;
@@ -234,9 +279,16 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
                                         : false);
     bool is_max_state = existing ? existing->is_maximized : false;
 
+    gf_monitor_id_t mon_id = 0;
+    if (existing)
+        mon_id = existing->monitor_id;
+    else if (platform->monitor_from_window)
+        mon_id = platform->monitor_from_window (platform, window);
+
     gf_win_info_t info = {
         .id = window,
         .workspace_id = workspace_id,
+        .monitor_id = mon_id,
         .geometry = geom,
         .is_minimized = is_min_state,
         .is_maximized = is_max_state,

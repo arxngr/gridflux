@@ -51,7 +51,8 @@ void gf_wm_keymap_event (gf_wm_t *m);
 void gf_wm_apply_layout (gf_wm_t *m, gf_win_info_t *windows, gf_rect_t *geometry,
                          uint32_t window_count);
 gf_err_t gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows,
-                                 uint32_t window_count, gf_rect_t **out_geometries);
+                                 uint32_t window_count, gf_monitor_id_t mon_id,
+                                 gf_rect_t **out_geometries);
 gf_err_t gf_wm_layout_apply (gf_wm_t *manager);
 gf_err_t gf_wm_layout_rebalance (gf_wm_t *m);
 

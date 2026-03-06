@@ -11,6 +11,10 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#endif
+
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
@@ -24,7 +28,6 @@ static const gf_config_t DEFAULT_CONFIG
         .enable_borders = true,
         .locked_workspaces_count = 0,
         .window_rules_count = 0 };
-
 
 const char *
 gf_config_get_path (void)
@@ -49,6 +52,7 @@ gf_config_get_path (void)
     // Ensure the directory exists
     char gridflux_dir[PATH_MAX];
     snprintf (gridflux_dir, sizeof (gridflux_dir), "%s\\gridflux", appdata);
+    _mkdir (gridflux_dir);
 
     return config_path;
 #else

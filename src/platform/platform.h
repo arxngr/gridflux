@@ -50,6 +50,15 @@ struct gf_platform
     gf_err_t (*screen_get_bounds) (gf_display_t display, gf_rect_t *bounds);
     uint32_t (*workspace_get_count) (gf_display_t display);
 
+    // --- Monitor Management ---
+    uint32_t (*monitor_get_count) (gf_platform_t *platform);
+    gf_err_t (*monitor_enumerate) (gf_platform_t *platform, gf_monitor_t *monitors,
+                                   uint32_t *count);
+    gf_monitor_id_t (*monitor_from_window) (gf_platform_t *platform, gf_handle_t window);
+    gf_err_t (*screen_get_bounds_for_monitor) (gf_display_t display,
+                                               gf_monitor_id_t monitor_id,
+                                               gf_rect_t *bounds);
+
     // --- Border Management ---
     void (*border_add) (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
                         int thickness);

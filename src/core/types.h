@@ -10,6 +10,7 @@ typedef int32_t gf_ws_id_t;
 typedef int32_t gf_coordinate_t;
 typedef uint32_t gf_dimension_t;
 typedef uint32_t gf_color_t;
+typedef uint32_t gf_monitor_id_t;
 
 // Platform-specific defines with proper guards
 #ifdef __linux__
@@ -46,9 +47,10 @@ typedef void (*gf_window_destroy_callback_t) (gf_handle_t window, void *user_dat
 // Constants
 #define GF_MAX_WINDOWS_PER_WORKSPACE 10
 #define GF_MAX_WORKSPACES 32
+#define GF_MAX_MONITORS 16
 #define GF_FIRST_WORKSPACE_ID 1
 #define GF_DEFAULT_PADDING 10
-#define GF_MIN_WINDOW_SIZE 10
+#define GF_MIN_WINDOW_SIZE 300
 
 // Error codes
 typedef enum
@@ -82,10 +84,20 @@ typedef struct
     gf_dimension_t width, height;
 } gf_rect_t;
 
+// Monitor information
+typedef struct
+{
+    gf_monitor_id_t id;
+    gf_rect_t bounds;      // Work area (excludes taskbar)
+    gf_rect_t full_bounds; // Full monitor rect
+    bool is_primary;
+} gf_monitor_t;
+
 typedef struct
 {
     gf_handle_t id;
     gf_ws_id_t workspace_id;
+    gf_monitor_id_t monitor_id;
     gf_rect_t geometry;
     bool is_maximized;
     bool is_minimized;

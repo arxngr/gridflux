@@ -15,7 +15,7 @@
 
 gf_err_t
 gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows, uint32_t window_count,
-                        gf_rect_t **out_geometries)
+                        gf_monitor_id_t mon_id, gf_rect_t **out_geometries)
 {
     if (!m || !windows || !out_geometries || window_count == 0)
         return GF_ERROR_INVALID_PARAMETER;
@@ -23,11 +23,27 @@ gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows, uint32_t window_coun
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
+    /* Get bounds: prefer per-monitor if available, fallback to virtual screen */
     gf_rect_t workspace_bounds;
-    gf_err_t result = platform->screen_get_bounds (display, &workspace_bounds);
 
-    if (result != GF_SUCCESS)
-        return GF_ERROR_DISPLAY_CONNECTION;
+    if (platform->screen_get_bounds_for_monitor)
+    {
+        gf_err_t result = platform->screen_get_bounds_for_monitor (display, mon_id,
+                                                                   &workspace_bounds);
+        if (result != GF_SUCCESS)
+        {
+            /* Fallback to virtual screen */
+            result = platform->screen_get_bounds (display, &workspace_bounds);
+            if (result != GF_SUCCESS)
+                return GF_ERROR_DISPLAY_CONNECTION;
+        }
+    }
+    else
+    {
+        gf_err_t result = platform->screen_get_bounds (display, &workspace_bounds);
+        if (result != GF_SUCCESS)
+            return GF_ERROR_DISPLAY_CONNECTION;
+    }
 
     gf_rect_t *new_geometries = gf_malloc (window_count * sizeof (gf_rect_t));
     if (!new_geometries)
@@ -40,6 +56,24 @@ gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows, uint32_t window_coun
     return GF_SUCCESS;
 }
 
+/* Calculate the effective max windows per workspace based on monitor resolution */
+static uint32_t
+_calculate_effective_max (const gf_rect_t *bounds, const gf_config_t *config)
+{
+    uint32_t min_size = config->min_window_size;
+    if (min_size == 0)
+        min_size = GF_MIN_WINDOW_SIZE;
+
+    uint32_t cols = bounds->width / min_size;
+    uint32_t rows = bounds->height / min_size;
+    uint32_t auto_max = cols * rows;
+    if (auto_max < 1)
+        auto_max = 1;
+
+    uint32_t config_max = config->max_windows_per_workspace;
+    return (config_max < auto_max) ? config_max : auto_max;
+}
+
 gf_err_t
 gf_wm_layout_apply (gf_wm_t *m)
 {
@@ -49,11 +83,31 @@ gf_wm_layout_apply (gf_wm_t *m)
     gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_win_list_t *windows = wm_windows (m);
     gf_platform_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
 
     if (windows->count == 0 || !windows->items)
         return GF_SUCCESS;
 
     _build_workspace_candidate (m);
+
+    /* Enumerate monitors (or use single virtual screen as fallback) */
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    uint32_t monitor_count = 0;
+
+    if (platform->monitor_enumerate)
+    {
+        monitor_count = GF_MAX_MONITORS;
+        platform->monitor_enumerate (platform, monitors, &monitor_count);
+    }
+
+    /* Fallback: treat the whole screen as one monitor */
+    if (monitor_count == 0)
+    {
+        monitor_count = 1;
+        monitors[0].id = 0;
+        monitors[0].is_primary = true;
+        platform->screen_get_bounds (display, &monitors[0].bounds);
+    }
 
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
@@ -73,46 +127,50 @@ gf_wm_layout_apply (gf_wm_t *m)
             continue;
         }
 
-        gf_win_info_t *non_minimized_windows = NULL;
-        uint32_t non_minimized_count = 0;
-
-        non_minimized_windows = gf_malloc (ws_window_count * sizeof (gf_win_info_t));
-        if (!non_minimized_windows)
+        /* For each monitor, layout the windows that belong to it */
+        for (uint32_t mon_idx = 0; mon_idx < monitor_count; mon_idx++)
         {
-            gf_free (ws_windows);
-            continue;
-        }
+            gf_monitor_t *mon = &monitors[mon_idx];
 
-        for (uint32_t j = 0; j < ws_window_count; j++)
-        {
-            if (!ws_windows[j].is_minimized && !wm_is_excluded (m, ws_windows[j].id))
+            /* Filter: collect non-minimized windows on this monitor */
+            gf_win_info_t *mon_windows
+                = gf_malloc (ws_window_count * sizeof (gf_win_info_t));
+            if (!mon_windows)
+                continue;
+
+            uint32_t mon_win_count = 0;
+            for (uint32_t j = 0; j < ws_window_count; j++)
             {
-                non_minimized_windows[non_minimized_count++] = ws_windows[j];
+                if (!ws_windows[j].is_minimized && !wm_is_excluded (m, ws_windows[j].id))
+                {
+                    /* If we have multi-monitor support, filter by monitor.
+                       If only 1 monitor, include all windows. */
+                    if (monitor_count <= 1 || ws_windows[j].monitor_id == mon->id)
+                    {
+                        mon_windows[mon_win_count++] = ws_windows[j];
+                    }
+                }
             }
-        }
 
-        // Only calculate layout if there are non-minimized windows
-        if (non_minimized_count > 0)
-        {
-            gf_rect_t workspace_bounds;
-            if (wm_platform (m)->screen_get_bounds (*wm_display (m), &workspace_bounds)
-                == GF_SUCCESS)
+            if (mon_win_count > 0)
             {
+                GF_LOG_DEBUG ("Layout applying for monitor %u with %u windows", mon->id,
+                              mon_win_count);
                 gf_rect_t *new_geometries = NULL;
-                if (gf_wm_calculate_layout (m, non_minimized_windows, non_minimized_count,
+                if (gf_wm_calculate_layout (m, mon_windows, mon_win_count, mon->id,
                                             &new_geometries)
                     == GF_SUCCESS)
                 {
-                    gf_wm_apply_layout (m, non_minimized_windows, new_geometries,
-                                        non_minimized_count);
+                    gf_wm_apply_layout (m, mon_windows, new_geometries, mon_win_count);
                     if (m->config->enable_borders && platform->border_update)
                         platform->border_update (platform, m->config);
                     gf_free (new_geometries);
                 }
             }
+
+            gf_free (mon_windows);
         }
 
-        gf_free (non_minimized_windows);
         gf_free (ws_windows);
     }
 
@@ -321,9 +379,15 @@ _handle_fullscreen_windows (gf_wm_t *m)
     if (active_win_id != 0
         && m->platform->window_is_fullscreen (m->display, (gf_handle_t)active_win_id))
     {
+        gf_monitor_id_t active_monitor = _get_active_monitor (m);
+
         for (uint32_t i = 0; i < windows->count; i++)
         {
             if (windows->items[i].id == active_win_id)
+                continue;
+
+            if (active_monitor != (gf_monitor_id_t)-1
+                && windows->items[i].monitor_id != active_monitor)
                 continue;
 
             m->platform->window_minimize (m->display, windows->items[i].id);

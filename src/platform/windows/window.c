@@ -54,6 +54,9 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
             window_list[found_count].is_maximized = IsZoomed (hwnd);
             window_list[found_count].is_valid = true;
             window_list[found_count].last_modified = time (NULL);
+
+            window_list[found_count].monitor_id = 0;
+
             found_count++;
         }
         hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);
@@ -105,6 +108,7 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
     int new_w = geometry->width;
     int new_h = geometry->height;
 
+    /* Compensate for the invisible DWM shadow/border that shifts the window rect */
     RECT d_rect, w_rect;
     if (SUCCEEDED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &d_rect,
                                           sizeof (d_rect)))
@@ -121,7 +125,11 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
         new_h += top_border + bottom_border;
     }
 
-    if (MoveWindow (window, new_x, new_y, new_w, new_h, TRUE) == 0)
+    /* Use SetWindowPos with SWP_NOSENDCHANGING so that apps like Discord
+       (CEF/Electron) cannot intercept the resize via WM_WINDOWPOSCHANGING
+       and silently enforce their own minimum size. */
+    UINT swp_flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING;
+    if (SetWindowPos (window, NULL, new_x, new_y, new_w, new_h, swp_flags) == 0)
         return GF_ERROR_PLATFORM_ERROR;
 
     return GF_SUCCESS;

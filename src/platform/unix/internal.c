@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 bool
@@ -14,7 +15,7 @@ _window_name_matches (const char *name, const char *list[], size_t count)
 {
     for (size_t i = 0; i < count; i++)
     {
-        if (strcmp (name, list[i]) == 0)
+        if (strcasecmp (name, list[i]) == 0)
             return true;
     }
     return false;
