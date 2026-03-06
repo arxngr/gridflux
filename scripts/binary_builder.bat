@@ -113,7 +113,7 @@ set WIX_DLL_FILE=build\wix_dlls.wxs
 echo ^<?xml version="1.0" encoding="UTF-8"?^>
 echo ^<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"^>
 echo ^<Fragment^>
-echo   ^<DirectoryRef Id="BinDir"^>
+echo   ^<DirectoryRef Id="INSTALLDIR"^>
 ) > %WIX_DLL_FILE%
 
 :: Loop through all DLLs in build\bin
@@ -167,7 +167,7 @@ echo.
 echo Building MSI installer
 echo.
 
-set MSI_NAME=GridFlux-0.1.0.msi
+set MSI_NAME=GridFlux-1.0.0.msi
 
 :: ADDED: -ext WixUIExtension -ext WixUtilExtension
 candle.exe -ext WixUIExtension -ext WixUtilExtension gridflux.wxs build\wix_dlls.wxs -out build\
@@ -208,4 +208,107 @@ echo To avoid SmartScreen warnings:
 echo - Sign the MSI using signtool.exe
 echo.
 
+echo ================================================
+echo Building MSIX Package (for Microsoft Store)
+echo ================================================
+
+:: Find makeappx.exe
+set "MAKEAPPX="
+for /d %%d in ("C:\Program Files (x86)\Windows Kits\10\bin\10.0.*") do (
+    if exist "%%d\x64\makeappx.exe" set "MAKEAPPX=%%d\x64\makeappx.exe"
+)
+
+if not defined MAKEAPPX (
+    echo WARNING: makeappx.exe not found. Skipping MSIX build.
+    goto :SkipMSIX
+)
+
+echo Found makeappx: !MAKEAPPX!
+
+set "MSIX_DIR=build\msix"
+if exist "!MSIX_DIR!" rmdir /s /q "!MSIX_DIR!"
+mkdir "!MSIX_DIR!"
+mkdir "!MSIX_DIR!\Assets"
+
+echo Copying binaries and DLLs...
+copy /y build\*.exe "!MSIX_DIR!\" >nul
+copy /y build\bin\*.dll "!MSIX_DIR!\" >nul
+
+echo Copying assets...
+copy /y icons\gridflux-48.png "!MSIX_DIR!\Assets\StoreLogo.png" >nul
+copy /y icons\gridflux-48.png "!MSIX_DIR!\Assets\Square44x44Logo.png" >nul
+copy /y icons\gf_logo.png "!MSIX_DIR!\Assets\Square150x150Logo.png" >nul
+
+echo Generating AppxManifest.xml...
+set "MANIFEST=!MSIX_DIR!\AppxManifest.xml"
+(
+echo ^<?xml version="1.0" encoding="utf-8"?^>
+echo ^<Package
+echo   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+echo   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+echo   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+echo   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+echo   IgnorableNamespaces="uap rescap desktop"^>
+echo.
+echo   ^<Identity
+echo     Name="ArdiNugraha.GridFluxVirtualWorkspace"
+echo     Publisher="CN=C0CED2D5-3090-4872-B6DE-67F97E7E24CD"
+echo     Version="1.0.0.0"
+echo     ProcessorArchitecture="x64" /^>
+echo.
+echo   ^<Properties^>
+echo     ^<DisplayName^>GridFlux Virtual Workspace^</DisplayName^>
+echo     ^<PublisherDisplayName^>Ardi Nugraha^</PublisherDisplayName^>
+echo     ^<Logo^>Assets\StoreLogo.png^</Logo^>
+echo   ^</Properties^>
+echo.
+echo   ^<Dependencies^>
+echo     ^<TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" /^>
+echo   ^</Dependencies^>
+echo.
+echo   ^<Resources^>
+echo     ^<Resource Language="EN-US" /^>
+echo   ^</Resources^>
+echo.
+echo   ^<Applications^>
+echo     ^<Application
+echo       Id="GridFlux"
+echo       Executable="gridflux-launcher.exe"
+echo       EntryPoint="Windows.FullTrustApplication"^>
+echo       ^<uap:VisualElements
+echo         DisplayName="GridFlux Virtual Workspace"
+echo         Description="A fast and configurable tiling window manager for Windows"
+echo         BackgroundColor="transparent"
+echo         Square150x150Logo="Assets\Square150x150Logo.png"
+echo         Square44x44Logo="Assets\Square44x44Logo.png"^>
+echo       ^</uap:VisualElements^>
+echo       ^<Extensions^>
+echo         ^<desktop:Extension Category="windows.startupTask" Executable="gridflux-launcher.exe" EntryPoint="Windows.FullTrustApplication"^>
+echo           ^<desktop:StartupTask TaskId="GridFluxStartup" Enabled="true" DisplayName="GridFlux" /^>
+echo         ^</desktop:Extension^>
+echo       ^</Extensions^>
+echo     ^</Application^>
+echo   ^</Applications^>
+echo.
+echo   ^<Capabilities^>
+echo     ^<rescap:Capability Name="runFullTrust" /^>
+echo   ^</Capabilities^>
+echo ^</Package^>
+) > "!MANIFEST!"
+
+echo Building MSIX...
+"!MAKEAPPX!" pack /d "!MSIX_DIR!" /p GridFlux-1.0.0.msix /o /l
+
+if !ERRORLEVEL! neq 0 (
+    echo ERROR: Failed to build MSIX package.
+) else (
+    echo.
+    echo ================================================
+    echo MSIX build Complete!
+    echo Output: GridFlux-1.0.0.msix
+    echo Submit this file to the Microsoft Store via Partner Center.
+    echo ================================================
+)
+
+:SkipMSIX
 endlocal

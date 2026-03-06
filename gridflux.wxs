@@ -101,7 +101,7 @@
 
       <Component Id="Registry" Guid="{88888888-8888-8888-8888-888888888888}" Win64="yes">
         <RegistryValue Root="HKLM" Key="Software\GridFlux" Name="Install_Dir" Value="[INSTALLDIR]" Type="string" KeyPath="yes"/>
-        <RegistryValue Root="HKLM" Key="Software\GridFlux" Name="Version" Value="0.1.0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\GridFlux" Name="Version" Value="1.0.0" Type="string" />
       </Component>
     </DirectoryRef>
 
