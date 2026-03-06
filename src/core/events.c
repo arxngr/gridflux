@@ -13,8 +13,6 @@
 #include <string.h>
 #include <time.h>
 
-
-
 void
 gf_wm_keymap_event (gf_wm_t *m)
 {
@@ -33,7 +31,8 @@ gf_wm_keymap_event (gf_wm_t *m)
 
     if (workspaces->count < 2)
     {
-        GF_LOG_DEBUG ("Keymap: only %u workspace(s), nothing to switch", workspaces->count);
+        GF_LOG_DEBUG ("Keymap: only %u workspace(s), nothing to switch",
+                      workspaces->count);
         return;
     }
 
@@ -93,7 +92,6 @@ gf_wm_keymap_event (gf_wm_t *m)
         }
     }
 
-
     GF_LOG_INFO ("Keymap: switched to workspace %d", target_ws);
 }
 
@@ -134,6 +132,10 @@ gf_wm_watch (gf_wm_t *m)
             {
                 continue;
             }
+
+            /* Tag window with its monitor */
+            if (platform->monitor_from_window)
+                win->monitor_id = platform->monitor_from_window (platform, win->id);
 
             gf_win_info_t *existing = gf_window_list_find_by_window_id (windows, win->id);
 
@@ -197,7 +199,8 @@ gf_wm_event (gf_wm_t *m)
 
         // Handle switching between maximized windows (e.g. Alt+Tab)
         // Ensure other windows in the same maximized workspace are minimized
-        _minimize_workspace_windows (m, focused->workspace_id, focused->id);
+        _minimize_workspace_windows (m, focused->workspace_id, focused->id,
+                                     focused->monitor_id);
 
         // Hide dock when maximizing
         if (!m->state.dock_hidden && platform->dock_hide)

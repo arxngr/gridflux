@@ -54,6 +54,9 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
             window_list[found_count].is_maximized = IsZoomed (hwnd);
             window_list[found_count].is_valid = true;
             window_list[found_count].last_modified = time (NULL);
+
+            window_list[found_count].monitor_id = 0;
+
             found_count++;
         }
         hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);

@@ -70,13 +70,16 @@ bool _workspace_is_valid (gf_ws_list_t *workspaces, gf_ws_id_t id);
 void _detect_minimization_changes (gf_wm_t *m, gf_ws_id_t current_workspace);
 int _find_maximized_index (gf_win_info_t *windows, uint32_t count, gf_handle_t handle);
 uint32_t _get_maximized_windows (gf_wm_t *m, gf_win_info_t **out_windows);
+gf_monitor_id_t _get_active_monitor (gf_wm_t *m);
 void _handle_fullscreen_windows (gf_wm_t *m);
 void _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws);
-void _minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id);
+void _minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id,
+                                  gf_monitor_id_t active_monitor);
 void _move_window_between_workspaces (gf_wm_t *m, gf_win_info_t *win,
                                       gf_ws_id_t new_ws_id);
 void _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id,
-                                    gf_handle_t active_window);
+                                    gf_handle_t active_window,
+                                    gf_monitor_id_t active_monitor);
 bool _window_has_valid_workspace (gf_win_info_t *win, gf_ws_list_t *workspaces);
 
 // --- Layout & Rendering ---

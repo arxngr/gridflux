@@ -59,6 +59,12 @@ gf_platform_create (void)
     platform->dock_hide = gf_dock_hide;
     platform->dock_restore = gf_dock_restore;
 
+    // --- Monitor Management ---
+    platform->monitor_get_count = gf_monitor_get_count;
+    platform->monitor_enumerate = gf_monitor_enumerate;
+    platform->monitor_from_window = gf_monitor_from_window;
+    platform->screen_get_bounds_for_monitor = gf_screen_get_bounds_for_monitor;
+
     // --- Keymap Support ---
     platform->keymap_init = gf_keymap_init;
     platform->keymap_cleanup = gf_keymap_cleanup;
@@ -82,6 +88,10 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
     data->monitor_count = GetSystemMetrics (SM_CMONITORS);
+
+    /* Enumerate monitors and cache their bounds */
+    uint32_t mon_count = GF_MAX_MONITORS;
+    gf_monitor_enumerate (platform, data->monitors, &mon_count);
 
     GF_LOG_INFO ("Platform initialized successfully (monitors: %d)", data->monitor_count);
     return GF_SUCCESS;
