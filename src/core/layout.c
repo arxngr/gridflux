@@ -210,24 +210,30 @@ gf_rect_is_valid (const gf_rect_t *r)
 void
 gf_rect_apply_padding (gf_rect_t *r, uint32_t padding)
 {
-    if (!gf_rect_is_valid (r))
+    if (!gf_rect_is_valid (r) || padding == 0)
         return;
 
-    r->x += padding;
-    r->y += padding;
-    r->width = (r->width > padding * 2) ? r->width - padding * 2 : r->width;
-    r->height = (r->height > padding * 2) ? r->height - padding * 2 : r->height;
+    /* Cap padding so it never consumes more than half the dimension */
+    uint32_t pad_x = (padding * 2 < (uint32_t)r->width) ? padding : r->width / 4;
+    uint32_t pad_y = (padding * 2 < (uint32_t)r->height) ? padding : r->height / 4;
+
+    r->x += pad_x;
+    r->y += pad_y;
+    r->width = (r->width > pad_x * 2) ? r->width - pad_x * 2 : 1;
+    r->height = (r->height > pad_y * 2) ? r->height - pad_y * 2 : 1;
 }
 
 void
 gf_rect_ensure_minimum_size (gf_rect_t *r, uint32_t min_size)
 {
-    if (!r)
+    if (!r || min_size == 0)
         return;
 
-    if (r->width < min_size)
+    /* Only enforce min_size if there is enough room; otherwise fit-to-cell.
+       This prevents windows being pushed off-screen on tiny displays. */
+    if (r->width < min_size && r->width > 0)
         r->width = min_size;
-    if (r->height < min_size)
+    if (r->height < min_size && r->height > 0)
         r->height = min_size;
 }
 

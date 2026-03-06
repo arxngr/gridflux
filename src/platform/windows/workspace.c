@@ -1,7 +1,6 @@
 #include "../../utils/logger.h"
 #include "internal.h"
 
-
 uint32_t
 gf_workspace_get_count (gf_display_t display)
 {
@@ -17,19 +16,23 @@ gf_screen_get_bounds (gf_display_t display, gf_rect_t *bounds)
     if (!bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
-    int x = GetSystemMetrics (SM_XVIRTUALSCREEN);
-    int y = GetSystemMetrics (SM_YVIRTUALSCREEN);
-    int width = GetSystemMetrics (SM_CXVIRTUALSCREEN);
-    int height = GetSystemMetrics (SM_CYVIRTUALSCREEN);
+    /* Use the system work area — Win32 already excludes the taskbar,
+       auto-hide bars, and accounts for DPI scaling. */
+    RECT wa;
+    if (SystemParametersInfo (SPI_GETWORKAREA, 0, &wa, 0))
+    {
+        bounds->x = wa.left;
+        bounds->y = wa.top;
+        bounds->width = (gf_dimension_t)(wa.right - wa.left);
+        bounds->height = (gf_dimension_t)(wa.bottom - wa.top);
+        return GF_SUCCESS;
+    }
 
-    int panel_left, panel_right, panel_top, panel_bottom;
-    _get_taskbar_dimensions (&panel_left, &panel_right, &panel_top, &panel_bottom);
-
-    bounds->x = x + panel_left;
-    bounds->y = y + panel_top;
-    bounds->width = (gf_dimension_t)(width - panel_left - panel_right);
-    bounds->height = (gf_dimension_t)(height - panel_top - panel_bottom);
-
+    /* Last-resort fallback: raw virtual screen with no taskbar compensation */
+    bounds->x = GetSystemMetrics (SM_XVIRTUALSCREEN);
+    bounds->y = GetSystemMetrics (SM_YVIRTUALSCREEN);
+    bounds->width = (gf_dimension_t)GetSystemMetrics (SM_CXVIRTUALSCREEN);
+    bounds->height = (gf_dimension_t)GetSystemMetrics (SM_CYVIRTUALSCREEN);
     return GF_SUCCESS;
 }
 
