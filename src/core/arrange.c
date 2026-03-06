@@ -15,7 +15,7 @@
 
 gf_err_t
 gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows, uint32_t window_count,
-                        gf_rect_t **out_geometries)
+                        gf_monitor_id_t mon_id, gf_rect_t **out_geometries)
 {
     if (!m || !windows || !out_geometries || window_count == 0)
         return GF_ERROR_INVALID_PARAMETER;
@@ -25,7 +25,6 @@ gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows, uint32_t window_coun
 
     /* Get bounds: prefer per-monitor if available, fallback to virtual screen */
     gf_rect_t workspace_bounds;
-    gf_monitor_id_t mon_id = (window_count > 0) ? windows[0].monitor_id : 0;
 
     if (platform->screen_get_bounds_for_monitor)
     {
@@ -155,8 +154,10 @@ gf_wm_layout_apply (gf_wm_t *m)
 
             if (mon_win_count > 0)
             {
+                GF_LOG_DEBUG ("Layout applying for monitor %u with %u windows", mon->id,
+                              mon_win_count);
                 gf_rect_t *new_geometries = NULL;
-                if (gf_wm_calculate_layout (m, mon_windows, mon_win_count,
+                if (gf_wm_calculate_layout (m, mon_windows, mon_win_count, mon->id,
                                             &new_geometries)
                     == GF_SUCCESS)
                 {

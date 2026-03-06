@@ -279,9 +279,16 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
                                         : false);
     bool is_max_state = existing ? existing->is_maximized : false;
 
+    gf_monitor_id_t mon_id = 0;
+    if (existing)
+        mon_id = existing->monitor_id;
+    else if (platform->monitor_from_window)
+        mon_id = platform->monitor_from_window (platform, window);
+
     gf_win_info_t info = {
         .id = window,
         .workspace_id = workspace_id,
+        .monitor_id = mon_id,
         .geometry = geom,
         .is_minimized = is_min_state,
         .is_maximized = is_max_state,

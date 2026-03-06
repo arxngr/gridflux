@@ -69,6 +69,12 @@ gf_platform_create (void)
     platform->screen_get_bounds = gf_screen_get_bounds;
     platform->workspace_get_count = gf_workspace_get_count;
 
+    // --- Monitor Management ---
+    platform->monitor_get_count = gf_monitor_get_count;
+    platform->monitor_enumerate = gf_monitor_enumerate;
+    platform->monitor_from_window = gf_monitor_from_window;
+    platform->screen_get_bounds_for_monitor = gf_screen_get_bounds_for_monitor;
+
     // --- Border Management ---
     platform->border_add = gf_border_add;
     platform->border_cleanup = gf_border_cleanup;
@@ -78,7 +84,6 @@ gf_platform_create (void)
     // --- Dock Management ---
     platform->dock_hide = gf_dock_hide;
     platform->dock_restore = gf_dock_restore;
-
 
     // --- Keymap Support ---
     platform->keymap_init = gf_keymap_init;

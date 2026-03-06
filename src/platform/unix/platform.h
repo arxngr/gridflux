@@ -4,6 +4,7 @@
 #include "../platform.h"
 #include "atoms.h"
 #include <X11/Xlib.h>
+#include <X11/extensions/Xinerama.h>
 #include <stdbool.h>
 
 // Border structure
@@ -19,6 +20,9 @@ typedef struct
 
     gf_border_t **borders;
     int border_count;
+
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    uint32_t enumerated_monitor_count;
 
     // Dock auto-hide state
     Window saved_dock_windows[GF_MAX_DOCK_WINDOWS];
@@ -62,6 +66,13 @@ gf_err_t gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds);
 gf_err_t gf_window_set_geometry (gf_display_t display, gf_handle_t window,
                                  const gf_rect_t *geometry, gf_geom_flags_t flags,
                                  gf_config_t *cfg);
+
+uint32_t gf_monitor_get_count (gf_platform_t *platform);
+gf_err_t gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors,
+                               uint32_t *count);
+gf_monitor_id_t gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window);
+gf_err_t gf_screen_get_bounds_for_monitor (gf_display_t display,
+                                           gf_monitor_id_t monitor_id, gf_rect_t *bounds);
 
 gf_err_t gf_platform_get_frame_extents (Display *dpy, Window win, int *left, int *right,
                                         int *top, int *bottom, bool *is_csd);
