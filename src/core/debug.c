@@ -83,7 +83,7 @@ gf_wm_debug_stats (const gf_wm_t *m)
         }
         else
         {
-            // Workspace does not exist yet
+            /*  Workspace does not exist yet */
             available = is_locked ? 0 : max_windows;
         }
 

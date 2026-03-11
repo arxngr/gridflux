@@ -48,4 +48,4 @@ typedef struct
 } gf_refresh_task_t;
 #endif
 
-#endif // GF_APP_STATE_H
+#endif /*  GF_APP_STATE_H */

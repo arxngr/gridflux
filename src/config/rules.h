@@ -14,13 +14,13 @@ typedef struct
     gf_ws_id_t workspace_id;
 } gf_window_rule_t;
 
-// Forward declaration
+/*  Forward declaration */
 struct gf_config;
 
-// --- Rule CRUD ---
+/*  --- Rule CRUD --- */
 gf_err_t gf_rules_add (struct gf_config *cfg, const char *wm_class, gf_ws_id_t ws_id);
 gf_err_t gf_rules_remove (struct gf_config *cfg, const char *wm_class);
 const gf_window_rule_t *gf_rules_find (const struct gf_config *cfg, const char *wm_class);
 uint32_t gf_rules_count (const struct gf_config *cfg);
 
-#endif // GF_CONFIG_RULES_H
+#endif /*  GF_CONFIG_RULES_H */

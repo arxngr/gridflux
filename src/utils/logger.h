@@ -11,4 +11,4 @@ void gf_log (gf_log_level_t level, const char *format, ...);
 #define GF_LOG_INFO(...) gf_log (GF_LOG_INFO, __VA_ARGS__)
 #define GF_LOG_DEBUG(...) gf_log (GF_LOG_DEBUG, __VA_ARGS__)
 
-#endif // GF_CORE_LOGGER_H
+#endif /*  GF_CORE_LOGGER_H */

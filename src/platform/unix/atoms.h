@@ -4,7 +4,7 @@
 #include "../../core/types.h"
 #include <X11/Xlib.h>
 
-// Platform atoms
+/*  Platform atoms */
 typedef struct
 {
     Atom net_active_window;
@@ -53,9 +53,9 @@ typedef struct
     Atom net_wm_window_opacity;
 } gf_platform_atoms_t;
 
-// Atoms management
+/*  Atoms management */
 gf_err_t gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms);
 gf_platform_atoms_t *gf_platform_atoms_get_global (void);
 
-#endif // __linux__
-#endif // GF_PLATFORM_LINUX_ATOMS_H
+#endif /*  __linux__ */
+#endif /*  GF_PLATFORM_LINUX_ATOMS_H */

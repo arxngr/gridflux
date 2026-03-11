@@ -25,14 +25,14 @@ unix_get_app_icon (gf_gui_platform_t *platform, const char *wm_class)
     (void)platform;
     GtkIconTheme *theme = gtk_icon_theme_get_for_display (gdk_display_get_default ());
 
-    // Try the wm_class name directly (lowercased)
+    /*  Try the wm_class name directly (lowercased) */
     char lower[128];
     size_t i;
     for (i = 0; wm_class[i] && i < sizeof (lower) - 1; i++)
         lower[i] = g_ascii_tolower (wm_class[i]);
     lower[i] = '\0';
 
-    // Try several icon name variations
+    /*  Try several icon name variations */
     const char *tries[] = { lower, wm_class, "application-x-executable", NULL };
 
     for (int t = 0; tries[t]; t++)
@@ -46,7 +46,7 @@ unix_get_app_icon (gf_gui_platform_t *platform, const char *wm_class)
         }
     }
 
-    // Fallback
+    /*  Fallback */
     GtkIconPaintable *fallback = gtk_icon_theme_lookup_icon (
         theme, "application-x-executable", NULL, 24, 1, GTK_TEXT_DIR_NONE, 0);
     return fallback ? GDK_PAINTABLE (fallback) : NULL;

@@ -24,16 +24,16 @@ gf_platform_create (void)
     memset (platform, 0, sizeof (gf_platform_t));
     memset (data, 0, sizeof (gf_windows_platform_data_t));
 
-    // --- Lifecycle & Core ---
+    /*  --- Lifecycle & Core --- */
     platform->init = gf_platform_init;
     platform->cleanup = gf_platform_cleanup;
 
-    // --- Window Enumeration & Info ---
+    /*  --- Window Enumeration & Info --- */
     platform->window_enumerate = gf_platform_get_windows;
     platform->window_get_focused = gf_window_get_focused;
     platform->window_get_class = gf_window_get_class;
 
-    // --- Window Geometry & State ---
+    /*  --- Window Geometry & State --- */
     platform->window_get_geometry = gf_window_get_geometry;
     platform->window_is_excluded = gf_window_is_excluded;
     platform->window_is_fullscreen = gf_window_is_fullscreen;
@@ -45,21 +45,27 @@ gf_platform_create (void)
     platform->window_set_geometry = gf_window_set_geometry;
     platform->window_unminimize = gf_window_unminimize;
 
-    // --- Workspace & Screen ---
+    /*  --- Workspace & Screen --- */
     platform->screen_get_bounds = gf_screen_get_bounds;
     platform->workspace_get_count = gf_workspace_get_count;
 
-    // --- Border Management ---
+    /*  --- Border Management --- */
     platform->border_add = gf_border_add;
     platform->border_cleanup = gf_border_cleanup;
     platform->border_remove = gf_border_remove;
     platform->border_update = gf_border_update;
 
-    // --- Dock Management ---
+    /*  --- Dock Management --- */
     platform->dock_hide = gf_dock_hide;
     platform->dock_restore = gf_dock_restore;
 
-    // --- Keymap Support ---
+    /*  --- Monitor Management --- */
+    platform->monitor_get_count = gf_monitor_get_count;
+    platform->monitor_enumerate = gf_monitor_enumerate;
+    platform->monitor_from_window = gf_monitor_from_window;
+    platform->screen_get_bounds_for_monitor = gf_screen_get_bounds_for_monitor;
+
+    /*  --- Keymap Support --- */
     platform->keymap_init = gf_keymap_init;
     platform->keymap_cleanup = gf_keymap_cleanup;
     platform->keymap_poll = gf_keymap_poll;
@@ -82,6 +88,10 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
     data->monitor_count = GetSystemMetrics (SM_CMONITORS);
+
+    /* Enumerate monitors and cache their bounds */
+    uint32_t mon_count = GF_MAX_MONITORS;
+    gf_monitor_enumerate (platform, data->monitors, &mon_count);
 
     GF_LOG_INFO ("Platform initialized successfully (monitors: %d)", data->monitor_count);
     return GF_SUCCESS;

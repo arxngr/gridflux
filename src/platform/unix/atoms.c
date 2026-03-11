@@ -30,35 +30,35 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
     atoms->net_wm_state_fullscreen
         = XInternAtom (display, "_NET_WM_STATE_FULLSCREEN", False);
 
-    atoms->net_wm_desktop = XInternAtom (display, "_NET_WM_DESKTOP", True);
-    atoms->net_current_desktop = XInternAtom (display, "_NET_CURRENT_DESKTOP", True);
+    atoms->net_wm_desktop = XInternAtom (display, "_NET_WM_DESKTOP", False);
+    atoms->net_current_desktop = XInternAtom (display, "_NET_CURRENT_DESKTOP", False);
     atoms->net_number_of_desktops
-        = XInternAtom (display, "_NET_NUMBER_OF_DESKTOPS", True);
-    atoms->net_client_list = XInternAtom (display, "_NET_CLIENT_LIST", True);
+        = XInternAtom (display, "_NET_NUMBER_OF_DESKTOPS", False);
+    atoms->net_client_list = XInternAtom (display, "_NET_CLIENT_LIST", False);
     atoms->net_client_list_stacking
-        = XInternAtom (display, "_NET_CLIENT_LIST_STACKING", True);
+        = XInternAtom (display, "_NET_CLIENT_LIST_STACKING", False);
 
     atoms->net_wm_window_type = XInternAtom (display, "_NET_WM_WINDOW_TYPE", False);
     atoms->net_wm_window_type_normal
-        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_NORMAL", True);
+        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_NORMAL", False);
     atoms->net_wm_window_type_dialog
-        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_DIALOG", True);
+        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_DIALOG", False);
     atoms->net_wm_window_type_utility
         = XInternAtom (display, "_NET_WM_WINDOW_TYPE_UTILITY", False);
     atoms->net_wm_window_type_toolbar
-        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_TOOLBAR", True);
+        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_TOOLBAR", False);
     atoms->net_wm_window_type_menu
-        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_MENU", True);
+        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_MENU", False);
     atoms->net_wm_window_type_splash
-        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_SPLASH", True);
+        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_SPLASH", False);
     atoms->net_wm_window_type_dropdown_menu
-        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU", True);
+        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU", False);
     atoms->net_wm_window_type_popup_menu
         = XInternAtom (display, "_NET_WM_WINDOW_TYPE_POPUP_MENU", False);
     atoms->net_wm_window_type_tooltip
-        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_TOOLTIP", True);
+        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_TOOLTIP", False);
     atoms->net_wm_window_type_notification
-        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_NOTIFICATION", True);
+        = XInternAtom (display, "_NET_WM_WINDOW_TYPE_NOTIFICATION", False);
     atoms->net_wm_window_type_dock
         = XInternAtom (display, "_NET_WM_WINDOW_TYPE_DOCK", False);
     atoms->net_wm_window_type_combo
@@ -91,4 +91,4 @@ gf_platform_atoms_get_global (void)
 {
     return &g_atoms;
 }
-#endif // __linux__
+#endif /*  __linux__ */

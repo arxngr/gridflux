@@ -34,12 +34,16 @@ on_config_save_clicked (GtkButton *btn, gpointer data)
 
     config.enable_borders = gtk_switch_get_active (GTK_SWITCH (enable_borders_switch));
 
-    GdkRGBA color;
-    gtk_color_chooser_get_rgba (GTK_COLOR_CHOOSER (border_color_btn), &color);
-    uint32_t r = (uint32_t)(color.red * 255.0) & 0xFF;
-    uint32_t g = (uint32_t)(color.green * 255.0) & 0xFF;
-    uint32_t b = (uint32_t)(color.blue * 255.0) & 0xFF;
-    config.border_color = (r << 16) | (g << 8) | b;
+    /* GtkColorDialogButton stores the chosen colour as a GdkRGBA */
+    const GdkRGBA *color
+        = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (border_color_btn));
+    if (color)
+    {
+        uint32_t r = (uint32_t)(color->red * 255.0) & 0xFF;
+        uint32_t g = (uint32_t)(color->green * 255.0) & 0xFF;
+        uint32_t b = (uint32_t)(color->blue * 255.0) & 0xFF;
+        config.border_color = (r << 16) | (g << 8) | b;
+    }
 
     gf_config_save (config_path, &config);
 
@@ -95,12 +99,18 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     gtk_widget_set_halign (color_label, GTK_ALIGN_START);
     gtk_box_append (GTK_BOX (form), color_label);
 
+    /* GTK 4.10+ deprecated GtkColorButton. Use GtkColorDialog +
+       GtkColorDialogButton instead — they open the native async chooser. */
     GdkRGBA rgba;
     rgba.red = ((config.border_color >> 16) & 0xFF) / 255.0;
     rgba.green = ((config.border_color >> 8) & 0xFF) / 255.0;
     rgba.blue = (config.border_color & 0xFF) / 255.0;
     rgba.alpha = 1.0;
-    GtkWidget *color_btn = gtk_color_button_new_with_rgba (&rgba);
+
+    GtkColorDialog *color_dialog = gtk_color_dialog_new ();
+    gtk_color_dialog_set_with_alpha (color_dialog, FALSE);
+    GtkWidget *color_btn = gtk_color_dialog_button_new (color_dialog);
+    gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (color_btn), &rgba);
     gtk_widget_set_halign (color_btn, GTK_ALIGN_START);
     gtk_widget_set_sensitive (color_btn, config.enable_borders);
     g_object_set_data (G_OBJECT (config_window), "border_color_btn", color_btn);

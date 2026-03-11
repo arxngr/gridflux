@@ -5,13 +5,14 @@
 #include <stdint.h>
 #include <time.h>
 
-// Cross-platform types
+/*  Cross-platform types */
 typedef int32_t gf_ws_id_t;
 typedef int32_t gf_coordinate_t;
 typedef uint32_t gf_dimension_t;
 typedef uint32_t gf_color_t;
+typedef uint32_t gf_monitor_id_t;
 
-// Platform-specific defines with proper guards
+/*  Platform-specific defines with proper guards */
 #ifdef __linux__
 #include <X11/Xlib.h>
 typedef Window gf_handle_t;
@@ -40,17 +41,18 @@ typedef void *gf_display_t;
 #endif
 #endif
 
-// Callbacks
+/*  Callbacks */
 typedef void (*gf_window_destroy_callback_t) (gf_handle_t window, void *user_data);
 
-// Constants
+/*  Constants */
 #define GF_MAX_WINDOWS_PER_WORKSPACE 10
 #define GF_MAX_WORKSPACES 32
+#define GF_MAX_MONITORS 16
 #define GF_FIRST_WORKSPACE_ID 1
 #define GF_DEFAULT_PADDING 10
-#define GF_MIN_WINDOW_SIZE 10
+#define GF_MIN_WINDOW_SIZE 300
 
-// Error codes
+/*  Error codes */
 typedef enum
 {
     GF_SUCCESS = 0,
@@ -75,17 +77,27 @@ typedef enum
     GF_LOG_DEBUG = 3
 } gf_log_level_t;
 
-// Geometry structure
+/*  Geometry structure */
 typedef struct
 {
     gf_coordinate_t x, y;
     gf_dimension_t width, height;
 } gf_rect_t;
 
+/*  Monitor information */
+typedef struct
+{
+    gf_monitor_id_t id;
+    gf_rect_t bounds;      /*  Work area (excludes taskbar) */
+    gf_rect_t full_bounds; /*  Full monitor rect */
+    bool is_primary;
+} gf_monitor_t;
+
 typedef struct
 {
     gf_handle_t id;
     gf_ws_id_t workspace_id;
+    gf_monitor_id_t monitor_id;
     gf_rect_t geometry;
     bool is_maximized;
     bool is_minimized;
@@ -97,8 +109,8 @@ typedef struct
 
 typedef struct
 {
-    gf_handle_t target;  // The window we’re tracking
-    gf_handle_t overlay; // The overlay border window
+    gf_handle_t target;  /*  The window we’re tracking */
+    gf_handle_t overlay; /*  The overlay border window */
     gf_color_t color;
     int thickness;
 #if defined(_WIN32)
@@ -112,7 +124,7 @@ typedef struct
 #endif
 } gf_border_t;
 
-// Workspace information
+/*  Workspace information */
 typedef struct
 {
     gf_ws_id_t id;
@@ -123,7 +135,7 @@ typedef struct
     bool has_maximized_state;
 } gf_ws_info_t;
 
-// Geometry flags
+/*  Geometry flags */
 typedef enum
 {
     GF_GEOMETRY_CHANGE_X = (1 << 0),
@@ -135,4 +147,4 @@ typedef enum
                               | GF_GEOMETRY_CHANGE_WIDTH | GF_GEOMETRY_CHANGE_HEIGHT)
 } gf_geom_flags_t;
 
-#endif // GF_CORE_TYPES_H
+#endif /*  GF_CORE_TYPES_H */

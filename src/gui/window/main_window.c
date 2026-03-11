@@ -56,7 +56,7 @@ on_window_realize (GtkWidget *widget, gpointer user_data)
 void
 gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
 {
-    // CSS Provider
+    /*  CSS Provider */
     GtkCssProvider *provider = gtk_css_provider_new ();
     gtk_css_provider_load_from_string (
         provider,

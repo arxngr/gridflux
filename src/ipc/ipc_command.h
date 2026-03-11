@@ -7,7 +7,7 @@
 
 typedef struct
 {
-    int type; // 0 = success, 1 = error
+    int type; /*  0 = success, 1 = error */
     char message[256];
 } gf_command_response_t;
 

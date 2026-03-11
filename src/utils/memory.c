@@ -44,7 +44,7 @@ gf_realloc (void *ptr, size_t size)
     if (!new_ptr)
     {
         GF_LOG_ERROR ("Memory reallocation failed for size %zu", size);
-        return ptr; // Return original pointer on failure
+        return ptr; /*  Return original pointer on failure */
     }
     return new_ptr;
 }

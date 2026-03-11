@@ -5,22 +5,24 @@
 #include <stdbool.h>
 #include <windows.h>
 
-// Windows platform data
+/*  Windows platform data */
 typedef struct
 {
     HANDLE event_hook;
     HANDLE shell_hook;
     HMONITOR monitor;
     int monitor_count;
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    uint32_t enumerated_monitor_count;
     gf_border_t *borders[GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES];
     int border_count;
 } gf_windows_platform_data_t;
 
-// Platform interface (Windows implementation)
+/*  Platform interface (Windows implementation) */
 gf_platform_t *gf_platform_create (void);
 void gf_platform_destroy (gf_platform_t *platform);
 
-// Internal platform functions
+/*  Internal platform functions */
 gf_err_t gf_platform_init (gf_platform_t *platform, gf_display_t *display);
 void gf_platform_cleanup (gf_display_t display, gf_platform_t *platform);
 gf_err_t gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
@@ -53,4 +55,15 @@ bool gf_window_is_maximized (gf_display_t display, gf_handle_t window);
 bool gf_window_is_fullscreen (gf_display_t display, gf_handle_t window);
 void gf_dock_hide (gf_platform_t *platform);
 void gf_dock_restore (gf_platform_t *platform);
-#endif // GF_PLATFORM_WINDOWS_H
+
+/*  Monitor management */
+uint32_t gf_monitor_get_count (gf_platform_t *platform);
+gf_err_t gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors,
+                               uint32_t *count);
+gf_monitor_id_t gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window);
+gf_err_t gf_screen_get_bounds_for_monitor (gf_display_t display,
+                                           gf_monitor_id_t monitor_id, gf_rect_t *bounds);
+
+void gf_window_get_class (gf_display_t display, gf_handle_t win, char *buffer,
+                          size_t bufsize);
+#endif /*  GF_PLATFORM_WINDOWS_H */

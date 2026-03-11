@@ -66,6 +66,11 @@
         <Directory Id="INSTALLDIR" Name="GridFlux">
           <Directory Id="IconsDir" Name="icons" />
           <Directory Id="BinDir" Name="bin" />
+          <Directory Id="ShareDir" Name="share">
+            <Directory Id="GlibDir" Name="glib-2.0">
+              <Directory Id="SchemasDir" Name="schemas" />
+            </Directory>
+          </Directory>
         </Directory>
       </Directory>
 
@@ -121,6 +126,12 @@
       </Component>
     </DirectoryRef>
 
+    <DirectoryRef Id="SchemasDir">
+      <Component Id="GSchemaCompiled" Guid="{99999999-9999-9999-9999-999999999999}" Win64="yes">
+        <File Source="build\share\glib-2.0\schemas\gschemas.compiled" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
     <ComponentGroup Id="GridFluxCore">
       <ComponentRef Id="GridFluxExe"/>
       <ComponentRef Id="GridFluxGui"/>
@@ -129,6 +140,7 @@
       <ComponentRef Id="Icons"/>
       <ComponentRef Id="DefaultConfig"/>
       <ComponentRef Id="Registry"/>
+      <ComponentRef Id="GSchemaCompiled"/>
     </ComponentGroup>
   </Fragment>
 

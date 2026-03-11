@@ -25,12 +25,12 @@ LowLevelKeyboardProc (int nCode, WPARAM wParam, LPARAM lParam)
                 if (p->vkCode == VK_LEFT)
                 {
                     g_pending_action = GF_KEY_WORKSPACE_PREV;
-                    return 1; // Consume key to prevent Windows Virtual Desktop switch
+                    return 1; /*  Consume key to prevent Windows Virtual Desktop switch */
                 }
                 else if (p->vkCode == VK_RIGHT)
                 {
                     g_pending_action = GF_KEY_WORKSPACE_NEXT;
-                    return 1; // Consume key
+                    return 1; /*  Consume key */
                 }
             }
         }
@@ -46,8 +46,8 @@ gf_keymap_init (gf_platform_t *platform, gf_display_t display)
 
     g_pending_action = GF_KEY_NONE;
 
-    // Use a Low-Level Keyboard Hook instead of RegisterHotKey to bypass
-    // the native Windows 10/11 reserved Ctrl+Win+Left/Right behavior.
+    /*  Use a Low-Level Keyboard Hook instead of RegisterHotKey to bypass */
+    /*  the native Windows 10/11 reserved Ctrl+Win+Left/Right behavior. */
     g_keymap_hook = SetWindowsHookEx (WH_KEYBOARD_LL, LowLevelKeyboardProc,
                                       GetModuleHandle (NULL), 0);
 
@@ -85,8 +85,8 @@ gf_keymap_poll (gf_platform_t *platform, gf_display_t display)
     MSG msg;
     gf_key_action_t action = GF_KEY_NONE;
 
-    // Process all pending messages to ensure the hook thread doesn't freeze
-    // Limit to 10 messages per poll to avoid infinite spinning (fast event loop)
+    /*  Process all pending messages to ensure the hook thread doesn't freeze */
+    /*  Limit to 10 messages per poll to avoid infinite spinning (fast event loop) */
     int max_msgs = 10;
     while (max_msgs-- > 0 && PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
     {
@@ -94,7 +94,7 @@ gf_keymap_poll (gf_platform_t *platform, gf_display_t display)
         DispatchMessage (&msg);
     }
 
-    // Check if the keyboard hook intercepted a workspace switch command
+    /*  Check if the keyboard hook intercepted a workspace switch command */
     if (g_pending_action != GF_KEY_NONE)
     {
         action = g_pending_action;

@@ -1,4 +1,4 @@
-#include "../platform/platform_compat.h" // Centralized platform-specific includes
+#include "../platform/platform_compat.h" /*  Centralized platform-specific includes */
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>

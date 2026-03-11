@@ -38,9 +38,9 @@ int
 main ()
 {
 #ifdef _WIN32
-    // Use System DPI awareness as a baseline for consistent coordinate
-    // calculations across monitors. While not as advanced as Per-Monitor V2,
-    // it is highly compatible across different build environments.
+    /*  Use System DPI awareness as a baseline for consistent coordinate */
+    /*  calculations across monitors. While not as advanced as Per-Monitor V2, */
+    /*  it is highly compatible across different build environments. */
     SetProcessDPIAware ();
 #endif
 
@@ -54,7 +54,7 @@ main ()
 
     GF_LOG_INFO ("Starting GridFlux Window Manager v2.0");
 
-    // Load configuration first
+    /*  Load configuration first */
     config = gf_malloc (sizeof (gf_config_t));
     if (!config)
     {

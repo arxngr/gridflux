@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 bool
@@ -14,7 +15,7 @@ _window_name_matches (const char *name, const char *list[], size_t count)
 {
     for (size_t i = 0; i < count; i++)
     {
-        if (strcmp (name, list[i]) == 0)
+        if (strcasecmp (name, list[i]) == 0)
             return true;
     }
     return false;
@@ -133,8 +134,8 @@ _run_bg_command (const char *cmd, char *const argv[])
     pid_t pid = fork ();
     if (pid == 0)
     {
-        // Child process
-        // Redirect stdout/stderr to /dev/null to avoid cluttering logs
+        /*  Child process */
+        /*  Redirect stdout/stderr to /dev/null to avoid cluttering logs */
         int null_fd = open ("/dev/null", O_WRONLY);
         if (null_fd >= 0)
         {
@@ -144,7 +145,7 @@ _run_bg_command (const char *cmd, char *const argv[])
         }
 
         execvp (cmd, argv);
-        _exit (1); // Exit if exec fails
+        _exit (1); /*  Exit if exec fails */
     }
 }
 
