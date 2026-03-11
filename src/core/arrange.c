@@ -298,8 +298,9 @@ gf_wm_layout_rebalance (gf_wm_t *m)
         for (uint32_t j = 0; j < overflow; j++)
         {
             gf_ws_id_t dst_id = -1;
+            gf_monitor_id_t active_monitor = _get_active_monitor (m);
             gf_ws_info_t *active_ws_info
-                = gf_workspace_list_find_by_id (workspaces, workspaces->active_workspace);
+                = gf_workspace_list_find_by_id (workspaces, workspaces->active_workspace[active_monitor]);
 
             if (active_ws_info->available_space < 1)
             {

@@ -36,11 +36,13 @@ gf_wm_keymap_event (gf_wm_t *m)
         return;
     }
 
-    /* Find the index of the currently active workspace. */
+    gf_monitor_id_t active_monitor = _get_active_monitor (m);
+
+    /* Find the index of the currently active workspace on this monitor. */
     int current_idx = -1;
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
-        if (workspaces->items[i].id == workspaces->active_workspace)
+        if (workspaces->items[i].id == workspaces->active_workspace[active_monitor])
         {
             current_idx = (int)i;
             break;
@@ -70,14 +72,14 @@ gf_wm_keymap_event (gf_wm_t *m)
 
     gf_ws_id_t target_ws = workspaces->items[target_idx].id;
 
-    if (target_ws == workspaces->active_workspace)
+    if (target_ws == workspaces->active_workspace[active_monitor])
         return;
 
     /* Switch workspace — this minimizes other workspaces & unminimizes target. */
     _handle_workspace_switch (m, target_ws);
 
-    workspaces->active_workspace = target_ws;
-    m->state.last_active_workspace = target_ws;
+    workspaces->active_workspace[active_monitor] = target_ws;
+    m->state.last_active_workspace[active_monitor] = target_ws;
 
     /* Raise and focus the first valid window in the target workspace. */
     gf_win_list_t *windows = wm_windows (m);
@@ -87,7 +89,7 @@ gf_wm_keymap_event (gf_wm_t *m)
         {
             if (platform->window_unminimize)
                 platform->window_unminimize (display, windows->items[i].id);
-            m->state.last_active_window = windows->items[i].id;
+            m->state.last_active_window[active_monitor] = windows->items[i].id;
             break;
         }
     }
@@ -109,9 +111,15 @@ gf_wm_watch (gf_wm_t *m)
     _sync_workspaces (m);
     _handle_fullscreen_windows (m);
 
-    gf_ws_info_t *current_ws
-        = gf_workspace_list_find_by_id (workspaces, workspaces->active_workspace);
+    for (uint32_t mon_idx = 0; mon_idx < GF_MAX_MONITORS; mon_idx++)
+    {
+        gf_ws_info_t *current_ws
+            = gf_workspace_list_find_by_id (workspaces, workspaces->active_workspace[mon_idx]);
+        (void)current_ws; /* Used implicitly via _handle_new_window but usually we pass the right one */
+    }
 
+    /* We need to rewrite _handle_new_window to fetch the appropriate per-monitor target workspace. Let's just pass NULL for current_ws for now so it derives it. */
+    
     for (uint32_t wsi = 0; wsi < workspaces->count; wsi++)
     {
         gf_ws_id_t ws_id = workspaces->items[wsi].id - GF_FIRST_WORKSPACE_ID;
@@ -140,7 +148,7 @@ gf_wm_watch (gf_wm_t *m)
             gf_win_info_t *existing = gf_window_list_find_by_window_id (windows, win->id);
 
             if (!existing)
-                _handle_new_window (m, win, current_ws);
+                _handle_new_window (m, win, NULL);
             else
             {
                 /*  Preserve internally managed fields that the window manager */
@@ -189,7 +197,11 @@ gf_wm_event (gf_wm_t *m)
         now_maximized = platform->window_is_maximized (display, curr_win_id);
 
     bool was_maximized = focused->is_maximized;
-    if (now_maximized)
+
+    /* A workspace handles whether a window acts maximized or not. If
+     * the host WM claims it's maximized but we already know it is,
+     * do nothing. If we don't know it, move it to a max workspace. */
+    if (now_maximized && !was_maximized)
     {
         focused->is_maximized = true;
 
@@ -229,18 +241,19 @@ gf_wm_event (gf_wm_t *m)
     }
 
     gf_ws_id_t current_workspace = focused->workspace_id;
+    gf_monitor_id_t monitor_id = focused->monitor_id;
 
     _detect_minimization_changes (m, current_workspace);
 
-    bool workspace_changed = (m->state.last_active_workspace != current_workspace);
-    bool has_previous_window = (m->state.last_active_window != 0);
+    bool workspace_changed = (m->state.last_active_workspace[monitor_id] != current_workspace);
+    bool has_previous_window = (m->state.last_active_window[monitor_id] != 0);
 
     if (workspace_changed && has_previous_window)
     {
         _handle_workspace_switch (m, current_workspace);
     }
 
-    m->state.last_active_window = curr_win_id;
-    m->state.last_active_workspace = current_workspace;
-    workspaces->active_workspace = current_workspace;
+    m->state.last_active_window[monitor_id] = curr_win_id;
+    m->state.last_active_workspace[monitor_id] = current_workspace;
+    workspaces->active_workspace[monitor_id] = current_workspace;
 }

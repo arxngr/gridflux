@@ -336,8 +336,11 @@ _build_workspace_candidate (gf_wm_t *m)
     /*  Rebuild workspace stats */
     _rebuild_workspace_stats (m, workspaces, windows, max_per_ws);
 
-    if (workspaces->active_workspace >= workspaces->count)
-        workspaces->active_workspace = GF_FIRST_WORKSPACE_ID;
+    for (uint32_t mon_idx = 0; mon_idx < GF_MAX_MONITORS; mon_idx++)
+    {
+        if (workspaces->active_workspace[mon_idx] >= workspaces->count)
+            workspaces->active_workspace[mon_idx] = GF_FIRST_WORKSPACE_ID;
+    }
 
     _sync_workspaces (m);
 }
@@ -472,9 +475,9 @@ _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
 
     platform->window_unminimize (display, win->id);
 
-    m->state.last_active_window = win->id;
-    m->state.last_active_workspace = win->workspace_id;
-    workspaces->active_workspace = win->workspace_id;
+    m->state.last_active_window[win->monitor_id] = win->id;
+    m->state.last_active_workspace[win->monitor_id] = win->workspace_id;
+    workspaces->active_workspace[win->monitor_id] = win->workspace_id;
 
     if (m->config->enable_borders && platform->border_add)
         platform->border_add (platform, win->id, m->config->border_color, 3);

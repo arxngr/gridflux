@@ -15,7 +15,7 @@ typedef struct
     gf_ws_info_t *items;
     uint32_t count;
     uint32_t capacity;
-    uint32_t active_workspace;
+    uint32_t active_workspace[GF_MAX_MONITORS];
 } gf_ws_list_t;
 
 /*  --- Window List Operations --- */

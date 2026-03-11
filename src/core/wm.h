@@ -15,8 +15,8 @@ typedef struct
     time_t last_scan_time;
     time_t last_cleanup_time;
     uint32_t loop_counter;
-    gf_handle_t last_active_window;
-    gf_ws_id_t last_active_workspace;
+    gf_handle_t last_active_window[GF_MAX_MONITORS];
+    gf_ws_id_t last_active_workspace[GF_MAX_MONITORS];
     bool initialized;
     bool dock_hidden;
     bool keymap_initialized;

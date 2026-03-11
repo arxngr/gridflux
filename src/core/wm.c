@@ -112,11 +112,13 @@ gf_wm_cleanup (gf_wm_t *m)
     /*  Reset lists (items still allocated, will be freed in destroy) */
     windows->count = 0;
     workspaces->count = 0;
-    workspaces->active_workspace = 0;
-
     /*  Reset state */
-    m->state.last_active_window = 0;
-    m->state.last_active_workspace = 0;
+    for (int i = 0; i < GF_MAX_MONITORS; i++)
+    {
+        m->state.last_active_window[i] = 0;
+        m->state.last_active_workspace[i] = 0;
+        workspaces->active_workspace[i] = 0;
+    }
 
     /*  Cleanup keymap */
     if (m->state.keymap_initialized && platform->keymap_cleanup)

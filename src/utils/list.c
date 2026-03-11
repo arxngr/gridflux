@@ -320,7 +320,7 @@ gf_workspace_list_get_current (gf_ws_list_t *ws)
     if (!ws)
         return NULL;
 
-    return gf_workspace_list_find_by_id (ws, ws->active_workspace);
+    return gf_workspace_list_find_by_id (ws, ws->active_workspace[0]);
 }
 
 uint32_t
