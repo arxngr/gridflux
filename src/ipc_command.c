@@ -36,7 +36,7 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
     gf_platform_interface_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    // Ensure names are populated
+    /*  Ensure names are populated */
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_window_info_t *w = &windows->items[i];
@@ -127,7 +127,7 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
         return;
     }
 
-    // Just call the window manager API
+    /*  Just call the window manager API */
     gf_error_code_t result
         = gf_window_manager_move_window (m, window_id, target_workspace);
 
@@ -175,7 +175,7 @@ gf_cmd_lock_workspace (const char *args, gf_ipc_response_t *response, void *user
         return;
     }
 
-    // Just call the window manager API
+    /*  Just call the window manager API */
     gf_error_code_t result = gf_window_manager_lock_workspace (m, workspace_id);
 
     resp.type = (result == GF_SUCCESS) ? 0 : 1;
@@ -224,7 +224,7 @@ gf_cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *us
         return;
     }
 
-    // Just call the window manager API
+    /*  Just call the window manager API */
     gf_error_code_t result = gf_window_manager_unlock_workspace (m, workspace_id);
 
     resp.type = (result == GF_SUCCESS) ? 0 : 1;

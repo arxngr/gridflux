@@ -18,7 +18,7 @@ typedef struct
     uint32_t active_workspace;
 } gf_ws_list_t;
 
-// --- Window List Operations ---
+/*  --- Window List Operations --- */
 gf_err_t gf_window_list_add (gf_win_list_t *list, const gf_win_info_t *window);
 void gf_window_list_cleanup (gf_win_list_t *list);
 void gf_window_list_clear_update_flags (gf_win_list_t *list, gf_ws_id_t workspace_id);
@@ -35,7 +35,7 @@ void gf_window_list_mark_all_needs_update (gf_win_list_t *list,
 gf_err_t gf_window_list_remove (gf_win_list_t *list, gf_handle_t window_id);
 gf_err_t gf_window_list_update (gf_win_list_t *list, const gf_win_info_t *window);
 
-// --- Workspace List Operations ---
+/*  --- Workspace List Operations --- */
 gf_ws_id_t gf_workspace_create (gf_ws_list_t *ws, uint32_t max_win_per_ws,
                                 bool maximized_state, bool is_locked);
 bool gf_workspace_list_add_window (gf_ws_info_t *ws, gf_win_list_t *windows,

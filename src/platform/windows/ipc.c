@@ -41,7 +41,7 @@ gf_pipe_security_attributes (void)
 
     InitializeSecurityDescriptor (sd, SECURITY_DESCRIPTOR_REVISION);
 
-    // NULL DACL = allow same-user access (Unix chmod 0600 equivalent)
+    /*  NULL DACL = allow same-user access (Unix chmod 0600 equivalent) */
     SetSecurityDescriptorDacl (sd, TRUE, NULL, FALSE);
 
     sa->nLength = sizeof (*sa);
@@ -91,7 +91,7 @@ connect_to_client (gf_pipe_t *instance)
 
     if (connected)
     {
-        // Should never happen with async pipes
+        /*  Should never happen with async pipes */
         return FALSE;
     }
 
@@ -103,7 +103,7 @@ connect_to_client (gf_pipe_t *instance)
         return TRUE;
 
     case ERROR_PIPE_CONNECTED:
-        // Client connected before we called ConnectNamedPipe
+        /*  Client connected before we called ConnectNamedPipe */
         if (SetEvent (instance->overlapped.hEvent))
         {
             instance->pending_io = FALSE;
@@ -121,7 +121,7 @@ gf_ipc_server_create (void)
 {
     const char *pipe_path = gf_ipc_get_socket_path ();
 
-    // Allocate pipe instances array
+    /*  Allocate pipe instances array */
     pipe_instances = calloc (MAX_PIPE_INSTANCES, sizeof (gf_pipe_t));
     if (!pipe_instances)
     {
@@ -129,7 +129,7 @@ gf_ipc_server_create (void)
         return -1;
     }
 
-    // Create multiple pipe instances for concurrent connections
+    /*  Create multiple pipe instances for concurrent connections */
     for (int i = 0; i < MAX_PIPE_INSTANCES; i++)
     {
         pipe_instances[i].pipe = create_pipe_instance ();
@@ -137,7 +137,7 @@ gf_ipc_server_create (void)
         if (pipe_instances[i].pipe == INVALID_HANDLE_VALUE)
         {
             fprintf (stderr, "CreateNamedPipe failed: %lu\n", GetLastError ());
-            // Clean up previous instances
+            /*  Clean up previous instances */
             for (int j = 0; j < i; j++)
             {
                 CloseHandle (pipe_instances[j].pipe);
@@ -160,14 +160,14 @@ gf_ipc_server_create (void)
             return -1;
         }
 
-        // Start listening for connections
+        /*  Start listening for connections */
         connect_to_client (&pipe_instances[i]);
         num_instances++;
     }
 
     printf ("IPC server listening on: %s (with %d instances)\n", pipe_path,
             num_instances);
-    return 0; // Return success, actual handles are in pipe_instances
+    return 0; /*  Return success, actual handles are in pipe_instances */
 }
 
 void
@@ -207,7 +207,7 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
         DWORD bytes_transferred;
         BOOL success;
 
-        // Check if there's a pending connection
+        /*  Check if there's a pending connection */
         if (inst->pending_io)
         {
             success = GetOverlappedResult (inst->pipe, &inst->overlapped,
@@ -218,10 +218,10 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
                 DWORD err = GetLastError ();
                 if (err == ERROR_IO_INCOMPLETE)
                 {
-                    // Still waiting for client
+                    /*  Still waiting for client */
                     continue;
                 }
-                // Error occurred, reset this instance
+                /*  Error occurred, reset this instance */
                 DisconnectNamedPipe (inst->pipe);
                 connect_to_client (inst);
                 continue;
@@ -231,7 +231,7 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
             inst->connected = TRUE;
         }
 
-        // If connected, try to read data
+        /*  If connected, try to read data */
         if (inst->connected)
         {
             success = ReadFile (inst->pipe, inst->buffer, sizeof (inst->buffer) - 1,
@@ -239,7 +239,7 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
 
             if (success)
             {
-                // Read completed immediately
+                /*  Read completed immediately */
                 inst->buffer[bytes_transferred] = '\0';
 
                 gf_ipc_response_t response = { 0 };
@@ -263,11 +263,11 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
                 DWORD err = GetLastError ();
                 if (err == ERROR_IO_PENDING)
                 {
-                    // Wait a bit for the read to complete
+                    /*  Wait a bit for the read to complete */
                     DWORD wait = WaitForSingleObject (inst->overlapped.hEvent, 0);
                     if (wait == WAIT_OBJECT_0)
                     {
-                        // Read completed
+                        /*  Read completed */
                         GetOverlappedResult (inst->pipe, &inst->overlapped,
                                              &bytes_transferred, FALSE);
                         inst->buffer[bytes_transferred] = '\0';
@@ -291,7 +291,7 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
                 }
                 else
                 {
-                    // Error occurred
+                    /*  Error occurred */
                     DisconnectNamedPipe (inst->pipe);
                     inst->connected = FALSE;
                     connect_to_client (inst);
@@ -308,7 +308,7 @@ gf_ipc_client_connect (void)
 {
     const char *pipe_path = gf_ipc_get_socket_path ();
 
-    // Try multiple times with short waits
+    /*  Try multiple times with short waits */
     for (int retry = 0; retry < 10; retry++)
     {
         HANDLE pipe = CreateFileA (pipe_path, GENERIC_READ | GENERIC_WRITE, 0, NULL,
@@ -331,10 +331,10 @@ gf_ipc_client_connect (void)
 
         if (error == ERROR_PIPE_BUSY)
         {
-            // Wait briefly for a pipe instance to become available
+            /*  Wait briefly for a pipe instance to become available */
             if (!WaitNamedPipeA (pipe_path, 50))
             {
-                Sleep (10); // Brief sleep before retry
+                Sleep (10); /*  Brief sleep before retry */
                 continue;
             }
         }

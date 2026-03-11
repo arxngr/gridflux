@@ -276,11 +276,11 @@ gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
     if (!_validate_window (window))
         return;
 
-    // Use GetClassNameA to get the window class
+    /*  Use GetClassNameA to get the window class */
     char class_name[128] = { 0 };
     if (GetClassNameA ((HWND)window, class_name, sizeof (class_name)))
     {
-        // Get the executable name so rules can match against the .exe
+        /*  Get the executable name so rules can match against the .exe */
         char exe_name[MAX_PATH] = { 0 };
         DWORD pid = 0;
         GetWindowThreadProcessId ((HWND)window, &pid);
@@ -336,8 +336,8 @@ gf_platform_window_hidden (gf_display_t display, gf_handle_t window)
     if (!_validate_window (window))
         return false;
 
-    // Window is hidden if it's not visible AND not minimized to taskbar
-    // This catches windows that are closed to system tray
+    /*  Window is hidden if it's not visible AND not minimized to taskbar */
+    /*  This catches windows that are closed to system tray */
     return !IsWindowVisible ((HWND)window) && !IsIconic ((HWND)window);
 }
 

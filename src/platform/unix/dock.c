@@ -15,17 +15,17 @@ gf_dock_hide (gf_platform_t *platform)
     if (data->dock_hidden)
         return;
 
-    // Check for GNOME session first
+    /*  Check for GNOME session first */
     const char *desktop = getenv ("XDG_CURRENT_DESKTOP");
     if (desktop && strstr (desktop, "GNOME"))
     {
-        // Try Ubuntu Dock first (most likely on Ubuntu)
+        /*  Try Ubuntu Dock first (most likely on Ubuntu) */
         char *args_ubuntu[]
             = { "gsettings",  "set",   "org.gnome.shell.extensions.ubuntu-dock",
                 "dock-fixed", "false", NULL };
         _run_bg_command ("gsettings", args_ubuntu);
 
-        // Also try standard Dash to Dock (fire both, one will fail silently)
+        /*  Also try standard Dash to Dock (fire both, one will fail silently) */
         char *args_dash[]
             = { "gsettings",  "set",   "org.gnome.shell.extensions.dash-to-dock",
                 "dock-fixed", "false", NULL };
@@ -40,7 +40,7 @@ gf_dock_hide (gf_platform_t *platform)
     if (!atoms)
         return;
 
-    // Find all dock-type windows by scanning the client list
+    /*  Find all dock-type windows by scanning the client list */
     unsigned char *clients_data = NULL;
     unsigned long clients_count = 0;
     Atom actual_type;
@@ -74,7 +74,7 @@ gf_dock_hide (gf_platform_t *platform)
 
     XFree (clients_data);
 
-    // Also check root window children for override-redirect docks not in client list
+    /*  Also check root window children for override-redirect docks not in client list */
     Window root_ret, parent_ret;
     Window *children = NULL;
     unsigned int nchildren = 0;
@@ -84,7 +84,7 @@ gf_dock_hide (gf_platform_t *platform)
         for (unsigned int i = 0;
              i < nchildren && data->saved_dock_count < GF_MAX_DOCK_WINDOWS; i++)
         {
-            // Skip if already saved
+            /*  Skip if already saved */
             bool already_saved = false;
             for (int j = 0; j < data->saved_dock_count; j++)
             {
@@ -123,17 +123,17 @@ gf_dock_restore (gf_platform_t *platform)
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
     Display *dpy = data->display;
 
-    // Check for GNOME session
+    /*  Check for GNOME session */
     const char *desktop = getenv ("XDG_CURRENT_DESKTOP");
     if (desktop && strstr (desktop, "GNOME"))
     {
-        // Try Ubuntu Dock
+        /*  Try Ubuntu Dock */
         char *args_ubuntu[]
             = { "gsettings",  "set",  "org.gnome.shell.extensions.ubuntu-dock",
                 "dock-fixed", "true", NULL };
         _run_bg_command ("gsettings", args_ubuntu);
 
-        // Try standard Dash to Dock
+        /*  Try standard Dash to Dock */
         char *args_dash[]
             = { "gsettings",  "set",  "org.gnome.shell.extensions.dash-to-dock",
                 "dock-fixed", "true", NULL };
@@ -149,7 +149,7 @@ gf_dock_restore (gf_platform_t *platform)
 
     if (data->saved_dock_count == 0)
     {
-        // Still reset flag if we think it's hidden but have no windows saved
+        /*  Still reset flag if we think it's hidden but have no windows saved */
         data->dock_hidden = false;
         return;
     }

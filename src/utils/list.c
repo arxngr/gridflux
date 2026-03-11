@@ -63,7 +63,7 @@ gf_window_list_add (gf_win_list_t *list, const gf_win_info_t *window)
     if (!list || !window)
         return GF_ERROR_INVALID_PARAMETER;
 
-    // Check if window already exists
+    /*  Check if window already exists */
     if (gf_window_list_find_by_window_id (list, window->id))
     {
         return gf_window_list_update (list, window);
@@ -94,7 +94,7 @@ gf_window_list_remove (gf_win_list_t *list, gf_handle_t window_id)
         {
             gf_ws_id_t workspace_id = list->items[i].workspace_id;
 
-            // Move last item to this position
+            /*  Move last item to this position */
             if (i < list->count - 1)
             {
                 list->items[i] = list->items[list->count - 1];
@@ -259,7 +259,7 @@ gf_workspace_list_add (gf_ws_list_t *list, const gf_ws_info_t *workspace)
     if (!list || !workspace)
         return GF_ERROR_INVALID_PARAMETER;
 
-    // Check if workspace already exists
+    /*  Check if workspace already exists */
     if (gf_workspace_list_find_by_id (list, workspace->id))
         return GF_SUCCESS;
 

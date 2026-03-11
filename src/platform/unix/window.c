@@ -28,7 +28,7 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
     {
         *windows = NULL;
         *count = 0;
-        return GF_SUCCESS; // No windows is not an error
+        return GF_SUCCESS; /*  No windows is not an error */
     }
 
     Window *window_list = (Window *)data;
@@ -60,7 +60,7 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
     }
     else
     {
-        // Resize to actual count
+        /*  Resize to actual count */
         *windows = gf_realloc (filtered_windows, filtered_count * sizeof (gf_win_info_t));
         if (!*windows)
         {
@@ -195,20 +195,20 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
     if (flags & GF_GEOMETRY_APPLY_PADDING)
         gf_rect_apply_padding (&rect, cfg->default_padding);
 
-    // Calculate Frame Extents to correctly position the Client window
+    /*  Calculate Frame Extents to correctly position the Client window */
     int left = 0, right = 0, top = 0, bottom = 0;
     bool is_csd = false;
 
-    // We try to get frame extents. If we have them, we must adjust our target position.
+    /*  We try to get frame extents. If we have them, we must adjust our target position. */
     if (gf_platform_get_frame_extents (dpy, win, &left, &right, &top, &bottom, &is_csd)
         == GF_SUCCESS)
     {
         if (is_csd)
         {
-            // Client Side Decorations (GTK, etc.)
-            // The X Window includes the shadows/borders defined by extents.
-            // To make the VISUAL content match the grid 'rect', we must EXPAND the X
-            // Window. so that the shadows hang 'outside' the grid cell.
+            /*  Client Side Decorations (GTK, etc.) */
+            /*  The X Window includes the shadows/borders defined by extents. */
+            /*  To make the VISUAL content match the grid 'rect', we must EXPAND the X */
+            /*  Window. so that the shadows hang 'outside' the grid cell. */
             rect.x -= left;
             rect.y -= top;
             rect.width += (left + right);
@@ -216,10 +216,10 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
         }
         else
         {
-            // Server Side Decorations (Standard X11)
-            // The X Window is just the content. The WM adds the frame.
-            // The grid 'rect' includes the frame.
-            // So we must SHRINK the Client X Window so it fits inside the frame.
+            /*  Server Side Decorations (Standard X11) */
+            /*  The X Window is just the content. The WM adds the frame. */
+            /*  The grid 'rect' includes the frame. */
+            /*  So we must SHRINK the Client X Window so it fits inside the frame. */
             rect.x += left;
             rect.y += top;
             rect.width -= (left + right);
@@ -227,16 +227,16 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
         }
     }
 
-    // Use StaticGravity (10) to force the WM to place the client at exactly x, y
-    // This removes ambiguity about how NorthWestGravity is interpreted relative to
-    // frames.
+    /*  Use StaticGravity (10) to force the WM to place the client at exactly x, y */
+    /*  This removes ambiguity about how NorthWestGravity is interpreted relative to */
+    /*  frames. */
     long data[5];
 
-    data[0] = (10) |      // gravity = StaticGravity (10)
-              (1 << 8) |  // set x
-              (1 << 9) |  // set y
-              (1 << 10) | // set width
-              (1 << 11);  // set height
+    data[0] = (10) |      /*  gravity = StaticGravity (10) */
+              (1 << 8) |  /*  set x */
+              (1 << 9) |  /*  set y */
+              (1 << 10) | /*  set width */
+              (1 << 11);  /*  set height */
 
     data[1] = rect.x;
     data[2] = rect.y;
@@ -296,7 +296,7 @@ gf_window_minimize (gf_display_t display, gf_handle_t window)
     if (!display || window == None)
         return GF_ERROR_INVALID_PARAMETER;
 
-    // Verify window exists
+    /*  Verify window exists */
     XWindowAttributes attr;
     if (XGetWindowAttributes (display, window, &attr) == 0)
     {

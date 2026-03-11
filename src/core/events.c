@@ -143,11 +143,11 @@ gf_wm_watch (gf_wm_t *m)
                 _handle_new_window (m, win, current_ws);
             else
             {
-                // Preserve internally managed fields that the window manager
-                // has set (e.g. via _move_window_between_workspaces for
-                // maximized windows). The platform scan returns the raw
-                // desktop number which would overwrite our virtual workspace
-                // assignment, causing maximized workspace to report 0 windows.
+                /*  Preserve internally managed fields that the window manager */
+                /*  has set (e.g. via _move_window_between_workspaces for */
+                /*  maximized windows). The platform scan returns the raw */
+                /*  desktop number which would overwrite our virtual workspace */
+                /*  assignment, causing maximized workspace to report 0 windows. */
                 win->workspace_id = existing->workspace_id;
                 win->is_maximized = existing->is_maximized;
                 win->is_minimized = existing->is_minimized;
@@ -197,12 +197,12 @@ gf_wm_event (gf_wm_t *m)
 
         _move_window_between_workspaces (m, focused, max_ws);
 
-        // Handle switching between maximized windows (e.g. Alt+Tab)
-        // Ensure other windows in the same maximized workspace are minimized
+        /*  Handle switching between maximized windows (e.g. Alt+Tab) */
+        /*  Ensure other windows in the same maximized workspace are minimized */
         _minimize_workspace_windows (m, focused->workspace_id, focused->id,
                                      focused->monitor_id);
 
-        // Hide dock when maximizing
+        /*  Hide dock when maximizing */
         if (!m->state.dock_hidden && platform->dock_hide)
         {
             platform->dock_hide (platform);
@@ -218,7 +218,7 @@ gf_wm_event (gf_wm_t *m)
 
         _move_window_between_workspaces (m, focused, normal_ws);
 
-        // Clean up the now-empty maximized workspace
+        /*  Clean up the now-empty maximized workspace */
         _cleanup_empty_maximized_ws (m, old_ws_id);
 
         if (m->state.dock_hidden && platform->dock_restore)

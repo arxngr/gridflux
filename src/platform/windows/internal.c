@@ -102,7 +102,7 @@ _is_fullscreen_window (HWND hwnd)
     LONG style = GetWindowLong (hwnd, GWL_STYLE);
 
     RECT win, screen;
-    // Use GetWindowRect for screen occupancy check as it's more reliable
+    /*  Use GetWindowRect for screen occupancy check as it's more reliable */
     if (!GetWindowRect (hwnd, &win))
         return false;
 
@@ -111,7 +111,7 @@ _is_fullscreen_window (HWND hwnd)
     GetMonitorInfo (mon, &mi);
     screen = mi.rcMonitor;
 
-    // Tolerance of 10 pixels for DPI scaling/rounding
+    /*  Tolerance of 10 pixels for DPI scaling/rounding */
     int t = 10;
     bool covers_screen
         = (win.left <= screen.left + t && win.top <= screen.top + t
@@ -119,15 +119,15 @@ _is_fullscreen_window (HWND hwnd)
 
     if (covers_screen)
     {
-        // Many games use WS_POPUP (no borders/title bar)
+        /*  Many games use WS_POPUP (no borders/title bar) */
         if (style & WS_POPUP)
             return true;
 
-        // Also check if it lacks a caption (standard for borderless fullscreen)
+        /*  Also check if it lacks a caption (standard for borderless fullscreen) */
         if (!(style & WS_CAPTION))
             return true;
 
-        // Final fallback: if it strictly covers the whole screen
+        /*  Final fallback: if it strictly covers the whole screen */
         if (win.left <= screen.left && win.top <= screen.top && win.right >= screen.right
             && win.bottom >= screen.bottom)
             return true;
@@ -241,14 +241,14 @@ _window_it_self (gf_display_t display, gf_handle_t window)
     char title[MAX_TITLE_LENGTH];
     _get_window_name (display, window, title, sizeof (title));
 
-    // EXACT match for GridFlux GUI
+    /*  EXACT match for GridFlux GUI */
     if (strcmp (title, "GridFlux") == 0)
         return true;
 
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (window, class_name, sizeof (class_name)))
     {
-        // GridFlux GUI class
+        /*  GridFlux GUI class */
         if (strcmp (class_name, "GridFluxGUI") == 0)
         {
             return true;

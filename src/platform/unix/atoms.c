@@ -91,4 +91,4 @@ gf_platform_atoms_get_global (void)
 {
     return &g_atoms;
 }
-#endif // __linux__
+#endif /*  __linux__ */

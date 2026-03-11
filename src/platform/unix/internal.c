@@ -134,8 +134,8 @@ _run_bg_command (const char *cmd, char *const argv[])
     pid_t pid = fork ();
     if (pid == 0)
     {
-        // Child process
-        // Redirect stdout/stderr to /dev/null to avoid cluttering logs
+        /*  Child process */
+        /*  Redirect stdout/stderr to /dev/null to avoid cluttering logs */
         int null_fd = open ("/dev/null", O_WRONLY);
         if (null_fd >= 0)
         {
@@ -145,7 +145,7 @@ _run_bg_command (const char *cmd, char *const argv[])
         }
 
         execvp (cmd, argv);
-        _exit (1); // Exit if exec fails
+        _exit (1); /*  Exit if exec fails */
     }
 }
 

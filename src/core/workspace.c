@@ -33,7 +33,7 @@ _window_has_rule (const gf_config_t *cfg, const char *wm_class)
     return gf_rules_find (cfg, wm_class) != NULL;
 }
 
-// Evict a non-rule window from a workspace to make room for a rule-bound window
+/*  Evict a non-rule window from a workspace to make room for a rule-bound window */
 static void
 _evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id)
 {
@@ -41,7 +41,7 @@ _evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id)
     gf_ws_list_t *workspaces = wm_workspaces (m);
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
 
-    // Find a non-rule window in this workspace to move out
+    /*  Find a non-rule window in this workspace to move out */
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_win_info_t *win = &windows->items[i];
@@ -52,9 +52,9 @@ _evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id)
         gf_wm_window_class (m, win->id, name, sizeof (name));
 
         if (_window_has_rule (m->config, name))
-            continue; // Don't evict rule-bound windows
+            continue; /*  Don't evict rule-bound windows */
 
-        // Find a free workspace for this window
+        /*  Find a free workspace for this window */
         gf_ws_id_t dst_id = -1;
         for (uint32_t j = 0; j < workspaces->count; j++)
         {
@@ -70,7 +70,7 @@ _evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id)
 
         if (dst_id < 0)
         {
-            // Create a new workspace
+            /*  Create a new workspace */
             dst_id = gf_workspace_create (workspaces, max_per_ws, false, false);
         }
 
@@ -181,7 +181,7 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
     GF_LOG_DEBUG ("Workspace changed from %d to %d", m->state.last_active_workspace,
                   current_workspace);
 
-    // Minimize windows in other workspaces
+    /*  Minimize windows in other workspaces */
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_ws_id_t ws_id = workspaces->items[i].id;
@@ -193,15 +193,15 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
 
     gf_platform_t *platform = wm_platform (m);
 
-    // Get current active window to preserve focus
+    /*  Get current active window to preserve focus */
     gf_handle_t active_window = 0;
     if (platform->window_get_focused)
         active_window = platform->window_get_focused (*wm_display (m));
 
-    // Unminimize windows in current workspace
+    /*  Unminimize windows in current workspace */
     _unminimize_workspace_windows (m, current_workspace, active_window, active_monitor);
 
-    // Toggle dock based on target workspace type
+    /*  Toggle dock based on target workspace type */
     gf_ws_info_t *target_ws
         = gf_workspace_list_find_by_id (workspaces, current_workspace);
 
@@ -252,14 +252,14 @@ _build_workspace_candidate (gf_wm_t *m)
     gf_win_list_t *windows = wm_windows (m);
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
 
-    // Ensure workspaces targeted by rules always exist
+    /*  Ensure workspaces targeted by rules always exist */
     for (uint32_t i = 0; i < m->config->window_rules_count; i++)
     {
         gf_ws_id_t rule_ws = m->config->window_rules[i].workspace_id;
         gf_workspace_list_ensure (workspaces, rule_ws, max_per_ws);
     }
 
-    // First pass: preserve existing workspace assignments
+    /*  First pass: preserve existing workspace assignments */
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_win_info_t *win = &windows->items[i];
@@ -274,7 +274,7 @@ _build_workspace_candidate (gf_wm_t *m)
         }
     }
 
-    // Second pass: assign windows without valid workspace
+    /*  Second pass: assign windows without valid workspace */
     uint32_t ws_id = GF_FIRST_WORKSPACE_ID;
     uint32_t slot = 0;
 
@@ -285,7 +285,7 @@ _build_workspace_candidate (gf_wm_t *m)
         if (!win->is_valid || _window_has_valid_workspace (win, workspaces))
             continue;
 
-        // Check if this window has a rule — if so, it was already handled
+        /*  Check if this window has a rule — if so, it was already handled */
         char class_name[256];
         gf_wm_window_class (m, win->id, class_name, sizeof (class_name));
         const gf_window_rule_t *rule = gf_rules_find (m->config, class_name);
@@ -295,7 +295,7 @@ _build_workspace_candidate (gf_wm_t *m)
             continue;
         }
 
-        // Find next available unlocked, non-rule-reserved workspace with space
+        /*  Find next available unlocked, non-rule-reserved workspace with space */
         while (ws_id < workspaces->count)
         {
             gf_ws_info_t *check_ws = gf_workspace_list_find_by_id (workspaces, ws_id);
@@ -320,7 +320,7 @@ _build_workspace_candidate (gf_wm_t *m)
             }
         }
 
-        // Create workspace if needed
+        /*  Create workspace if needed */
         gf_workspace_list_ensure (workspaces, ws_id, max_per_ws);
 
         win->workspace_id = ws_id;
@@ -333,7 +333,7 @@ _build_workspace_candidate (gf_wm_t *m)
         }
     }
 
-    // Rebuild workspace stats
+    /*  Rebuild workspace stats */
     _rebuild_workspace_stats (m, workspaces, windows, max_per_ws);
 
     if (workspaces->active_workspace >= workspaces->count)
@@ -347,7 +347,7 @@ _find_or_create_maximized_ws (gf_wm_t *m)
 {
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
-    // Find an existing free (empty) maximized workspace to reuse
+    /*  Find an existing free (empty) maximized workspace to reuse */
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         if (workspaces->items[i].has_maximized_state
@@ -367,14 +367,14 @@ _cleanup_empty_maximized_ws (gf_wm_t *m, gf_ws_id_t ws_id)
     gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_win_list_t *windows = wm_windows (m);
 
-    // Check if any windows still reference this workspace
+    /*  Check if any windows still reference this workspace */
     for (uint32_t i = 0; i < windows->count; i++)
     {
         if (windows->items[i].is_valid && windows->items[i].workspace_id == ws_id)
-            return; // Still has a window, don't clean up
+            return; /*  Still has a window, don't clean up */
     }
 
-    // Find and remove the workspace from the list
+    /*  Find and remove the workspace from the list */
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         if (workspaces->items[i].id == ws_id && workspaces->items[i].has_maximized_state)
@@ -434,7 +434,7 @@ _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
     char class_name[256];
     gf_wm_window_class (m, win->id, class_name, sizeof (class_name));
 
-    // Check if this window is initially maximized
+    /*  Check if this window is initially maximized */
     if (platform->window_is_maximized && platform->window_is_maximized (display, win->id))
     {
         win->is_maximized = true;
@@ -442,7 +442,7 @@ _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
     }
     else
     {
-        // Not maximized, check if this window matches a rule
+        /*  Not maximized, check if this window matches a rule */
         const gf_window_rule_t *rule = gf_rules_find (m->config, class_name);
         if (rule)
         {
@@ -451,7 +451,7 @@ _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
 
             gf_ws_info_t *target_ws = gf_workspace_list_find_by_id (workspaces, target);
 
-            // If workspace is full, evict a non-rule window
+            /*  If workspace is full, evict a non-rule window */
             if (target_ws && target_ws->window_count >= max_per_ws)
             {
                 _evict_non_rule_window (m, target);

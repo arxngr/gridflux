@@ -19,7 +19,7 @@ class_matches (const char *rule_class, const char *window_class)
     if (rule_len > win_len)
         return false;
 
-    // Custom case-insensitive substring search
+    /*  Custom case-insensitive substring search */
     for (size_t i = 0; i <= win_len - rule_len; i++)
     {
         bool match = true;
@@ -48,7 +48,7 @@ gf_rules_add (gf_config_t *cfg, const char *wm_class, gf_ws_id_t ws_id)
     if (ws_id < GF_FIRST_WORKSPACE_ID)
         return GF_ERROR_INVALID_PARAMETER;
 
-    // Check if rule already exists for this class — update it
+    /*  Check if rule already exists for this class — update it */
     for (uint32_t i = 0; i < cfg->window_rules_count; i++)
     {
         if (class_matches (cfg->window_rules[i].wm_class, wm_class))
@@ -92,7 +92,7 @@ gf_rules_remove (gf_config_t *cfg, const char *wm_class)
     {
         if (class_matches (cfg->window_rules[i].wm_class, wm_class))
         {
-            // Shift remaining rules down
+            /*  Shift remaining rules down */
             for (uint32_t j = i; j < cfg->window_rules_count - 1; j++)
             {
                 cfg->window_rules[j] = cfg->window_rules[j + 1];

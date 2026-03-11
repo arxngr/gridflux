@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <windows.h>
 
-// Windows platform data
+/*  Windows platform data */
 typedef struct
 {
     HANDLE event_hook;
@@ -18,11 +18,11 @@ typedef struct
     int border_count;
 } gf_windows_platform_data_t;
 
-// Platform interface (Windows implementation)
+/*  Platform interface (Windows implementation) */
 gf_platform_t *gf_platform_create (void);
 void gf_platform_destroy (gf_platform_t *platform);
 
-// Internal platform functions
+/*  Internal platform functions */
 gf_err_t gf_platform_init (gf_platform_t *platform, gf_display_t *display);
 void gf_platform_cleanup (gf_display_t display, gf_platform_t *platform);
 gf_err_t gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
@@ -56,7 +56,7 @@ bool gf_window_is_fullscreen (gf_display_t display, gf_handle_t window);
 void gf_dock_hide (gf_platform_t *platform);
 void gf_dock_restore (gf_platform_t *platform);
 
-// Monitor management
+/*  Monitor management */
 uint32_t gf_monitor_get_count (gf_platform_t *platform);
 gf_err_t gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors,
                                uint32_t *count);
@@ -66,4 +66,4 @@ gf_err_t gf_screen_get_bounds_for_monitor (gf_display_t display,
 
 void gf_window_get_class (gf_display_t display, gf_handle_t win, char *buffer,
                           size_t bufsize);
-#endif // GF_PLATFORM_WINDOWS_H
+#endif /*  GF_PLATFORM_WINDOWS_H */

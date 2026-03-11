@@ -75,7 +75,7 @@ gf_workspace_get_current (gf_display_t display)
         return workspace;
     }
 
-    return 0; // Default to workspace 0 (0-indexed EWMH)
+    return 0; /*  Default to workspace 0 (0-indexed EWMH) */
 }
 
 uint32_t
@@ -100,7 +100,7 @@ gf_workspace_get_count (gf_display_t display)
         return count;
     }
 
-    return 1; // Default to 1 workspace
+    return 1; /*  Default to 1 workspace */
 }
 
 gf_err_t
@@ -117,7 +117,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
 
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
 
-    // Initialize with full screen
+    /*  Initialize with full screen */
     bounds->x = 0;
     bounds->y = 0;
     bounds->width = sw;
@@ -125,7 +125,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
 
     bool workarea_valid = false;
 
-    // Try _NET_WORKAREA first
+    /*  Try _NET_WORKAREA first */
     unsigned char *data = NULL;
     unsigned long nitems = 0;
 
@@ -134,16 +134,16 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
             == GF_SUCCESS
         && data && nitems >= 4)
     {
-        // _NET_WORKAREA is an array of 4 integers (x, y, w, h) per desktop
+        /*  _NET_WORKAREA is an array of 4 integers (x, y, w, h) per desktop */
         const int EWMH_WORKAREA_STRIDE = 4;
         gf_ws_id_t workspace = gf_workspace_get_current (dpy);
         unsigned long offset = workspace * EWMH_WORKAREA_STRIDE;
 
-        // Ensure we don't go out of bounds
+        /*  Ensure we don't go out of bounds */
         if (offset + (EWMH_WORKAREA_STRIDE - 1) < nitems)
         {
             long *workarea = (long *)data;
-            // Validate workarea makes sense (smaller than screen, non-zero)
+            /*  Validate workarea makes sense (smaller than screen, non-zero) */
             if (workarea[offset + 2] > 0 && workarea[offset + 3] > 0
                 && (workarea[offset + 1] > 0 || workarea[offset + 2] < sw
                     || workarea[offset + 3] < sh))
@@ -160,7 +160,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
     if (data)
         XFree (data);
 
-    // If Workarea gave full screen (or failed), try Struts to be safe
+    /*  If Workarea gave full screen (or failed), try Struts to be safe */
     if (!workarea_valid
         || (bounds->x == 0 && bounds->y == 0 && bounds->width == sw
             && bounds->height == sh))
@@ -168,17 +168,17 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
         int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
         _gf_get_global_struts(dpy, root, atoms, &panel_left, &panel_right, &panel_top, &panel_bottom);
 
-        // If Struts found reserved space, use it (intersect with current bounds if valid,
-        // else replace)
+        /*  If Struts found reserved space, use it (intersect with current bounds if valid, */
+        /*  else replace) */
         if (panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0)
         {
-            // Struts are reserved space logic.
+            /*  Struts are reserved space logic. */
             int new_x = panel_left;
             int new_y = panel_top;
             int new_w = sw - panel_left - panel_right;
             int new_h = sh - panel_top - panel_bottom;
 
-            // Prefer the "smaller" area (most restrictive)
+            /*  Prefer the "smaller" area (most restrictive) */
             if (new_x > bounds->x)
                 bounds->x = new_x;
             if (new_y > bounds->y)
@@ -244,7 +244,7 @@ gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors, uint32_t 
                 monitors[i].bounds.width = screens[i].width;
                 monitors[i].bounds.height = screens[i].height;
                 monitors[i].full_bounds = monitors[i].bounds;
-                monitors[i].is_primary = (i == 0); // Simplification: first is primary
+                monitors[i].is_primary = (i == 0); /*  Simplification: first is primary */
 
                 if (i < GF_MAX_MONITORS)
                     data->monitors[i] = monitors[i];
@@ -256,7 +256,7 @@ gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors, uint32_t 
         }
     }
 
-    // Fallback: single monitor
+    /*  Fallback: single monitor */
     *count = 1;
     monitors[0].id = 0;
     monitors[0].is_primary = true;
@@ -286,7 +286,7 @@ gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window)
         XTranslateCoordinates (dpy, (Window)window, DefaultRootWindow (dpy), 0, 0, &x, &y,
                                &child);
 
-        // Center point check
+        /*  Center point check */
         int cx = x + attrs.width / 2;
         int cy = y + attrs.height / 2;
 
@@ -324,7 +324,7 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
                 bounds->height = screens[i].height;
                 XFree (screens);
 
-                // Apply struts to the physical monitor bounds
+                /*  Apply struts to the physical monitor bounds */
                 int screen = DefaultScreen (display);
                 Window root = DefaultRootWindow (display);
                 Screen *scr = ScreenOfDisplay (display, screen);
@@ -342,8 +342,8 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
                     int new_w = sw - panel_left - panel_right;
                     int new_h = sh - panel_top - panel_bottom;
 
-                    // Prefer the "smaller" area (most restrictive)
-                    // Intersect monitor physical bounds with the strut-reduced global bounds
+                    /*  Prefer the "smaller" area (most restrictive) */
+                    /*  Intersect monitor physical bounds with the strut-reduced global bounds */
                     if (new_x > bounds->x)
                     {
                         bounds->width -= (new_x - bounds->x);

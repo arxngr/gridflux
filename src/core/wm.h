@@ -32,7 +32,7 @@ typedef struct
     gf_ipc_handle_t ipc_handle;
 } gf_wm_t;
 
-// --- Lifecycle & Initialization ---
+/*  --- Lifecycle & Initialization --- */
 void gf_wm_cleanup (gf_wm_t *manager);
 gf_err_t gf_wm_create (gf_wm_t **manager, gf_platform_t *platform,
                        gf_layout_engine_t *layout);
@@ -42,12 +42,12 @@ void gf_wm_init_window_list (gf_wm_t *m);
 void gf_wm_load_cfg (gf_wm_t *manager);
 gf_err_t gf_wm_run (gf_wm_t *manager);
 
-// --- Event Handling ---
+/*  --- Event Handling --- */
 void gf_wm_event (gf_wm_t *manager);
 void gf_wm_watch (gf_wm_t *m);
 void gf_wm_keymap_event (gf_wm_t *m);
 
-// --- Layout Management ---
+/*  --- Layout Management --- */
 void gf_wm_apply_layout (gf_wm_t *m, gf_win_info_t *windows, gf_rect_t *geometry,
                          uint32_t window_count);
 gf_err_t gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows,
@@ -56,7 +56,7 @@ gf_err_t gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows,
 gf_err_t gf_wm_layout_apply (gf_wm_t *manager);
 gf_err_t gf_wm_layout_rebalance (gf_wm_t *m);
 
-// --- Window Management ---
+/*  --- Window Management --- */
 void gf_wm_prune (gf_wm_t *manager);
 gf_err_t gf_wm_window_move (gf_wm_t *m, gf_handle_t window_id,
                             gf_ws_id_t target_workspace);
@@ -64,11 +64,11 @@ void gf_wm_window_class (const gf_wm_t *m, gf_handle_t handle, char *buffer, siz
 gf_err_t gf_wm_window_sync (gf_wm_t *manager, gf_handle_t window,
                             gf_ws_id_t workspace_id);
 
-// --- Workspace Management ---
+/*  --- Workspace Management --- */
 gf_err_t gf_wm_workspace_lock (gf_wm_t *m, gf_ws_id_t workspace_id);
 gf_err_t gf_wm_workspace_unlock (gf_wm_t *m, gf_ws_id_t workspace_id);
 
-// --- Debugging ---
+/*  --- Debugging --- */
 void gf_wm_debug_stats (const gf_wm_t *manager);
 
-#endif // GF_CORE_WINDOW_MANAGER_H
+#endif /*  GF_CORE_WINDOW_MANAGER_H */

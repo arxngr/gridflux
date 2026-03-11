@@ -5,4 +5,4 @@
 
 void on_rules_button_clicked (GtkButton *btn, gpointer data);
 
-#endif // GF_GUI_RULES_PANEL_H
+#endif /*  GF_GUI_RULES_PANEL_H */

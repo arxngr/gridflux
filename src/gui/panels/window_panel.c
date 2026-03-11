@@ -133,7 +133,7 @@ gf_gui_window_panel_new (gf_app_state_t *app)
     app->window_model = gtk_string_list_new (NULL);
     app->window_dropdown = gtk_drop_down_new (G_LIST_MODEL (app->window_model), NULL);
 
-    // Set up custom factory for window list item (Icon + Label)
+    /*  Set up custom factory for window list item (Icon + Label) */
     GtkListItemFactory *win_factory = gtk_signal_list_item_factory_new ();
     g_signal_connect (win_factory, "setup", G_CALLBACK (window_dropdown_setup), app);
     g_signal_connect (win_factory, "bind", G_CALLBACK (window_dropdown_bind), app);
