@@ -5,4 +5,4 @@
 
 GtkWidget *gf_gui_workspace_panel_new (gf_app_state_t *app);
 
-#endif // GF_GUI_WORKSPACE_PANEL_H
+#endif /*  GF_GUI_WORKSPACE_PANEL_H */

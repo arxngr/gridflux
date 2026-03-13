@@ -11,6 +11,10 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#endif
+
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
@@ -24,7 +28,6 @@ static const gf_config_t DEFAULT_CONFIG
         .enable_borders = true,
         .locked_workspaces_count = 0,
         .window_rules_count = 0 };
-
 
 const char *
 gf_config_get_path (void)
@@ -46,20 +49,21 @@ gf_config_get_path (void)
 
     snprintf (config_path, sizeof (config_path), "%s\\gridflux\\config.json", appdata);
 
-    // Ensure the directory exists
+    /*  Ensure the directory exists */
     char gridflux_dir[PATH_MAX];
     snprintf (gridflux_dir, sizeof (gridflux_dir), "%s\\gridflux", appdata);
+    _mkdir (gridflux_dir);
 
     return config_path;
 #else
-    // Unix-like systems
+    /*  Unix-like systems */
     const char *xdg_config = getenv ("XDG_CONFIG_HOME");
     if (xdg_config && xdg_config[0] != '\0')
     {
         snprintf (config_path, sizeof (config_path), "%s/gridflux/config.json",
                   xdg_config);
 
-        // Ensure the directory exists
+        /*  Ensure the directory exists */
         char gridflux_dir[PATH_MAX];
         snprintf (gridflux_dir, sizeof (gridflux_dir), "%s/gridflux", xdg_config);
         mkdir (gridflux_dir, 0755);
@@ -76,7 +80,7 @@ gf_config_get_path (void)
 
     snprintf (config_path, sizeof (config_path), "%s/.config/gridflux/config.json", home);
 
-    // Ensure the directory exists
+    /*  Ensure the directory exists */
     char config_dir[PATH_MAX];
     snprintf (config_dir, sizeof (config_dir), "%s/.config", home);
     mkdir (config_dir, 0755);
@@ -159,7 +163,7 @@ gf_config_save (const char *filename, const gf_config_t *cfg)
     }
     json_object_object_add (json, "locked_workspaces", arr);
 
-    // Serialize window rules
+    /*  Serialize window rules */
     struct json_object *rules_arr = json_object_new_array ();
     for (uint32_t i = 0; i < cfg->window_rules_count; i++)
     {
@@ -263,7 +267,7 @@ load_or_create_config (const char *filename)
         cfg.locked_workspaces_count = 0;
 
         if (len > cfg.max_workspaces)
-            changed = true; // truncated
+            changed = true; /*  truncated */
 
         for (size_t i = 0; i < len && cfg.locked_workspaces_count < cfg.max_workspaces;
              i++)
@@ -285,7 +289,7 @@ load_or_create_config (const char *filename)
         changed = true;
     }
 
-    // Parse window rules
+    /*  Parse window rules */
     struct json_object *rules_obj = NULL;
     if (json_object_object_get_ex (json, "window_rules", &rules_obj)
         && json_object_is_type (rules_obj, json_type_array))

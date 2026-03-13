@@ -20,8 +20,11 @@ typedef struct
     GtkWidget *target_ws_dropdown;
     GtkStringList *target_ws_model;
     gf_gui_platform_t *platform;
+    GtkWidget *start_btn;
+    GtkWidget *stop_btn;
 #ifdef _WIN32
     gboolean operation_in_progress;
+    void *tray_data;
 #endif
 } gf_app_state_t;
 
@@ -48,4 +51,4 @@ typedef struct
 } gf_refresh_task_t;
 #endif
 
-#endif // GF_APP_STATE_H
+#endif /*  GF_APP_STATE_H */

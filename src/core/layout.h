@@ -19,13 +19,13 @@ struct gf_layout_engine
     void *engine_data;
 };
 
-// --- Engine Lifecycle ---
+/*  --- Engine Lifecycle --- */
 gf_layout_engine_t *gf_layout_engine_create (const gf_config_t *config);
 gf_layout_engine_t *gf_layout_engine_create_grid (uint32_t columns,
                                                   const gf_config_t *config);
 void gf_layout_engine_destroy (gf_layout_engine_t *engine);
 
-// --- Rect Geometry Operations ---
+/*  --- Rect Geometry Operations --- */
 void gf_rect_apply_padding (gf_rect_t *rect, uint32_t padding);
 gf_rect_t gf_rect_create (gf_coordinate_t x, gf_coordinate_t y, gf_dimension_t width,
                           gf_dimension_t height);

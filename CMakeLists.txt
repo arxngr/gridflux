@@ -86,6 +86,7 @@ if(UNIX AND NOT APPLE)
         ${X11_LIBRARIES}
         Xext
         Xi
+        Xinerama
         m
         ${JSONC_LIBRARIES}
     )
@@ -233,9 +234,16 @@ if(GTK4_FOUND)
     )
 
     if(WIN32)
-        target_sources(gridflux-gui PRIVATE src/gui/platform/windows/gui_platform.c)
+        target_sources(gridflux-gui PRIVATE
+            src/gui/platform/windows/gui_platform.c
+            src/gui/bridge/windows/process_manager.c
+            src/gui/window/tray.c
+        )
     elseif(UNIX AND NOT APPLE)
-        target_sources(gridflux-gui PRIVATE src/gui/platform/unix/gui_platform.c)
+        target_sources(gridflux-gui PRIVATE
+            src/gui/platform/unix/gui_platform.c
+            src/gui/bridge/unix/process_manager.c
+        )
     endif()
 
     target_include_directories(gridflux-gui PRIVATE

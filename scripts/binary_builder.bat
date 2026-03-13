@@ -89,6 +89,22 @@ for /f "tokens=3" %%A in ('findstr /i "mingw64" build\ldd_out.txt') do (
     )
 )
 
+echo Adding dynamically loaded GTK runtime DLLs missed by ldd...
+:: GTK4 dynamically loads these at runtime for icons, parsing, and rendering
+set "GTK_RUNTIME_DLLS=libgdk_pixbuf-2.0-0.dll libglib-2.0-0.dll libgobject-2.0-0.dll libgio-2.0-0.dll libgmodule-2.0-0.dll libpangocairo-1.0-0.dll libpango-1.0-0.dll libcairo-gobject-2.dll libcairo-2.dll libepoxy-0.dll libharfbuzz-0.dll libintl-8.dll libsqlite3-0.dll libtiff-6.dll libjpeg-8.dll libpng16-16.dll zlib1.dll libffi-8.dll libgcc_s_seh-1.dll libwinpthread-1.dll libstdc++-6.dll"
+
+for %%D in (%GTK_RUNTIME_DLLS%) do (
+    if exist "C:\msys64\mingw64\bin\%%D" (
+        copy /y "C:\msys64\mingw64\bin\%%D" build\bin\ >nul
+    )
+)
+
+echo Adding GTK/GLib compiled schemas...
+mkdir "build\share\glib-2.0\schemas" 2>nul
+if exist "C:\msys64\mingw64\share\glib-2.0\schemas\gschemas.compiled" (
+    copy /y "C:\msys64\mingw64\share\glib-2.0\schemas\gschemas.compiled" "build\share\glib-2.0\schemas\" >nul
+)
+
 echo Stripping collected DLLs and executables to reduce size...
 for %%f in (build\bin\*.dll) do strip "%%f"
 strip build\gridflux.exe build\gridflux-gui.exe build\gridflux-cli.exe 2>nul

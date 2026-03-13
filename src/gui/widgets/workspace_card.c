@@ -56,13 +56,13 @@ gf_gui_workspace_card_add_to_grid (GtkGrid *grid, gf_ws_info_t *ws,
     gtk_widget_add_css_class (l2, "table-cell");
     gtk_grid_attach (grid, l2, 1, row, 1, 1);
 
-    // Build scrollable window class list for this workspace
+    /*  Build scrollable window class list for this workspace */
     GtkWidget *scrolled = gtk_scrolled_window_new ();
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
     gtk_scrolled_window_set_propagate_natural_height (GTK_SCROLLED_WINDOW (scrolled), TRUE);
     gtk_scrolled_window_set_max_content_height (GTK_SCROLLED_WINDOW (scrolled), 150);
     
-    // Explicitly demand width from the grid
+    /*  Explicitly demand width from the grid */
     gtk_widget_set_size_request (scrolled, 250, -1);
     gtk_widget_set_hexpand (scrolled, TRUE);
 

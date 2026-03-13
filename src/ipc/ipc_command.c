@@ -37,7 +37,7 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    // Ensure names are populated
+    /*  Ensure names are populated */
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_win_info_t *w = &windows->items[i];
@@ -127,7 +127,7 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
         return;
     }
 
-    // Just call the window manager API
+    /*  Just call the window manager API */
     gf_err_t result = gf_wm_window_move (m, window_id, target_workspace);
 
     resp.type = (result == GF_SUCCESS) ? 0 : 1;
@@ -180,7 +180,7 @@ gf_cmd_lock_workspace (const char *args, gf_ipc_response_t *response, void *user
         return;
     }
 
-    // Just call the window manager API
+    /*  Just call the window manager API */
     gf_err_t result = gf_wm_workspace_lock (m, workspace_id);
 
     resp.type = (result == GF_SUCCESS) ? 0 : 1;
@@ -229,7 +229,7 @@ gf_cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *us
         return;
     }
 
-    // Just call the window manager API
+    /*  Just call the window manager API */
     gf_err_t result = gf_wm_workspace_unlock (m, workspace_id);
 
     resp.type = (result == GF_SUCCESS) ? 0 : 1;
@@ -292,7 +292,7 @@ gf_cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
         return;
     }
 
-    // Check if adding this rule would exceed max_windows_per_workspace
+    /*  Check if adding this rule would exceed max_windows_per_workspace */
     uint32_t rule_count_for_ws = 0;
     for (uint32_t i = 0; i < m->config->window_rules_count; i++)
     {
@@ -399,7 +399,7 @@ gf_cmd_query_apps (const char *args, gf_ipc_response_t *response, void *user_dat
     gf_command_response_t resp;
     resp.type = 0;
 
-    // Collect unique class names from tracked windows
+    /*  Collect unique class names from tracked windows */
     char classes[128][128];
     uint32_t class_count = 0;
 
@@ -411,7 +411,7 @@ gf_cmd_query_apps (const char *args, gf_ipc_response_t *response, void *user_dat
         if (name[0] == '\0')
             continue;
 
-        // Check for duplicate
+        /*  Check for duplicate */
         bool found = false;
         for (uint32_t j = 0; j < class_count; j++)
         {

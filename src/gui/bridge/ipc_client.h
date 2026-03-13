@@ -5,4 +5,4 @@
 
 gf_ipc_response_t gf_run_client_command (const char *command);
 
-#endif // GF_GUI_IPC_CLIENT_H
+#endif /*  GF_GUI_IPC_CLIENT_H */

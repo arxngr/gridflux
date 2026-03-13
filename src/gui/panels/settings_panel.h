@@ -5,4 +5,4 @@
 
 void on_config_button_clicked (GtkButton *btn, gpointer data);
 
-#endif // GF_GUI_SETTINGS_PANEL_H
+#endif /*  GF_GUI_SETTINGS_PANEL_H */

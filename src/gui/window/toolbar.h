@@ -5,4 +5,4 @@
 
 GtkWidget *gf_gui_toolbar_new (gf_app_state_t *app);
 
-#endif // GF_GUI_TOOLBAR_H
+#endif /*  GF_GUI_TOOLBAR_H */

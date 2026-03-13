@@ -35,7 +35,7 @@ _remove_stale_windows (gf_wm_t *m, gf_win_list_t *windows)
 
         if (excluded || invalid || hidden)
         {
-            // If this was a maximized window, clear the workspace's maximized state
+            /*  If this was a maximized window, clear the workspace's maximized state */
             if (win->is_maximized)
             {
                 gf_ws_info_t *ws
@@ -71,14 +71,43 @@ gf_wm_window_class (const gf_wm_t *m, gf_handle_t handle, char *buffer, size_t s
     }
 }
 
-void
-_minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id)
+gf_monitor_id_t
+_get_active_monitor (gf_wm_t *m)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
     gf_win_list_t *windows = wm_windows (m);
 
-    // Iterate backwards to maintain stacking order
+    gf_handle_t curr_win_id = platform->window_get_focused (display);
+    if (curr_win_id != 0)
+    {
+        gf_win_info_t *focused = gf_window_list_find_by_window_id (windows, curr_win_id);
+        if (focused)
+            return focused->monitor_id;
+
+        if (platform->monitor_from_window)
+            return platform->monitor_from_window (platform, curr_win_id);
+    }
+
+    /*  Fallback: Use the monitor of the first valid window (often primary monitor) */
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        if (windows->items[i].is_valid)
+            return windows->items[i].monitor_id;
+    }
+
+    return 0; /*  Fallback */
+}
+
+void
+_minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id,
+                             gf_monitor_id_t active_monitor)
+{
+    gf_platform_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+    gf_win_list_t *windows = wm_windows (m);
+
+    /*  Iterate backwards to maintain stacking order */
     for (int32_t i = (int32_t)windows->count - 1; i >= 0; i--)
     {
         gf_win_info_t *win = &windows->items[i];
@@ -89,13 +118,18 @@ _minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_i
         if (wm_is_excluded (m, win->id))
             continue;
 
+        /*  If active_monitor is not -1, filter by monitor */
+        if (active_monitor != (gf_monitor_id_t)-1 && win->monitor_id != active_monitor)
+            continue;
+
         platform->window_minimize (display, win->id);
         win->is_minimized = true;
     }
 }
 
 void
-_unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window)
+_unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
+                               gf_monitor_id_t active_monitor)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -104,8 +138,8 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
     gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
     bool is_maximized_ws = (ws && ws->has_maximized_state);
 
-    // First pass: unminimize all non-active windows in target workspace
-    // Iterate backwards to maintain stacking order
+    /*  First pass: unminimize all non-active windows in target workspace */
+    /*  Iterate backwards to maintain stacking order */
     for (int32_t i = (int32_t)windows->count - 1; i >= 0; i--)
     {
         gf_win_info_t *win = &windows->items[i];
@@ -113,19 +147,22 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
         if (win->workspace_id != ws_id)
             continue;
 
-        // For maximized workspaces, we ONLY want one window visible at a time.
-        // We skip unminimizing non-active windows in this pass if it's a maximized
-        // workspace.
+        /*  For maximized workspaces, we ONLY want one window visible at a time. */
+        /*  We skip unminimizing non-active windows in this pass if it's a maximized */
+        /*  workspace. */
         if (is_maximized_ws)
             continue;
 
         if (wm_is_excluded (m, win->id))
             continue;
 
+        if (active_monitor != (gf_monitor_id_t)-1 && win->monitor_id != active_monitor)
+            continue;
+
         if (platform->window_is_hidden && platform->window_is_hidden (display, win->id))
             continue;
 
-        // Skip active window for now
+        /*  Skip active window for now */
         if (active_window != 0 && win->id == active_window)
             continue;
 
@@ -139,7 +176,7 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
         }
     }
 
-    // Second pass: unminimize active window last (to ensure it's on top)
+    /*  Second pass: unminimize active window last (to ensure it's on top) */
     if (active_window != 0)
     {
         for (int32_t i = (int32_t)windows->count - 1; i >= 0; i--)
@@ -148,6 +185,10 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
 
             if (win->workspace_id == ws_id && win->id == active_window)
             {
+                if (active_monitor != (gf_monitor_id_t)-1
+                    && win->monitor_id != active_monitor)
+                    continue;
+
                 platform->window_unminimize (display, win->id);
                 win->is_minimized = false;
 
@@ -162,14 +203,18 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
     }
     else if (is_maximized_ws && windows->count > 0)
     {
-        // If it's a maximized workspace but no active window was specified,
-        // unminimize at least the first one we find in this workspace
-        // to avoid having an empty-looking screen.
+        /*  If it's a maximized workspace but no active window was specified, */
+        /*  unminimize at least the first one we find in this workspace */
+        /*  to avoid having an empty-looking screen. */
         for (uint32_t i = 0; i < windows->count; i++)
         {
             gf_win_info_t *win = &windows->items[i];
             if (win->workspace_id == ws_id && !wm_is_excluded (m, win->id))
             {
+                if (active_monitor != (gf_monitor_id_t)-1
+                    && win->monitor_id != active_monitor)
+                    continue;
+
                 platform->window_unminimize (display, win->id);
                 win->is_minimized = false;
                 break;
@@ -234,9 +279,16 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
                                         : false);
     bool is_max_state = existing ? existing->is_maximized : false;
 
+    gf_monitor_id_t mon_id = 0;
+    if (existing)
+        mon_id = existing->monitor_id;
+    else if (platform->monitor_from_window)
+        mon_id = platform->monitor_from_window (platform, window);
+
     gf_win_info_t info = {
         .id = window,
         .workspace_id = workspace_id,
+        .monitor_id = mon_id,
         .geometry = geom,
         .is_minimized = is_min_state,
         .is_maximized = is_max_state,
@@ -279,7 +331,7 @@ gf_wm_window_move (gf_wm_t *m, gf_handle_t window_id, gf_ws_id_t target_workspac
     gf_win_list_t *windows = wm_windows (m);
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
-    // Find window
+    /*  Find window */
     gf_win_info_t *win = NULL;
     for (uint32_t i = 0; i < windows->count; i++)
     {

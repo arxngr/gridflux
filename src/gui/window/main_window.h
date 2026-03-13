@@ -5,4 +5,4 @@
 
 void gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app);
 
-#endif // GF_GUI_MAIN_WINDOW_H
+#endif /*  GF_GUI_MAIN_WINDOW_H */

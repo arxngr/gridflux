@@ -4,10 +4,11 @@
 #include "../platform.h"
 #include "atoms.h"
 #include <X11/Xlib.h>
+#include <X11/extensions/Xinerama.h>
 #include <stdbool.h>
 
-// Border structure
-// Linux platform data
+/*  Border structure */
+/*  Linux platform data */
 #define GF_MAX_DOCK_WINDOWS 8
 
 typedef struct
@@ -20,21 +21,24 @@ typedef struct
     gf_border_t **borders;
     int border_count;
 
-    // Dock auto-hide state
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    uint32_t enumerated_monitor_count;
+
+    /*  Dock auto-hide state */
     Window saved_dock_windows[GF_MAX_DOCK_WINDOWS];
     int saved_dock_count;
     bool dock_hidden;
 
-    // Keymap state
+    /*  Keymap state */
     bool keymap_initialized;
     int xi_opcode;
 } gf_linux_platform_data_t;
 
-// Platform interface (Linux implementation)
+/*  Platform interface (Linux implementation) */
 gf_platform_t *gf_platform_create (void);
 void gf_platform_destroy (gf_platform_t *platform);
 
-// Internal platform functions (declared here for use in other linux files)
+/*  Internal platform functions (declared here for use in other linux files) */
 gf_err_t gf_platform_init (gf_platform_t *platform, gf_display_t *display);
 void gf_platform_cleanup (gf_display_t display, gf_platform_t *platform);
 gf_err_t gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
@@ -53,7 +57,7 @@ bool gf_window_is_valid (gf_display_t display, gf_handle_t window);
 bool gf_window_is_excluded (gf_display_t display, gf_handle_t window);
 gf_err_t gf_platform_is_window_drag (gf_display_t display, gf_handle_t window,
                                      gf_rect_t *geometry);
-// Additional platform functions
+/*  Additional platform functions */
 gf_handle_t gf_window_get_focused (gf_display_t dpy);
 gf_err_t gf_window_minimize (gf_display_t display, gf_handle_t window);
 gf_err_t gf_window_unminimize (gf_display_t display, gf_handle_t window);
@@ -62,6 +66,13 @@ gf_err_t gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds);
 gf_err_t gf_window_set_geometry (gf_display_t display, gf_handle_t window,
                                  const gf_rect_t *geometry, gf_geom_flags_t flags,
                                  gf_config_t *cfg);
+
+uint32_t gf_monitor_get_count (gf_platform_t *platform);
+gf_err_t gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors,
+                               uint32_t *count);
+gf_monitor_id_t gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window);
+gf_err_t gf_screen_get_bounds_for_monitor (gf_display_t display,
+                                           gf_monitor_id_t monitor_id, gf_rect_t *bounds);
 
 gf_err_t gf_platform_get_frame_extents (Display *dpy, Window win, int *left, int *right,
                                         int *top, int *bottom, bool *is_csd);
@@ -84,9 +95,9 @@ bool gf_window_is_maximized (gf_display_t display, gf_handle_t window);
 void gf_dock_hide (gf_platform_t *platform);
 void gf_dock_restore (gf_platform_t *platform);
 
-// --- Keymap Support ---
+/*  --- Keymap Support --- */
 gf_err_t gf_keymap_init (gf_platform_t *platform, gf_display_t display);
 void gf_keymap_cleanup (gf_platform_t *platform);
 gf_key_action_t gf_keymap_poll (gf_platform_t *platform, gf_display_t display);
 
-#endif // GF_PLATFORM_LINUX_H
+#endif /*  GF_PLATFORM_LINUX_H */

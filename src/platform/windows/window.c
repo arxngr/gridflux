@@ -54,6 +54,9 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
             window_list[found_count].is_maximized = IsZoomed (hwnd);
             window_list[found_count].is_valid = true;
             window_list[found_count].last_modified = time (NULL);
+
+            window_list[found_count].monitor_id = 0;
+
             found_count++;
         }
         hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);
@@ -105,6 +108,7 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
     int new_w = geometry->width;
     int new_h = geometry->height;
 
+    /* Compensate for the invisible DWM shadow/border that shifts the window rect */
     RECT d_rect, w_rect;
     if (SUCCEEDED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &d_rect,
                                           sizeof (d_rect)))
@@ -121,7 +125,11 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
         new_h += top_border + bottom_border;
     }
 
-    if (MoveWindow (window, new_x, new_y, new_w, new_h, TRUE) == 0)
+    /* Use SetWindowPos with SWP_NOSENDCHANGING so that apps like Discord
+       (CEF/Electron) cannot intercept the resize via WM_WINDOWPOSCHANGING
+       and silently enforce their own minimum size. */
+    UINT swp_flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING;
+    if (SetWindowPos (window, NULL, new_x, new_y, new_w, new_h, swp_flags) == 0)
         return GF_ERROR_PLATFORM_ERROR;
 
     return GF_SUCCESS;
@@ -268,11 +276,11 @@ gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
     if (!_validate_window (window))
         return;
 
-    // Use GetClassNameA to get the window class
+    /*  Use GetClassNameA to get the window class */
     char class_name[128] = { 0 };
     if (GetClassNameA ((HWND)window, class_name, sizeof (class_name)))
     {
-        // Get the executable name so rules can match against the .exe
+        /*  Get the executable name so rules can match against the .exe */
         char exe_name[MAX_PATH] = { 0 };
         DWORD pid = 0;
         GetWindowThreadProcessId ((HWND)window, &pid);
@@ -328,8 +336,8 @@ gf_platform_window_hidden (gf_display_t display, gf_handle_t window)
     if (!_validate_window (window))
         return false;
 
-    // Window is hidden if it's not visible AND not minimized to taskbar
-    // This catches windows that are closed to system tray
+    /*  Window is hidden if it's not visible AND not minimized to taskbar */
+    /*  This catches windows that are closed to system tray */
     return !IsWindowVisible ((HWND)window) && !IsIconic ((HWND)window);
 }
 
