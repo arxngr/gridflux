@@ -53,6 +53,16 @@ on_window_realize (GtkWidget *widget, gpointer user_data)
 #endif
 }
 
+#ifdef _WIN32
+static gboolean
+on_close_request_hide (GtkWindow *window, gpointer user_data)
+{
+    (void)user_data;
+    gtk_widget_set_visible (GTK_WIDGET (window), FALSE);
+    return TRUE; // suppress default destroy
+}
+#endif
+
 void
 gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
 {
@@ -146,6 +156,14 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
     }
 
     g_signal_connect (widgets->window, "realize", G_CALLBACK (on_window_realize), NULL);
+
+#ifdef _WIN32
+    // hide to tray instead of quitting when the user clicks X
+    g_signal_connect (
+        widgets->window, "close-request",
+        G_CALLBACK (on_close_request_hide),
+        NULL);
+#endif
 
     GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
     gtk_window_set_child (GTK_WINDOW (widgets->window), main_box);
