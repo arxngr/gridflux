@@ -4,7 +4,7 @@
 #include "../config/config.h"
 #include "types.h"
 
-/* Forward declaration */
+// Forward declaration
 typedef struct gf_layout_engine gf_layout_engine_t;
 struct gf_layout_engine
 {
@@ -19,13 +19,13 @@ struct gf_layout_engine
     void *engine_data;
 };
 
-/*  --- Engine Lifecycle --- */
+// --- Engine Lifecycle ---
 gf_layout_engine_t *gf_layout_engine_create (const gf_config_t *config);
 gf_layout_engine_t *gf_layout_engine_create_grid (uint32_t columns,
                                                   const gf_config_t *config);
 void gf_layout_engine_destroy (gf_layout_engine_t *engine);
 
-/*  --- Rect Geometry Operations --- */
+// --- Rect Geometry Operations ---
 void gf_rect_apply_padding (gf_rect_t *rect, uint32_t padding);
 gf_rect_t gf_rect_create (gf_coordinate_t x, gf_coordinate_t y, gf_dimension_t width,
                           gf_dimension_t height);
@@ -36,4 +36,4 @@ bool gf_rect_intersects (const gf_rect_t *a, const gf_rect_t *b);
 bool gf_rect_is_valid (const gf_rect_t *rect);
 bool gf_rect_point_in (int x, int y, const gf_rect_t *rect);
 
-#endif /* GF_CORE_LAYOUT_H */
+#endif // GF_CORE_LAYOUT_H

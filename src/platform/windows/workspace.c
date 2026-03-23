@@ -16,8 +16,8 @@ gf_screen_get_bounds (gf_display_t display, gf_rect_t *bounds)
     if (!bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
-    /* Use the system work area — Win32 already excludes the taskbar,
-       auto-hide bars, and accounts for DPI scaling. */
+        // Use the system work area — Win32 already excludes the taskbar,
+    // auto-hide bars, and accounts for DPI scaling.
     RECT wa;
     if (SystemParametersInfo (SPI_GETWORKAREA, 0, &wa, 0))
     {
@@ -28,7 +28,7 @@ gf_screen_get_bounds (gf_display_t display, gf_rect_t *bounds)
         return GF_SUCCESS;
     }
 
-    /* Last-resort fallback: raw virtual screen with no taskbar compensation */
+        // Last-resort fallback: raw virtual screen with no taskbar compensation
     bounds->x = GetSystemMetrics (SM_XVIRTUALSCREEN);
     bounds->y = GetSystemMetrics (SM_YVIRTUALSCREEN);
     bounds->width = (gf_dimension_t)GetSystemMetrics (SM_CXVIRTUALSCREEN);
@@ -36,7 +36,7 @@ gf_screen_get_bounds (gf_display_t display, gf_rect_t *bounds)
     return GF_SUCCESS;
 }
 
-/* ── Monitor enumeration callback ── */
+// ── Monitor enumeration callback ──
 
 typedef struct
 {
@@ -97,7 +97,7 @@ gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors, uint32_t 
 
     *count = ctx.count;
 
-    /* Cache in platform data for later lookups */
+        // Cache in platform data for later lookups
     for (uint32_t i = 0; i < ctx.count && i < GF_MAX_MONITORS; i++)
         data->monitors[i] = monitors[i];
     data->enumerated_monitor_count = ctx.count;
@@ -128,7 +128,7 @@ gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window)
     if (!GetMonitorInfo (hmon, &mi))
         return 0;
 
-    /* Match the HMONITOR work-area to our cached monitors */
+        // Match the HMONITOR work-area to our cached monitors
     for (uint32_t i = 0; i < data->enumerated_monitor_count; i++)
     {
         if (data->monitors[i].full_bounds.x == mi.rcMonitor.left
@@ -138,7 +138,7 @@ gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window)
         }
     }
 
-    return 0; /* fallback to primary */
+    return 0; // fallback to primary
 }
 
 gf_err_t
@@ -150,7 +150,7 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
     if (!bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
-    /* Re-enumerate to get fresh bounds (handles resolution changes) */
+        // Re-enumerate to get fresh bounds (handles resolution changes)
     gf_monitor_t monitors[GF_MAX_MONITORS];
     uint32_t count = GF_MAX_MONITORS;
     _enum_mon_ctx_t ctx = { .monitors = monitors, .count = 0, .max = count };
@@ -166,6 +166,6 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
         }
     }
 
-    /* Fallback: return primary or virtual screen */
+        // Fallback: return primary or virtual screen
     return gf_screen_get_bounds (display, bounds);
 }

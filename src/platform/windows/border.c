@@ -47,7 +47,7 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
     int cloaked = 0;
     DwmGetWindowAttribute (b->target, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
 
-    /*  Hide border if target is not visible, cloaked, minimized, or maximized */
+        // Hide border if target is not visible, cloaked, minimized, or maximized
     if (!IsWindowVisible (b->target) || cloaked || IsIconic (b->target)
         || IsZoomed (b->target))
     {
@@ -55,86 +55,101 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
         return;
     }
 
-    RECT rect;
-    if (SUCCEEDED (DwmGetWindowAttribute (b->target, DWMWA_EXTENDED_FRAME_BOUNDS, &rect,
-                                          sizeof (rect)))
-        || GetWindowRect (b->target, &rect))
+    /*  Get the true visible bounds (no DWM shadow) */
+    RECT d_rect;
+    if (!SUCCEEDED (DwmGetWindowAttribute (b->target, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                           &d_rect, sizeof (d_rect))))
+        return;
+
+    // Get the full Win32 rect (includes invisible DWM shadow) — this is the
+    // coordinate space that SetWindowPos operates in
+    RECT w_rect;
+    if (!GetWindowRect (b->target, &w_rect))
+        return;
+
+    // Compute the shadow insets so we can convert DWM coords → Win32 coords
+    int shadow_left = d_rect.left - w_rect.left;
+    int shadow_top = d_rect.top - w_rect.top;
+    int shadow_right = w_rect.right - d_rect.right;
+    int shadow_bottom = w_rect.bottom - d_rect.bottom;
+
+    int t = b->thickness;
+
+    // Overlay position in Win32 coords: expand by thickness around the visible edge
+    int win_x = w_rect.left + shadow_left - t;
+    int win_y = w_rect.top + shadow_top - t;
+    int vis_w = d_rect.right - d_rect.left;
+    int vis_h = d_rect.bottom - d_rect.top;
+    int win_w = vis_w + 2 * t;
+    int win_h = vis_h + 2 * t;
+
+    RECT border_rect = { win_x, win_y, win_x + win_w, win_y + win_h };
+
+    // Find intersections with GUI windows
+    RECT intersections[16];
+    int intersect_count = 0;
+
+    for (int i = 0; i < gui_count && intersect_count < 16; i++)
     {
-        int t = b->thickness;
-        int win_x = rect.left - t;
-        int win_y = rect.top - t;
-        int win_w = (rect.right - rect.left) + 2 * t;
-        int win_h = (rect.bottom - rect.top) + 2 * t;
-
-        RECT border_rect = { win_x, win_y, win_x + win_w, win_y + win_h };
-
-        /*  Find intersections with GUI windows */
-        RECT intersections[16];
-        int intersect_count = 0;
-
-        for (int i = 0; i < gui_count && intersect_count < 16; i++)
+        RECT intersect;
+        if (IntersectRect (&intersect, &border_rect, &gui_rects[i]))
         {
-            RECT intersect;
-            if (IntersectRect (&intersect, &border_rect, &gui_rects[i]))
-            {
-                intersections[intersect_count++] = intersect;
-            }
+            intersections[intersect_count++] = intersect;
         }
-
-        bool geom_changed = memcmp (&rect, &b->last_rect, sizeof (RECT)) != 0;
-        bool shape_changed = geom_changed || (intersect_count != b->last_intersect_count);
-
-        if (!shape_changed && intersect_count > 0)
-        {
-            for (int k = 0; k < intersect_count; k++)
-            {
-                if (memcmp (&intersections[k], &b->last_intersections[k], sizeof (RECT))
-                    != 0)
-                {
-                    shape_changed = true;
-                    break;
-                }
-            }
-        }
-
-        if (shape_changed)
-        {
-            MoveWindow (b->overlay, win_x, win_y, win_w, win_h, TRUE);
-
-            /*  Apply region to exclude intersections */
-            HRGN full_rgn = CreateRectRgn (0, 0, win_w, win_h);
-
-            /*  Subtract middle (the target window itself) */
-            HRGN hollow_rgn = CreateRectRgn (t, t, win_w - t, win_h - t);
-            CombineRgn (full_rgn, full_rgn, hollow_rgn, RGN_DIFF);
-            DeleteObject (hollow_rgn);
-
-            /*  Subtract GUI intersections */
-            for (int i = 0; i < intersect_count; i++)
-            {
-                HRGN intersect_rgn = CreateRectRgn (
-                    intersections[i].left - win_x, intersections[i].top - win_y,
-                    intersections[i].right - win_x, intersections[i].bottom - win_y);
-                CombineRgn (full_rgn, full_rgn, intersect_rgn, RGN_DIFF);
-                DeleteObject (intersect_rgn);
-            }
-
-            SetWindowRgn (b->overlay, full_rgn, TRUE);
-
-            b->last_rect = rect;
-            b->last_intersect_count = intersect_count;
-            if (intersect_count > 0)
-            {
-                memcpy (b->last_intersections, intersections,
-                        intersect_count * sizeof (RECT));
-            }
-        }
-
-        if (!IsWindowVisible (b->overlay))
-            ShowWindow (b->overlay, SW_SHOWNOACTIVATE);
-
-        InvalidateRect (b->overlay, NULL, TRUE);
     }
+
+    bool geom_changed = memcmp (&d_rect, &b->last_rect, sizeof (RECT)) != 0;
+    bool shape_changed = geom_changed || (intersect_count != b->last_intersect_count);
+
+    if (!shape_changed && intersect_count > 0)
+    {
+        for (int k = 0; k < intersect_count; k++)
+        {
+            if (memcmp (&intersections[k], &b->last_intersections[k], sizeof (RECT)) != 0)
+            {
+                shape_changed = true;
+                break;
+            }
+        }
+    }
+
+    if (shape_changed)
+    {
+        SetWindowPos (b->overlay, NULL, win_x, win_y, win_w, win_h,
+                      SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOREDRAW);
+
+        // Hollow ring region: full rect minus the inner window area
+        HRGN full_rgn = CreateRectRgn (0, 0, win_w, win_h);
+        HRGN hollow_rgn = CreateRectRgn (t, t, win_w - t, win_h - t);
+        CombineRgn (full_rgn, full_rgn, hollow_rgn, RGN_DIFF);
+        DeleteObject (hollow_rgn);
+
+        // Subtract GUI intersections (converted to overlay-local coords)
+        for (int i = 0; i < intersect_count; i++)
+        {
+            HRGN ir = CreateRectRgn (
+                intersections[i].left - win_x, intersections[i].top - win_y,
+                intersections[i].right - win_x, intersections[i].bottom - win_y);
+            CombineRgn (full_rgn, full_rgn, ir, RGN_DIFF);
+            DeleteObject (ir);
+        }
+
+        SetWindowRgn (b->overlay, full_rgn, TRUE);
+
+        b->last_rect = d_rect;
+        b->last_intersect_count = intersect_count;
+        if (intersect_count > 0)
+            memcpy (b->last_intersections, intersections,
+                    intersect_count * sizeof (RECT));
+    }
+
+    if (!IsWindowVisible (b->overlay))
+        ShowWindow (b->overlay, SW_SHOWNOACTIVATE);
+
+    InvalidateRect (b->overlay, NULL, TRUE);
+
+    (void)shadow_right;
+    (void)shadow_bottom;
 }
 
 LRESULT CALLBACK
@@ -162,25 +177,25 @@ _border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
             HBRUSH brush = CreateSolidBrush (c);
 
             RECT r;
-            /*  Left */
+                        // Left
             r.left = 0;
             r.top = 0;
             r.right = t;
             r.bottom = rect.bottom;
             FillRect (hdc, &r, brush);
-            /*  Right */
+                        // Right
             r.left = rect.right - t;
             r.top = 0;
             r.right = rect.right;
             r.bottom = rect.bottom;
             FillRect (hdc, &r, brush);
-            /*  Top */
+                        // Top
             r.left = t;
             r.top = 0;
             r.right = rect.right - t;
             r.bottom = t;
             FillRect (hdc, &r, brush);
-            /*  Bottom */
+                        // Bottom
             r.left = t;
             r.top = rect.bottom - t;
             r.right = rect.right - t;
@@ -207,7 +222,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    /*  Check if already exists */
+        // Check if already exists
     for (int i = 0; i < data->border_count; i++)
     {
         if (data->borders[i] && data->borders[i]->target == window)
@@ -218,9 +233,8 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     }
 
     RECT rect;
-    if (FAILED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &rect,
-                                       sizeof (rect)))
-        && !GetWindowRect (window, &rect))
+    if (!SUCCEEDED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &rect,
+                                           sizeof (rect))))
     {
         GF_LOG_WARN ("Failed to get window rect for border");
         return;
@@ -252,6 +266,11 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
 
     data->borders[data->border_count++] = b;
 
+    // Force square corners so the rectangular border overlay sits flush
+    DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_DONOTROUND;
+    DwmSetWindowAttribute (window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner,
+                           sizeof (corner));
+
     GF_LOG_INFO ("Added border for window %p (color=0x%08X, thickness=%d, count=%d)",
                  window, color, thickness, data->border_count);
 
@@ -264,7 +283,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     if (!platform || !platform->platform_data || !config)
         return;
 
-    /*  Find all GUI windows geometries */
+        // Find all GUI windows geometries
     RECT gui_rects[16];
     int gui_count = 0;
 
@@ -290,7 +309,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    /*  Update all borders and prune dead ones */
+        // Update all borders and prune dead ones
     for (int i = 0; i < data->border_count;)
     {
         gf_border_t *b = data->borders[i];
@@ -308,8 +327,8 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         i++;
     }
 
-    /*  Process messages for border windows (they are created on this thread) */
-    /*  Limit to 10 messages per poll to avoid infinite spinning */
+        // Process messages for border windows (they are created on this thread)
+        // Limit to 10 messages per poll to avoid infinite spinning
     MSG msg;
     while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
     {
@@ -327,7 +346,7 @@ gf_border_set_color (gf_platform_t *platform, gf_color_t color)
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    /*  Update existing borders */
+        // Update existing borders
     for (int i = 0; i < data->border_count; i++)
     {
         gf_border_t *b = data->borders[i];
@@ -355,15 +374,20 @@ gf_border_remove (gf_platform_t *platform, gf_handle_t window)
         {
             gf_border_t *b = data->borders[i];
 
-            /*  Destroy overlay window */
+                        // Destroy overlay window
             if (b->overlay && IsWindow (b->overlay))
             {
                 DestroyWindow (b->overlay);
             }
 
+            /*  Restore default corner rounding when the border is removed */
+            DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_DEFAULT;
+            DwmSetWindowAttribute (window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner,
+                                   sizeof (corner));
+
             free (b);
 
-            /*  Shift remaining borders */
+                        // Shift remaining borders
             for (int j = i; j < data->border_count - 1; j++)
                 data->borders[j] = data->borders[j + 1];
 

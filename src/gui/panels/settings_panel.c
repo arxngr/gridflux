@@ -14,10 +14,6 @@ on_config_save_clicked (GtkButton *btn, gpointer data)
         = g_object_get_data (G_OBJECT (config_window), "max_windows_spin");
     GtkWidget *max_workspaces_spin
         = g_object_get_data (G_OBJECT (config_window), "max_workspaces_spin");
-    GtkWidget *default_padding_spin
-        = g_object_get_data (G_OBJECT (config_window), "default_padding_spin");
-    GtkWidget *min_window_size_spin
-        = g_object_get_data (G_OBJECT (config_window), "min_window_size_spin");
     GtkWidget *border_color_btn
         = g_object_get_data (G_OBJECT (config_window), "border_color_btn");
     GtkWidget *enable_borders_switch
@@ -27,14 +23,10 @@ on_config_save_clicked (GtkButton *btn, gpointer data)
         = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (max_windows_spin));
     config.max_workspaces
         = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (max_workspaces_spin));
-    config.default_padding
-        = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (default_padding_spin));
-    config.min_window_size
-        = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (min_window_size_spin));
 
     config.enable_borders = gtk_switch_get_active (GTK_SWITCH (enable_borders_switch));
 
-    /* GtkColorDialogButton stores the chosen colour as a GdkRGBA */
+        // GtkColorDialogButton stores the chosen colour as a GdkRGBA
     const GdkRGBA *color
         = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (border_color_btn));
     if (color)
@@ -75,15 +67,12 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     GtkWidget *form = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
     gtk_box_append (GTK_BOX (main), form);
 
-    const char *labels[] = { "Max Windows per Workspace:", "Max Workspaces:",
-                             "Default Padding:", "Min Window Size:" };
-    int values[] = { config.max_windows_per_workspace, config.max_workspaces,
-                     config.default_padding, config.min_window_size };
-    int ranges[][3] = { { 1, 20, 1 }, { 1, 50, 1 }, { 0, 50, 1 }, { 50, 500, 10 } };
-    const char *data_keys[] = { "max_windows_spin", "max_workspaces_spin",
-                                "default_padding_spin", "min_window_size_spin" };
+    const char *labels[] = { "Max Windows per Workspace:", "Max Workspaces:" };
+    int values[] = { config.max_windows_per_workspace, config.max_workspaces };
+    int ranges[][3] = { { 1, 20, 1 }, { 1, 50, 1 } };
+    const char *data_keys[] = { "max_windows_spin", "max_workspaces_spin" };
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 2; i++)
     {
         GtkWidget *l = gtk_label_new (labels[i]);
         gtk_widget_set_halign (l, GTK_ALIGN_START);
@@ -99,8 +88,8 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     gtk_widget_set_halign (color_label, GTK_ALIGN_START);
     gtk_box_append (GTK_BOX (form), color_label);
 
-    /* GTK 4.10+ deprecated GtkColorButton. Use GtkColorDialog +
-       GtkColorDialogButton instead — they open the native async chooser. */
+        // GTK 4.10+ deprecated GtkColorButton. Use GtkColorDialog +
+    // GtkColorDialogButton instead — they open the native async chooser.
     GdkRGBA rgba;
     rgba.red = ((config.border_color >> 16) & 0xFF) / 255.0;
     rgba.green = ((config.border_color >> 8) & 0xFF) / 255.0;
@@ -116,7 +105,7 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     g_object_set_data (G_OBJECT (config_window), "border_color_btn", color_btn);
     gtk_box_append (GTK_BOX (form), color_btn);
 
-    /* Enable Borders toggle */
+        // Enable Borders toggle
     GtkWidget *border_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_box_append (GTK_BOX (form), border_row);
 
@@ -129,7 +118,7 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     gtk_switch_set_active (GTK_SWITCH (border_switch), config.enable_borders);
     gtk_widget_set_halign (border_switch, GTK_ALIGN_END);
     g_object_set_data (G_OBJECT (config_window), "enable_borders_switch", border_switch);
-    /* Gray out color picker when borders are disabled */
+        // Gray out color picker when borders are disabled
     g_object_bind_property (border_switch, "active", color_btn, "sensitive",
                             G_BINDING_SYNC_CREATE);
     gtk_box_append (GTK_BOX (border_row), border_switch);

@@ -102,17 +102,17 @@ gf_wm_cleanup (gf_wm_t *m)
 
     gf_platform_t *platform = wm_platform (m);
 
-    /*  Clear all windows and workspaces from memory */
+        // Clear all windows and workspaces from memory
     gf_win_list_t *windows = wm_windows (m);
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
     GF_LOG_INFO ("Clearing %u windows and %u workspaces from memory", windows->count,
                  workspaces->count);
 
-    /*  Reset lists (items still allocated, will be freed in destroy) */
+        // Reset lists (items still allocated, will be freed in destroy)
     windows->count = 0;
     workspaces->count = 0;
-    /*  Reset state */
+        // Reset state
     for (int i = 0; i < GF_MAX_MONITORS; i++)
     {
         m->state.last_active_window[i] = 0;
@@ -120,14 +120,14 @@ gf_wm_cleanup (gf_wm_t *m)
         workspaces->active_workspace[i] = 0;
     }
 
-    /*  Cleanup keymap */
+        // Cleanup keymap
     if (m->state.keymap_initialized && platform->keymap_cleanup)
     {
         platform->keymap_cleanup (platform);
         m->state.keymap_initialized = false;
     }
 
-    /*  Restore dock if it was hidden (critical for program termination) */
+        // Restore dock if it was hidden (critical for program termination)
     if (m->state.dock_hidden && platform->dock_restore)
     {
         platform->dock_restore (platform);
@@ -138,7 +138,7 @@ gf_wm_cleanup (gf_wm_t *m)
     platform->cleanup (*wm_display (m), platform);
     m->state.initialized = false;
 
-    /*  Cleanup IPC server */
+        // Cleanup IPC server
     if (m->ipc_handle >= 0)
     {
         gf_ipc_server_destroy (m->ipc_handle);
@@ -197,7 +197,7 @@ gf_wm_load_cfg (gf_wm_t *m)
                 GF_LOG_INFO ("Borders enabled, adding to all valid windows...");
                 if (m->platform->border_cleanup)
                     m->platform->border_cleanup (m->platform);
-                /*  Get all windows from all workspaces to ensure we don't miss any */
+                                // Get all windows from all workspaces to ensure we don't miss any
                 for (gf_ws_id_t workspace = 0; workspace < GF_MAX_WORKSPACES; workspace++)
                 {
                     gf_win_info_t *workspace_windows = NULL;
@@ -219,7 +219,7 @@ gf_wm_load_cfg (gf_wm_t *m)
                     {
                         gf_win_info_t *win = &workspace_windows[i];
 
-                        /*  Check if window is valid and not excluded */
+                                                // Check if window is valid and not excluded
                         if (win->is_valid && !win->is_minimized
                             && !wm_is_excluded (m, win->id))
                         {
@@ -228,7 +228,7 @@ gf_wm_load_cfg (gf_wm_t *m)
 
                             if (m->platform->border_add)
                                 m->platform->border_add (m->platform, win->id,
-                                                         m->config->border_color, 3);
+                                                         m->config->border_color, GF_BORDER_WIDTH);
                         }
                         else
                         {
@@ -239,12 +239,12 @@ gf_wm_load_cfg (gf_wm_t *m)
                         }
                     }
 
-                    /*  Free the window list for this workspace */
+                                        // Free the window list for this workspace
                     if (workspace_windows)
                         gf_free (workspace_windows);
                 }
 
-                /*  Also check the current workspace windows list as a fallback */
+                                // Also check the current workspace windows list as a fallback
                 gf_win_list_t *current_windows = wm_windows (m);
                 GF_LOG_DEBUG ("Current workspace has %d additional windows",
                               current_windows->count);
@@ -255,13 +255,13 @@ gf_wm_load_cfg (gf_wm_t *m)
                     if (win->is_valid && !win->is_minimized
                         && !wm_is_excluded (m, win->id))
                     {
-                        /*  Check if border already exists to avoid duplicates */
+                                                // Check if border already exists to avoid duplicates
                         bool has_border = false;
-                        /*  This check will be handled by add_border function now */
+                                                // This check will be handled by add_border function now
 
                         if (m->platform->border_add)
                             m->platform->border_add (m->platform, win->id,
-                                                     m->config->border_color, 3);
+                                                     m->config->border_color, GF_BORDER_WIDTH);
                     }
                 }
             }
@@ -296,9 +296,9 @@ gf_wm_run (gf_wm_t *m)
         gf_wm_layout_rebalance (m);
         gf_wm_event (m);
 
-        /* Keymap must run AFTER gf_wm_event so that our workspace switch
-         * is not immediately undone by gf_wm_event reading the old focused
-         * window and switching back. */
+                // Keymap must run AFTER gf_wm_event so that our workspace switch
+        // is not immediately undone by gf_wm_event reading the old focused
+        // window and switching back.
         gf_wm_keymap_event (m);
 
         if (m->config->enable_borders && m->platform->border_update)

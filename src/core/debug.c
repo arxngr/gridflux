@@ -83,15 +83,15 @@ gf_wm_debug_stats (const gf_wm_t *m)
         }
         else
         {
-            /*  Workspace does not exist yet */
+                        // Workspace does not exist yet
             available = is_locked ? 0 : max_windows;
         }
 
-        /* ---- Workspace header ---- */
+                // ---- Workspace header ----
         GF_LOG_INFO ("WS %d %s %s  %u/%u  free=%d", i, is_locked ? "[LOCKED]" : "",
                      has_maximized ? "[MAX]" : "", count, max_windows, available);
 
-        /* ---- Windows in this workspace ---- */
+                // ---- Windows in this workspace ----
         for (uint32_t w = 0; w < windows->count; w++)
         {
             const gf_win_info_t *win = &windows->items[w];

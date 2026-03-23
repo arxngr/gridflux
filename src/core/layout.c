@@ -20,9 +20,6 @@ typedef struct
 static uint32_t
 get_padding (const gf_layout_engine_t *engine)
 {
-    if (engine->config)
-        return engine->config->default_padding;
-
     if (engine->engine_data)
         return ((layout_engine_t *)engine->engine_data)->padding;
 
@@ -153,7 +150,7 @@ gf_layout_engine_create (const gf_config_t *config)
     eng->base.engine_data = eng;
     eng->base.config = config;
 
-    eng->padding = config ? config->default_padding : GF_DEFAULT_PADDING;
+    eng->padding = GF_DEFAULT_PADDING;
     eng->min_window_size = config ? config->min_window_size : GF_MIN_WINDOW_SIZE;
 
     return &eng->base;
@@ -175,7 +172,7 @@ gf_layout_engine_create_grid (uint32_t columns, const gf_config_t *config)
     eng->base.config = config;
 
     eng->columns = columns ? columns : 2;
-    eng->padding = config ? config->default_padding : GF_DEFAULT_PADDING;
+    eng->padding = GF_DEFAULT_PADDING;
     eng->min_window_size = config ? config->min_window_size : GF_MIN_WINDOW_SIZE;
 
     return &eng->base;
@@ -213,7 +210,7 @@ gf_rect_apply_padding (gf_rect_t *r, uint32_t padding)
     if (!gf_rect_is_valid (r) || padding == 0)
         return;
 
-    /* Cap padding so it never consumes more than half the dimension */
+        // Cap padding so it never consumes more than half the dimension
     uint32_t pad_x = (padding * 2 < (uint32_t)r->width) ? padding : r->width / 4;
     uint32_t pad_y = (padding * 2 < (uint32_t)r->height) ? padding : r->height / 4;
 
@@ -229,8 +226,8 @@ gf_rect_ensure_minimum_size (gf_rect_t *r, uint32_t min_size)
     if (!r || min_size == 0)
         return;
 
-    /* Only enforce min_size if there is enough room; otherwise fit-to-cell.
-       This prevents windows being pushed off-screen on tiny displays. */
+        // Only enforce min_size if there is enough room; otherwise fit-to-cell.
+    // This prevents windows being pushed off-screen on tiny displays.
     if (r->width < min_size && r->width > 0)
         r->width = min_size;
     if (r->height < min_size && r->height > 0)
