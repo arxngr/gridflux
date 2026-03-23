@@ -26,7 +26,7 @@ on_config_save_clicked (GtkButton *btn, gpointer data)
 
     config.enable_borders = gtk_switch_get_active (GTK_SWITCH (enable_borders_switch));
 
-        // GtkColorDialogButton stores the chosen colour as a GdkRGBA
+    // GtkColorDialogButton stores the chosen colour as a GdkRGBA
     const GdkRGBA *color
         = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (border_color_btn));
     if (color)
@@ -88,7 +88,7 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     gtk_widget_set_halign (color_label, GTK_ALIGN_START);
     gtk_box_append (GTK_BOX (form), color_label);
 
-        // GTK 4.10+ deprecated GtkColorButton. Use GtkColorDialog +
+    // GTK 4.10+ deprecated GtkColorButton. Use GtkColorDialog +
     // GtkColorDialogButton instead — they open the native async chooser.
     GdkRGBA rgba;
     rgba.red = ((config.border_color >> 16) & 0xFF) / 255.0;
@@ -105,7 +105,7 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     g_object_set_data (G_OBJECT (config_window), "border_color_btn", color_btn);
     gtk_box_append (GTK_BOX (form), color_btn);
 
-        // Enable Borders toggle
+    // Enable Borders toggle
     GtkWidget *border_row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_box_append (GTK_BOX (form), border_row);
 
@@ -118,7 +118,7 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     gtk_switch_set_active (GTK_SWITCH (border_switch), config.enable_borders);
     gtk_widget_set_halign (border_switch, GTK_ALIGN_END);
     g_object_set_data (G_OBJECT (config_window), "enable_borders_switch", border_switch);
-        // Gray out color picker when borders are disabled
+    // Gray out color picker when borders are disabled
     g_object_bind_property (border_switch, "active", color_btn, "sensitive",
                             G_BINDING_SYNC_CREATE);
     gtk_box_append (GTK_BOX (border_row), border_switch);

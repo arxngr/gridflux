@@ -24,12 +24,12 @@ typedef struct
     gf_monitor_t monitors[GF_MAX_MONITORS];
     uint32_t enumerated_monitor_count;
 
-        // Dock auto-hide state
+    // Dock auto-hide state
     Window saved_dock_windows[GF_MAX_DOCK_WINDOWS];
     int saved_dock_count;
     bool dock_hidden;
 
-        // Keymap state
+    // Keymap state
     bool keymap_initialized;
     int xi_opcode;
 } gf_linux_platform_data_t;

@@ -10,8 +10,7 @@ get_app_icon_for_card (const char *wm_class)
     if (!wm_class || wm_class[0] == '\0')
         return NULL;
 
-    GtkIconTheme *theme
-        = gtk_icon_theme_get_for_display (gdk_display_get_default ());
+    GtkIconTheme *theme = gtk_icon_theme_get_for_display (gdk_display_get_default ());
 
     char lower[256];
     size_t i;
@@ -27,9 +26,8 @@ get_app_icon_for_card (const char *wm_class)
     {
         if (gtk_icon_theme_has_icon (theme, tries[t]))
         {
-            GtkIconPaintable *icon
-                = gtk_icon_theme_lookup_icon (theme, tries[t], NULL, 16, 1,
-                                              GTK_TEXT_DIR_NONE, 0);
+            GtkIconPaintable *icon = gtk_icon_theme_lookup_icon (
+                theme, tries[t], NULL, 16, 1, GTK_TEXT_DIR_NONE, 0);
             if (icon)
                 return GDK_PAINTABLE (icon);
         }
@@ -42,7 +40,7 @@ get_app_icon_for_card (const char *wm_class)
 
 void
 gf_gui_workspace_card_add_to_grid (GtkGrid *grid, gf_ws_info_t *ws,
-                                    const gf_win_list_t *windows, int row)
+                                   const gf_win_list_t *windows, int row)
 {
     char id_str[16];
     snprintf (id_str, sizeof (id_str), "%d", ws->id);
@@ -56,13 +54,15 @@ gf_gui_workspace_card_add_to_grid (GtkGrid *grid, gf_ws_info_t *ws,
     gtk_widget_add_css_class (l2, "table-cell");
     gtk_grid_attach (grid, l2, 1, row, 1, 1);
 
-        // Build scrollable window class list for this workspace
+    // Build scrollable window class list for this workspace
     GtkWidget *scrolled = gtk_scrolled_window_new ();
-    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_scrolled_window_set_propagate_natural_height (GTK_SCROLLED_WINDOW (scrolled), TRUE);
+    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER,
+                                    GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_propagate_natural_height (GTK_SCROLLED_WINDOW (scrolled),
+                                                      TRUE);
     gtk_scrolled_window_set_max_content_height (GTK_SCROLLED_WINDOW (scrolled), 150);
-    
-        // Explicitly demand width from the grid
+
+    // Explicitly demand width from the grid
     gtk_widget_set_size_request (scrolled, 250, -1);
     gtk_widget_set_hexpand (scrolled, TRUE);
 
@@ -84,7 +84,7 @@ gf_gui_workspace_card_add_to_grid (GtkGrid *grid, gf_ws_info_t *ws,
                 continue;
 
             GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-            
+
             GdkPaintable *icon = get_app_icon_for_card (name);
             if (icon)
             {
