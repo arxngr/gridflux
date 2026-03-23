@@ -338,6 +338,9 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
 
     int screen_count = 0;
     XineramaScreenInfo *screens = XineramaQueryScreens (display, &screen_count);
+    bool found = false;
+
+    // Get Physical Geometry from Xinerama
     if (screens)
     {
         for (int i = 0; i < screen_count; i++)
@@ -348,56 +351,71 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
                 bounds->y = screens[i].y_org;
                 bounds->width = screens[i].width;
                 bounds->height = screens[i].height;
-                XFree (screens);
-
-                // Apply struts to the physical monitor bounds
-                int screen = DefaultScreen (display);
-                Window root = DefaultRootWindow (display);
-                Screen *scr = ScreenOfDisplay (display, screen);
-                int sw = scr->width;
-                int sh = scr->height;
-
-                int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
-                gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
-                _gf_get_global_struts (display, root, atoms, &panel_left, &panel_right,
-                                       &panel_top, &panel_bottom);
-
-                if (panel_top > 0 || panel_bottom > 0 || panel_left > 0
-                    || panel_right > 0)
-                {
-                    int new_x = panel_left;
-                    int new_y = panel_top;
-                    int new_w = sw - panel_left - panel_right;
-                    int new_h = sh - panel_top - panel_bottom;
-
-                    // Prefer the "smaller" area (most restrictive)
-                    // Intersect monitor physical bounds with the strut-reduced global
-                    // bounds
-                    if (new_x > bounds->x)
-                    {
-                        bounds->width -= (new_x - bounds->x);
-                        bounds->x = new_x;
-                    }
-                    if (new_y > bounds->y)
-                    {
-                        bounds->height -= (new_y - bounds->y);
-                        bounds->y = new_y;
-                    }
-                    if (bounds->x + bounds->width > new_x + new_w)
-                    {
-                        bounds->width = (new_x + new_w) - bounds->x;
-                    }
-                    if (bounds->y + bounds->height > new_y + new_h)
-                    {
-                        bounds->height = (new_y + new_h) - bounds->y;
-                    }
-                }
-
-                return GF_SUCCESS;
+                found = true;
+                break;
             }
         }
         XFree (screens);
     }
 
-    return gf_screen_get_bounds (display, bounds);
+    if (!found)
+    {
+        return gf_screen_get_bounds (display, bounds);
+    }
+
+    // Get the "Global Safe Zone" via gf_platform_get_window_property
+    Window root = DefaultRootWindow (display);
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    unsigned char *data = NULL;
+    unsigned long nitems = 0;
+
+    // Default the safe zone to the whole display in case the property fails
+    int safe_x = 0, safe_y = 0;
+    int safe_w = DisplayWidth (display, DefaultScreen (display));
+    int safe_h = DisplayHeight (display, DefaultScreen (display));
+
+    if (gf_platform_get_window_property (display, root, atoms->net_workarea, XA_CARDINAL,
+                                         &data, &nitems)
+        == GF_SUCCESS)
+    {
+        if (data && nitems >= 4)
+        {
+            // _NET_WORKAREA is an array of 4 longs per workspace
+            long *workareas = (long *)data;
+            gf_ws_id_t workspace = gf_workspace_get_current (display);
+            unsigned long offset = workspace * 4;
+
+            if (offset + 3 < nitems)
+            {
+                safe_x = (int)workareas[offset];
+                safe_y = (int)workareas[offset + 1];
+                safe_w = (int)workareas[offset + 2];
+                safe_h = (int)workareas[offset + 3];
+            }
+        }
+    }
+
+    if (data)
+        XFree (data);
+
+    // Clip the physical monitor against the global safe zone
+    // This is the logic that supports multiple monitors of different sizes
+    int monitor_right = bounds->x + bounds->width;
+    int monitor_bottom = bounds->y + bounds->height;
+    int safe_right = safe_x + safe_w;
+    int safe_bottom = safe_y + safe_h;
+
+    // Calculate the overlap
+    int final_x = (bounds->x > safe_x) ? bounds->x : safe_x;
+    int final_y = (bounds->y > safe_y) ? bounds->y : safe_y;
+    int final_r = (monitor_right < safe_right) ? monitor_right : safe_right;
+    int final_b = (monitor_bottom < safe_bottom) ? monitor_bottom : safe_bottom;
+
+    // Final assignment with safety checks
+    bounds->x = final_x;
+    bounds->y = final_y;
+    bounds->width = (final_r > final_x) ? (final_r - final_x) : 0;
+    bounds->height = (final_b > final_y) ? (final_b - final_y) : 0;
+
+    return GF_SUCCESS;
 }
