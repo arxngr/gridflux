@@ -17,7 +17,6 @@ struct gf_config
 {
     uint32_t max_windows_per_workspace;
     uint32_t max_workspaces;
-    uint32_t default_padding;
     uint32_t min_window_size;
     uint32_t border_color;
     bool enable_borders;

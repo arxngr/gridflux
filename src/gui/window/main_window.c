@@ -159,10 +159,8 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
 
 #ifdef _WIN32
     // hide to tray instead of quitting when the user clicks X
-    g_signal_connect (
-        widgets->window, "close-request",
-        G_CALLBACK (on_close_request_hide),
-        NULL);
+    g_signal_connect (widgets->window, "close-request",
+                      G_CALLBACK (on_close_request_hide), NULL);
 #endif
 
     GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
