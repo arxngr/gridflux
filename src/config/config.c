@@ -22,7 +22,6 @@
 static const gf_config_t DEFAULT_CONFIG
     = { .max_windows_per_workspace = GF_MAX_WINDOWS_PER_WORKSPACE,
         .max_workspaces = GF_MAX_WORKSPACES,
-        .default_padding = GF_DEFAULT_PADDING,
         .min_window_size = GF_MIN_WINDOW_SIZE,
         .border_color = 0x00F49D2A,
         .enable_borders = true,

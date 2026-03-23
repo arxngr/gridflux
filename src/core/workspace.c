@@ -480,7 +480,7 @@ _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
     workspaces->active_workspace[win->monitor_id] = win->workspace_id;
 
     if (m->config->enable_borders && platform->border_add)
-        platform->border_add (platform, win->id, m->config->border_color, 3);
+        platform->border_add (platform, win->id, m->config->border_color, GF_BORDER_WIDTH);
 
     for (uint32_t i = 0; i < workspaces->count; i++)
     {

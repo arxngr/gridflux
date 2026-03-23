@@ -172,7 +172,7 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
         if (m->config->enable_borders && !win->is_maximized && platform->border_add
             && !wm_is_excluded (m, win->id))
         {
-            platform->border_add (platform, win->id, m->config->border_color, 3);
+            platform->border_add (platform, win->id, m->config->border_color, GF_BORDER_WIDTH);
         }
     }
 
@@ -195,7 +195,7 @@ _unminimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_
                 if (m->config->enable_borders && !win->is_maximized
                     && platform->border_add && !wm_is_excluded (m, win->id))
                 {
-                    platform->border_add (platform, win->id, m->config->border_color, 3);
+                    platform->border_add (platform, win->id, m->config->border_color, GF_BORDER_WIDTH);
                 }
                 break;
             }
