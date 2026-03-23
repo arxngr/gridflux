@@ -51,18 +51,18 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
     hollow_rect.width = frame_w;
     hollow_rect.height = frame_h;
 
-    /* Use an explicit full-window rectangle for ShapeSet instead of
-     * XShapeCombineMask(..., None, ...) which can be unreliable on some
-     * compositors. */
+        // Use an explicit full-window rectangle for ShapeSet instead of
+    // XShapeCombineMask(..., None, ...) which can be unreliable on some
+    // compositors.
     XRectangle full_rect = { 0, 0, (unsigned short)w, (unsigned short)h };
     XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, &full_rect, 1, ShapeSet,
                              Unsorted);
 
-    /* Carve out the interior so only the border ring remains. */
+        // Carve out the interior so only the border ring remains.
     XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0, &hollow_rect, 1,
                              ShapeSubtract, Unsorted);
 
-    /* Remove the regions covered by excluded/always-on-top windows. */
+        // Remove the regions covered by excluded/always-on-top windows.
     if (sub_count > 0 && sub_rects)
     {
         XShapeCombineRectangles (dpy, overlay, ShapeBounding, 0, 0,
@@ -70,7 +70,7 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
                                  Unsorted);
     }
 
-    /* Make the entire overlay click-through (empty input region). */
+        // Make the entire overlay click-through (empty input region).
     XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, &full_rect, 0, ShapeSet,
                              Unsorted);
     XSync (dpy, False);
@@ -105,7 +105,7 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
         return None;
     }
 
-    /*  Validate geometry */
+        // Validate geometry
     if (frame.width <= 0 || frame.height <= 0 || thickness < 0)
     {
         GF_LOG_ERROR ("Invalid geometry for border overlay: w=%d, h=%d, thickness=%d",
@@ -169,14 +169,14 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
         return;
     }
 
-    /*  Check if border already exists for this window */
+        // Check if border already exists for this window
     for (int i = 0; i < data->border_count; i++)
     {
         if (data->borders[i] && data->borders[i]->target == (Window)window)
         {
             GF_LOG_INFO ("Border already exists for window %lu, updating color",
                          (unsigned long)window);
-            /*  Update existing border color */
+                        // Update existing border color
             gf_border_t *border = data->borders[i];
             border->color = color;
             if (border->overlay)
@@ -212,7 +212,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     border->thickness = thickness;
     border->last_intersect_count = 0;
 
-    /*  Init last_rect */
+        // Init last_rect
     XWindowAttributes attrs;
     if (XGetWindowAttributes (data->display, (Window)window, &attrs))
     {
@@ -222,7 +222,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
         XTranslateCoordinates (data->display, (Window)window, root, 0, 0, &abs_x, &abs_y,
                                &child);
 
-        /*  Store Frame Geometry as last_rect */
+                // Store Frame Geometry as last_rect
         int left_ext = 0, right_ext = 0, top_ext = 0, bottom_ext = 0;
         bool is_csd = false;
         gf_platform_get_frame_extents (data->display, (Window)window, &left_ext,
@@ -315,6 +315,7 @@ gf_border_remove (gf_platform_t *platform, gf_handle_t window)
 
             gf_free (data->borders[i]);
 
+                        // Shift
             for (int j = i; j < data->border_count - 1; j++)
                 data->borders[j] = data->borders[j + 1];
 
@@ -334,7 +335,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     Display *dpy = data->display;
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
 
-    /*  Find all GUI windows geometries */
+        // Find all GUI windows geometries
     gf_rect_t gui_geoms[16];
     int gui_count = 0;
 
@@ -373,10 +374,10 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         XWindowAttributes attrs;
         if (!XGetWindowAttributes (dpy, b->target, &attrs))
         {
-            /*  Window is definitely gone - removing */
+                        // Window is definitely gone - removing
             XDestroyWindow (dpy, b->overlay);
             gf_free (b);
-            /*  Shift array */
+                        // Shift array
             for (int j = i; j < data->border_count - 1; j++)
                 data->borders[j] = data->borders[j + 1];
             data->border_count--;
@@ -393,7 +394,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
 
         XMapWindow (dpy, b->overlay);
 
-        /*  Update Color dynamically */
+                // Update Color dynamically
         if (b->color != config->border_color)
         {
             b->color = config->border_color;
@@ -416,7 +417,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         int win_w = frame.width + 2 * thickness;
         int win_h = frame.height + 2 * thickness;
 
-        /*  Find intersections with GUI windows to subtract from shape */
+                // Find intersections with GUI windows to subtract from shape
         XRectangle intersections[16];
         int intersect_count = 0;
         gf_rect_t border_rect = { win_x, win_y, win_w, win_h };
