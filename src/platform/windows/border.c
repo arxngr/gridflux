@@ -47,7 +47,7 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
     int cloaked = 0;
     DwmGetWindowAttribute (b->target, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
 
-        // Hide border if target is not visible, cloaked, minimized, or maximized
+    // Hide border if target is not visible, cloaked, minimized, or maximized
     if (!IsWindowVisible (b->target) || cloaked || IsIconic (b->target)
         || IsZoomed (b->target))
     {
@@ -55,7 +55,6 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
         return;
     }
 
-    /*  Get the true visible bounds (no DWM shadow) */
     RECT d_rect;
     if (!SUCCEEDED (DwmGetWindowAttribute (b->target, DWMWA_EXTENDED_FRAME_BOUNDS,
                                            &d_rect, sizeof (d_rect))))
@@ -177,25 +176,25 @@ _border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
             HBRUSH brush = CreateSolidBrush (c);
 
             RECT r;
-                        // Left
+            // Left
             r.left = 0;
             r.top = 0;
             r.right = t;
             r.bottom = rect.bottom;
             FillRect (hdc, &r, brush);
-                        // Right
+            // Right
             r.left = rect.right - t;
             r.top = 0;
             r.right = rect.right;
             r.bottom = rect.bottom;
             FillRect (hdc, &r, brush);
-                        // Top
+            // Top
             r.left = t;
             r.top = 0;
             r.right = rect.right - t;
             r.bottom = t;
             FillRect (hdc, &r, brush);
-                        // Bottom
+            // Bottom
             r.left = t;
             r.top = rect.bottom - t;
             r.right = rect.right - t;
@@ -222,7 +221,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-        // Check if already exists
+    // Check if already exists
     for (int i = 0; i < data->border_count; i++)
     {
         if (data->borders[i] && data->borders[i]->target == window)
@@ -283,7 +282,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     if (!platform || !platform->platform_data || !config)
         return;
 
-        // Find all GUI windows geometries
+    // Find all GUI windows geometries
     RECT gui_rects[16];
     int gui_count = 0;
 
@@ -309,7 +308,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-        // Update all borders and prune dead ones
+    // Update all borders and prune dead ones
     for (int i = 0; i < data->border_count;)
     {
         gf_border_t *b = data->borders[i];
@@ -327,8 +326,8 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         i++;
     }
 
-        // Process messages for border windows (they are created on this thread)
-        // Limit to 10 messages per poll to avoid infinite spinning
+    // Process messages for border windows (they are created on this thread)
+    // Limit to 10 messages per poll to avoid infinite spinning
     MSG msg;
     while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
     {
@@ -346,7 +345,7 @@ gf_border_set_color (gf_platform_t *platform, gf_color_t color)
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-        // Update existing borders
+    // Update existing borders
     for (int i = 0; i < data->border_count; i++)
     {
         gf_border_t *b = data->borders[i];
@@ -374,20 +373,20 @@ gf_border_remove (gf_platform_t *platform, gf_handle_t window)
         {
             gf_border_t *b = data->borders[i];
 
-                        // Destroy overlay window
+            // Destroy overlay window
             if (b->overlay && IsWindow (b->overlay))
             {
                 DestroyWindow (b->overlay);
             }
 
-            /*  Restore default corner rounding when the border is removed */
+            //  Restore default corner rounding when the border is removed
             DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_DEFAULT;
             DwmSetWindowAttribute (window, DWMWA_WINDOW_CORNER_PREFERENCE, &corner,
                                    sizeof (corner));
 
             free (b);
 
-                        // Shift remaining borders
+            // Shift remaining borders
             for (int j = i; j < data->border_count - 1; j++)
                 data->borders[j] = data->borders[j + 1];
 
