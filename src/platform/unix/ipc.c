@@ -223,4 +223,4 @@ gf_ipc_client_disconnect (gf_ipc_handle_t handle)
     }
 }
 
-#endif /* __unix__ */
+#endif // __unix__
