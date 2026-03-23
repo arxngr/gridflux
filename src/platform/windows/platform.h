@@ -39,8 +39,7 @@ gf_err_t gf_workspace_create_native (gf_display_t display);
 gf_err_t gf_screen_get_bounds (gf_display_t display, gf_rect_t *bounds);
 bool gf_window_is_valid (gf_display_t display, gf_handle_t window);
 bool gf_window_is_excluded (gf_display_t display, gf_handle_t window);
-gf_err_t gf_platform_is_window_drag (gf_display_t display, gf_handle_t window,
-                                     gf_rect_t *geometry);
+
 gf_handle_t gf_window_get_focused (gf_display_t display);
 gf_err_t gf_window_minimize (gf_display_t display, gf_handle_t window);
 gf_err_t gf_window_unminimize (gf_display_t display, gf_handle_t window);
