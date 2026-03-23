@@ -5,8 +5,10 @@
 #ifdef _WIN32
 #include "window/tray.h"
 #endif
+#include <string.h>
 
 static gf_app_state_t *g_widgets = NULL;
+static gboolean g_start_minimized = FALSE;
 
 static void
 gf_gtk_activate (GtkApplication *app, gpointer user_data)
@@ -23,6 +25,10 @@ gf_gtk_activate (GtkApplication *app, gpointer user_data)
 
 #ifdef _WIN32
     gf_gui_tray_init (g_widgets);
+
+    // if started with --minimized, hide window and keep only tray icon
+    if (g_start_minimized)
+        gtk_widget_set_visible (g_widgets->window, FALSE);
 #endif
 }
 
@@ -40,6 +46,16 @@ gf_gtk_shutdown (GtkApplication *app, gpointer user_data)
 int
 main (int argc, char **argv)
 {
+    // check for --minimized flag
+    for (int i = 1; i < argc; i++)
+    {
+        if (strcmp (argv[i], "--minimized") == 0 || strcmp (argv[i], "-m") == 0)
+        {
+            g_start_minimized = TRUE;
+            break;
+        }
+    }
+
     GtkApplication *app
         = gtk_application_new ("dev.gridflux.gui", G_APPLICATION_DEFAULT_FLAGS);
 

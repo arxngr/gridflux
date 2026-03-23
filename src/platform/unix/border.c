@@ -245,6 +245,23 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     }
 
     data->borders[data->border_count++] = border;
+
+    //  Force square corners: set a rectangular ShapeBounding on the target window.
+    //  Compositors (picom, compton, etc.) respect the X Shape extension and will
+    //  not apply rounding to windows that have an explicit bounding shape.
+    int shape_event, shape_error;
+    if (XShapeQueryExtension (data->display, &shape_event, &shape_error))
+    {
+        XWindowAttributes wa;
+        if (XGetWindowAttributes (data->display, (Window)window, &wa))
+        {
+            XRectangle rect
+                = { 0, 0, (unsigned short)wa.width, (unsigned short)wa.height };
+            XShapeCombineRectangles (data->display, (Window)window, ShapeBounding, 0, 0,
+                                     &rect, 1, ShapeSet, Unsorted);
+        }
+    }
+
     XFlush (data->display);
     GF_LOG_INFO ("Border added for window %lu (overlay %lu)", (unsigned long)window,
                  (unsigned long)overlay);
@@ -287,6 +304,15 @@ gf_border_remove (gf_platform_t *platform, gf_handle_t window)
         {
             if (data->borders[i]->overlay)
                 XDestroyWindow (data->display, data->borders[i]->overlay);
+
+            // Restore compositor rounding by removing the explicit bounding shape
+            {
+                int shape_event, shape_error;
+                if (XShapeQueryExtension (data->display, &shape_event, &shape_error))
+                    XShapeCombineMask (data->display, target, ShapeBounding, 0, 0, None,
+                                       ShapeSet);
+            }
+
             gf_free (data->borders[i]);
 
                         // Shift
@@ -324,10 +350,8 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         for (unsigned long i = 0; i < nitems && gui_count < 16; i++)
         {
             if (_window_excluded_border (dpy, clients[i])
-                && !_window_has_type (dpy, clients[i],
-                                     atoms->net_wm_window_type_desktop)
-                && !_window_has_type (dpy, clients[i],
-                                     atoms->net_wm_window_type_dock))
+                && !_window_has_type (dpy, clients[i], atoms->net_wm_window_type_desktop)
+                && !_window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
             {
                 if (_get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
                 {

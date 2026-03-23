@@ -11,6 +11,7 @@
 // clang-format on
 
 #define GF_SERVER_EXE_W L"gridflux.exe"
+#define GF_LAUNCHER_EXE_W L"gridflux-launcher.exe"
 
 static DWORD
 find_server_pid (void)
@@ -48,6 +49,21 @@ get_exe_dir (wchar_t *buf, DWORD buf_len)
 }
 
 static BOOL
+is_pipe_available (void)
+{
+    // try to open the gridflux IPC pipe — if it exists, the server is running
+    HANDLE pipe = CreateFileA ("\\\\.\\pipe\\gridflux", GENERIC_READ | GENERIC_WRITE, 0,
+                               NULL, OPEN_EXISTING, 0, NULL);
+    if (pipe != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle (pipe);
+        return TRUE;
+    }
+    // ERROR_PIPE_BUSY means the pipe exists but all instances are busy
+    return GetLastError () == ERROR_PIPE_BUSY;
+}
+
+static BOOL
 is_elevated (void)
 {
     BOOL elevated = FALSE;
@@ -66,6 +82,10 @@ is_elevated (void)
 bool
 gf_server_is_running (void)
 {
+    // prefer IPC pipe check — works reliably across elevation boundaries
+    if (is_pipe_available ())
+        return true;
+    // fallback to process enumeration
     return find_server_pid () != 0;
 }
 
@@ -76,17 +96,40 @@ gf_server_start (void)
         return true; // already running
 
     wchar_t dir[MAX_PATH] = { 0 };
-    wchar_t exe_path[MAX_PATH] = { 0 };
-
     get_exe_dir (dir, MAX_PATH);
+
+    // prefer starting via the launcher (handles elevation + restart-on-crash)
+    wchar_t launcher_path[MAX_PATH] = { 0 };
+    _snwprintf (launcher_path, MAX_PATH, L"%s" GF_LAUNCHER_EXE_W, dir);
+
+    if (GetFileAttributesW (launcher_path) != INVALID_FILE_ATTRIBUTES)
+    {
+        // launcher runs as asInvoker and handles elevation internally
+        wchar_t cmd[MAX_PATH + 4] = { 0 };
+        _snwprintf (cmd, MAX_PATH + 4, L"\"%s\"", launcher_path);
+
+        STARTUPINFOW si = { .cb = sizeof (si) };
+        PROCESS_INFORMATION pi = { 0 };
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
+
+        BOOL ok = CreateProcessW (launcher_path, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW,
+                                  NULL, dir, &si, &pi);
+        if (ok)
+        {
+            CloseHandle (pi.hThread);
+            CloseHandle (pi.hProcess);
+            return true;
+        }
+    }
+
+    // fallback: start gridflux.exe directly if launcher not found
+    wchar_t exe_path[MAX_PATH] = { 0 };
     _snwprintf (exe_path, MAX_PATH, L"%s" GF_SERVER_EXE_W, dir);
 
     if (GetFileAttributesW (exe_path) == INVALID_FILE_ATTRIBUTES)
         return false; // executable not found
 
-    // gridflux.exe has requireAdministrator in its manifest.
-    // If we are already elevated, use CreateProcessW (no UAC prompt).
-    // Otherwise, use ShellExecuteExW with "runas" to request elevation.
     if (is_elevated ())
     {
         wchar_t cmd[MAX_PATH + 4] = { 0 };
@@ -97,8 +140,8 @@ gf_server_start (void)
         si.dwFlags = STARTF_USESHOWWINDOW;
         si.wShowWindow = SW_HIDE;
 
-        BOOL ok = CreateProcessW (exe_path, cmd, NULL, NULL, FALSE,
-                                  CREATE_NO_WINDOW, NULL, dir, &si, &pi);
+        BOOL ok = CreateProcessW (exe_path, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW,
+                                  NULL, dir, &si, &pi);
         if (!ok)
             return false;
 
@@ -122,9 +165,40 @@ gf_server_start (void)
     return true;
 }
 
+static void
+terminate_process_by_name (const wchar_t *name)
+{
+    HANDLE snap = CreateToolhelp32Snapshot (TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE)
+        return;
+
+    PROCESSENTRY32W pe = { .dwSize = sizeof (pe) };
+    if (Process32FirstW (snap, &pe))
+    {
+        do
+        {
+            if (_wcsicmp (pe.szExeFile, name) == 0)
+            {
+                HANDLE proc = OpenProcess (PROCESS_TERMINATE | SYNCHRONIZE, FALSE,
+                                           pe.th32ProcessID);
+                if (proc)
+                {
+                    TerminateProcess (proc, 0);
+                    WaitForSingleObject (proc, 3000);
+                    CloseHandle (proc);
+                }
+            }
+        } while (Process32NextW (snap, &pe));
+    }
+    CloseHandle (snap);
+}
+
 bool
 gf_server_stop (void)
 {
+    // kill the launcher first so it can't restart gridflux.exe
+    terminate_process_by_name (GF_LAUNCHER_EXE_W);
+
     DWORD pid = find_server_pid ();
     if (pid == 0)
         return false; // not running

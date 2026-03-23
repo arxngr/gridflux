@@ -228,7 +228,7 @@ gf_wm_load_cfg (gf_wm_t *m)
 
                             if (m->platform->border_add)
                                 m->platform->border_add (m->platform, win->id,
-                                                         m->config->border_color, 3);
+                                                         m->config->border_color, GF_BORDER_WIDTH);
                         }
                         else
                         {
@@ -261,7 +261,7 @@ gf_wm_load_cfg (gf_wm_t *m)
 
                         if (m->platform->border_add)
                             m->platform->border_add (m->platform, win->id,
-                                                     m->config->border_color, 3);
+                                                     m->config->border_color, GF_BORDER_WIDTH);
                     }
                 }
             }

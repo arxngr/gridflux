@@ -50,6 +50,7 @@ typedef void (*gf_window_destroy_callback_t) (gf_handle_t window, void *user_dat
 #define GF_MAX_MONITORS 16
 #define GF_FIRST_WORKSPACE_ID 1
 #define GF_DEFAULT_PADDING 10
+#define GF_BORDER_WIDTH 4
 #define GF_MIN_WINDOW_SIZE 300
 
 // Error codes
