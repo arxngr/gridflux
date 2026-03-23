@@ -51,7 +51,7 @@ typedef void (*gf_window_destroy_callback_t) (gf_handle_t window, void *user_dat
 #define GF_FIRST_WORKSPACE_ID 1
 #define GF_DEFAULT_PADDING 8
 #define GF_BORDER_WIDTH 4
-#define GF_MIN_WINDOW_SIZE 300
+#define GF_MIN_WINDOW_SIZE 50
 
 // Error codes
 typedef enum
