@@ -80,6 +80,10 @@ gf_wm_layout_apply (gf_wm_t *m)
     if (!m)
         return GF_ERROR_INVALID_PARAMETER;
 
+    // Suppress layout while user is actively resizing
+    if (m->state.resize_active)
+        return GF_SUCCESS;
+
     gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_win_list_t *windows = wm_windows (m);
     gf_platform_t *platform = wm_platform (m);
@@ -257,7 +261,10 @@ gf_wm_apply_layout (gf_wm_t *m, gf_win_info_t *windows, gf_rect_t *geometry,
         if (wm_is_excluded (m, windows[i].id))
             continue;
 
-        if (windows[i].is_minimized || !windows[i].needs_update && !windows[i].is_valid)
+        if (!windows[i].needs_update)
+            continue;
+
+        if (windows[i].is_minimized || !windows[i].is_valid)
             continue;
 
         gf_err_t result = platform->window_set_geometry (

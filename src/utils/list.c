@@ -130,12 +130,19 @@ gf_window_list_update (gf_win_list_t *list, const gf_win_info_t *window)
                     || existing->geometry.height != window->geometry.height
                     || existing->workspace_id != window->workspace_id);
 
+    // Save the needs_update flag before the struct copy overwrites it.
+    // The platform-enumerated window data has needs_update = false,
+    // but we may have set it to true (e.g. when a new window was added).
+    bool was_pending = existing->needs_update;
+
     *existing = *window;
+
+    // Restore: keep true if it was already pending, or if geometry changed
+    existing->needs_update = was_pending || changed;
 
     if (changed)
     {
         existing->last_modified = time (NULL);
-        existing->needs_update = true;
     }
 
     return GF_SUCCESS;

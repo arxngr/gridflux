@@ -20,6 +20,7 @@ typedef struct
     bool initialized;
     bool dock_hidden;
     bool keymap_initialized;
+    bool resize_active;
 } gf_wm_state_t;
 
 typedef struct
@@ -46,6 +47,7 @@ gf_err_t gf_wm_run (gf_wm_t *manager);
 void gf_wm_event (gf_wm_t *manager);
 void gf_wm_watch (gf_wm_t *m);
 void gf_wm_keymap_event (gf_wm_t *m);
+void gf_wm_resize_event (gf_wm_t *m);
 
 // --- Layout Management ---
 void gf_wm_apply_layout (gf_wm_t *m, gf_win_info_t *windows, gf_rect_t *geometry,

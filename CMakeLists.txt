@@ -166,7 +166,12 @@ add_executable(gridflux
 )
 
 if(WIN32)
-    target_sources(gridflux PRIVATE ${CMAKE_SOURCE_DIR}/gridflux.rc)
+    if(GF_DEV_MODE)
+        # Dev mode: use asInvoker manifest so debugger can launch without elevation
+        target_sources(gridflux PRIVATE ${CMAKE_SOURCE_DIR}/gridflux.dev.rc)
+    else()
+        target_sources(gridflux PRIVATE ${CMAKE_SOURCE_DIR}/gridflux.rc)
+    endif()
     add_executable(gridflux-launcher WIN32
         src/launcher/win32.c
         src/launcher/gridflux-launcher.rc
@@ -191,6 +196,7 @@ add_executable(gridflux-cli
     src/utils/logger.c
     src/config/config.c
     src/core/layout.c
+    src/core/resize.c
     src/utils/file.c
     src/config/rules.c
 )
@@ -228,6 +234,7 @@ if(GTK4_FOUND)
         src/config/config.c
         src/utils/logger.c
         src/core/layout.c
+        src/core/resize.c
         src/utils/file.c
         src/config/rules.c
         ${PLATFORM_SOURCES}

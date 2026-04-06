@@ -6,6 +6,9 @@
 extern gf_err_t gf_keymap_init (gf_platform_t *platform, gf_display_t display);
 extern void gf_keymap_cleanup (gf_platform_t *platform);
 extern gf_key_action_t gf_keymap_poll (gf_platform_t *platform, gf_display_t display);
+extern gf_err_t gf_resize_hook_install (gf_platform_t *platform);
+extern void gf_resize_hook_uninstall (gf_platform_t *platform);
+extern bool gf_resize_poll (gf_platform_t *platform, gf_resize_event_t *event);
 
 gf_platform_t *
 gf_platform_create (void)
@@ -70,6 +73,11 @@ gf_platform_create (void)
     platform->keymap_cleanup = gf_keymap_cleanup;
     platform->keymap_poll = gf_keymap_poll;
 
+        // --- Resize Interaction ---
+    platform->resize_hook_install = gf_resize_hook_install;
+    platform->resize_hook_uninstall = gf_resize_hook_uninstall;
+    platform->resize_poll = gf_resize_poll;
+
     platform->platform_data = data;
 
     return platform;
@@ -93,6 +101,9 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
     uint32_t mon_count = GF_MAX_MONITORS;
     gf_monitor_enumerate (platform, data->monitors, &mon_count);
 
+    if (platform->resize_hook_install)
+        platform->resize_hook_install (platform);
+
     GF_LOG_INFO ("Platform initialized successfully (monitors: %d)", data->monitor_count);
     return GF_SUCCESS;
 }
@@ -104,6 +115,9 @@ gf_platform_cleanup (gf_display_t display, gf_platform_t *platform)
 
     if (!platform || !platform->platform_data)
         return;
+
+    if (platform->resize_hook_uninstall)
+        platform->resize_hook_uninstall (platform);
 
     gf_border_cleanup (platform);
 

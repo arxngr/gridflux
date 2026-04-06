@@ -291,6 +291,7 @@ gf_wm_run (gf_wm_t *m)
         gf_wm_load_cfg (m);
         gf_wm_watch (m);
 
+        gf_wm_resize_event (m);
         gf_wm_layout_apply (m);
         gf_wm_layout_rebalance (m);
         gf_wm_event (m);
