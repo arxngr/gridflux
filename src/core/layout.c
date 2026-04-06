@@ -210,7 +210,7 @@ gf_rect_apply_padding (gf_rect_t *r, uint32_t padding)
     if (!gf_rect_is_valid (r) || padding == 0)
         return;
 
-        // Cap padding so it never consumes more than half the dimension
+    // Cap padding so it never consumes more than half the dimension
     uint32_t pad_x = (padding * 2 < (uint32_t)r->width) ? padding : r->width / 4;
     uint32_t pad_y = (padding * 2 < (uint32_t)r->height) ? padding : r->height / 4;
 
@@ -226,7 +226,7 @@ gf_rect_ensure_minimum_size (gf_rect_t *r, uint32_t min_size)
     if (!r || min_size == 0)
         return;
 
-        // Only enforce min_size if there is enough room; otherwise fit-to-cell.
+    // Only enforce min_size if there is enough room; otherwise fit-to-cell.
     // This prevents windows being pushed off-screen on tiny displays.
     if (r->width < min_size && r->width > 0)
         r->width = min_size;

@@ -5,6 +5,17 @@
 #include <stdbool.h>
 #include <windows.h>
 
+// Internal resize tracking state
+typedef struct
+{
+    gf_resize_phase_t phase;
+    gf_handle_t window;
+    gf_resize_dir_t direction;
+    gf_rect_t initial_rect;
+    gf_rect_t current_rect;
+    bool pending; // New event available for polling
+} gf_resize_state_t;
+
 // Windows platform data
 typedef struct
 {
@@ -16,6 +27,9 @@ typedef struct
     uint32_t enumerated_monitor_count;
     gf_border_t *borders[GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES];
     int border_count;
+    HWINEVENTHOOK resize_hook;
+    HWINEVENTHOOK location_hook;
+    gf_resize_state_t resize_state;
 } gf_windows_platform_data_t;
 
 // Platform interface (Windows implementation)

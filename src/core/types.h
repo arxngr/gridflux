@@ -136,6 +136,35 @@ typedef struct
     bool has_maximized_state;
 } gf_ws_info_t;
 
+// Resize direction flags (bitmask for corner drags)
+typedef enum
+{
+    GF_RESIZE_NONE = 0,
+    GF_RESIZE_LEFT = (1 << 0),
+    GF_RESIZE_RIGHT = (1 << 1),
+    GF_RESIZE_TOP = (1 << 2),
+    GF_RESIZE_BOTTOM = (1 << 3),
+} gf_resize_dir_t;
+
+// Resize interaction phase
+typedef enum
+{
+    GF_RESIZE_IDLE = 0,
+    GF_RESIZE_ACTIVE,
+    GF_RESIZE_COMPLETE,
+} gf_resize_phase_t;
+
+// Resize event data
+typedef struct
+{
+    gf_handle_t window;
+    gf_resize_phase_t phase;
+    gf_resize_dir_t direction;
+    gf_rect_t initial_rect;
+    gf_rect_t current_rect;
+    int32_t dx, dy, dw, dh;
+} gf_resize_event_t;
+
 // Geometry flags
 typedef enum
 {
@@ -147,5 +176,31 @@ typedef enum
     GF_GEOMETRY_CHANGE_ALL = (GF_GEOMETRY_CHANGE_X | GF_GEOMETRY_CHANGE_Y
                               | GF_GEOMETRY_CHANGE_WIDTH | GF_GEOMETRY_CHANGE_HEIGHT)
 } gf_geom_flags_t;
+
+// Alignment references for layout segments
+typedef enum {
+    GF_ALIGN_TOP,
+    GF_ALIGN_BOTTOM,
+    GF_ALIGN_LEFT,
+    GF_ALIGN_RIGHT
+} gf_align_type_t;
+
+typedef struct {
+    gf_win_info_t *win;
+    gf_align_type_t align;
+} gf_segment_neighbor_t;
+
+// Corner references for 2D corner drags
+typedef enum {
+    GF_CORNER_TOP_LEFT,
+    GF_CORNER_TOP_RIGHT,
+    GF_CORNER_BOTTOM_LEFT,
+    GF_CORNER_BOTTOM_RIGHT
+} gf_corner_type_t;
+
+typedef struct {
+    gf_win_info_t *win;
+    gf_corner_type_t corner;
+} gf_corner_neighbor_t;
 
 #endif // GF_CORE_TYPES_H
