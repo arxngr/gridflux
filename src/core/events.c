@@ -227,6 +227,7 @@ gf_wm_event (gf_wm_t *m)
         {
             platform->dock_hide (platform);
             m->state.dock_hidden = true;
+            gf_window_list_mark_all_needs_update (windows, &focused->workspace_id);
         }
     }
     else if (!now_maximized && was_maximized)
@@ -245,6 +246,7 @@ gf_wm_event (gf_wm_t *m)
         {
             platform->dock_restore (platform);
             m->state.dock_hidden = false;
+            gf_window_list_mark_all_needs_update (windows, &focused->workspace_id);
         }
     }
 

@@ -30,6 +30,8 @@ typedef struct
     HWINEVENTHOOK resize_hook;
     HWINEVENTHOOK location_hook;
     gf_resize_state_t resize_state;
+    UINT original_dock_state;
+    bool dock_state_saved;
 } gf_windows_platform_data_t;
 
 // Platform interface (Windows implementation)

@@ -251,6 +251,31 @@ _detect_minimization_changes (gf_wm_t *m, gf_ws_id_t current_workspace)
         if (win->is_minimized != currently_minimized)
         {
             win->is_minimized = currently_minimized;
+
+            // Only trigger a re-layout when a window is MINIMIZED (to fill the gap).
+            // When a window is RESTORED (unminimized), we preserve custom sizing
+            // by default, especially during workspace switches.
+            if (currently_minimized)
+            {
+                // Reset resize state to allow layout engine to take over if we were in
+                // live resize
+                m->state.resize_active = false;
+
+                // Mark all windows in this workspace as needing an update to trigger
+                // a re-layout effectively filling the gap.
+                gf_window_list_mark_all_needs_update (windows, &current_workspace);
+
+                // Since we are re-arranging, it's no longer a 'custom' layout
+                gf_ws_info_t *ws
+                    = gf_workspace_list_find_by_id (wm_workspaces (m),
+                                                   current_workspace);
+                if (ws)
+                    ws->is_custom_layout = false;
+
+                GF_LOG_INFO (
+                    "[EVENT] Window %p was minimized, triggering layout update",
+                    (void *)win->id);
+            }
         }
     }
 }

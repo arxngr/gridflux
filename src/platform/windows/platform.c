@@ -95,16 +95,28 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
 
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
+
+    // Capture original dock (taskbar) state before we start managing it
+    APPBARDATA abd = { .cbSize = sizeof (abd) };
+    abd.hWnd = FindWindowA ("Shell_TrayWnd", NULL);
+    if (abd.hWnd)
+    {
+        data->original_dock_state = (UINT)SHAppBarMessage (ABM_GETSTATE, &abd);
+        data->dock_state_saved = true;
+        GF_LOG_INFO ("Captured original dock state: %u", data->original_dock_state);
+    }
+
     data->monitor_count = GetSystemMetrics (SM_CMONITORS);
 
-        // Enumerate monitors and cache their bounds
+    // Enumerate monitors and cache their bounds
     uint32_t mon_count = GF_MAX_MONITORS;
     gf_monitor_enumerate (platform, data->monitors, &mon_count);
 
     if (platform->resize_hook_install)
         platform->resize_hook_install (platform);
 
-    GF_LOG_INFO ("Platform initialized successfully (monitors: %d)", data->monitor_count);
+    GF_LOG_INFO ("Platform initialized successfully (monitors: %d)",
+                 data->monitor_count);
     return GF_SUCCESS;
 }
 
@@ -115,6 +127,22 @@ gf_platform_cleanup (gf_display_t display, gf_platform_t *platform)
 
     if (!platform || !platform->platform_data)
         return;
+
+    gf_windows_platform_data_t *data
+        = (gf_windows_platform_data_t *)platform->platform_data;
+
+    // Restore original dock state on exit
+    if (data->dock_state_saved)
+    {
+        APPBARDATA abd = { .cbSize = sizeof (abd) };
+        abd.hWnd = FindWindowA ("Shell_TrayWnd", NULL);
+        if (abd.hWnd)
+        {
+            abd.lParam = data->original_dock_state;
+            SHAppBarMessage (ABM_SETSTATE, &abd);
+            GF_LOG_INFO ("Restored original dock state: %u", data->original_dock_state);
+        }
+    }
 
     if (platform->resize_hook_uninstall)
         platform->resize_hook_uninstall (platform);

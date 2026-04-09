@@ -21,6 +21,7 @@ gf_dock_restore (gf_platform_t *platform)
     abd.hWnd = FindWindowA ("Shell_TrayWnd", NULL);
     if (abd.hWnd)
     {
+        // Force autohide OFF when in normal/tiling mode
         abd.lParam = ABS_ALWAYSONTOP;
         SHAppBarMessage (ABM_SETSTATE, &abd);
     }
