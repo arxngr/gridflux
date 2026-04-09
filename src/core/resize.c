@@ -690,6 +690,18 @@ _commit_resize (gf_wm_t *m, gf_resize_event_t *ev)
     }
 
     GF_LOG_INFO ("[RESIZE] Committed resize for window %p", (void *)ev->window);
+
+    // Mark workspace as having a custom layout
+    gf_ws_id_t ws_id = ev->window ? (gf_window_list_find_by_window_id (windows, ev->window)->workspace_id) : 0;
+    if (ws_id != 0)
+    {
+        gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
+        if (ws)
+        {
+            ws->is_custom_layout = true;
+            GF_LOG_INFO ("Workspace %d marked as having custom layout", ws_id);
+        }
+    }
 }
 
 void

@@ -134,6 +134,7 @@ typedef struct
     int32_t available_space;
     bool is_locked;
     bool has_maximized_state;
+    bool is_custom_layout;
 } gf_ws_info_t;
 
 // Resize direction flags (bitmask for corner drags)

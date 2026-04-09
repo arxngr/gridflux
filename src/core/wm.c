@@ -89,6 +89,9 @@ gf_wm_init (gf_wm_t *m)
         GF_LOG_WARN ("Failed to create IPC server - client commands will not work");
     }
 
+    if (platform->dock_restore)
+        platform->dock_restore (platform);
+
     GF_LOG_INFO ("Window manager initialized successfully");
     gf_wm_debug_stats (m);
     return GF_SUCCESS;
