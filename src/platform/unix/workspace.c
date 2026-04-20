@@ -398,6 +398,43 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
     if (data)
         XFree (data);
 
+    // Always check Struts to be safe, because GNOME's _NET_WORKAREA can be unreliable
+    // especially during or after workspace transitions or dynamic dock visibility changes.
+    int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
+    _gf_get_global_struts (display, root, atoms, &panel_left, &panel_right, &panel_top,
+                           &panel_bottom);
+
+    int sw = DisplayWidth (display, DefaultScreen (display));
+    int sh = DisplayHeight (display, DefaultScreen (display));
+
+    if (panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0)
+    {
+        int strut_x = panel_left;
+        int strut_y = panel_top;
+        int strut_w = sw - panel_left - panel_right;
+        int strut_h = sh - panel_top - panel_bottom;
+
+        // Intersect strut area with the currently determined safe area
+        if (strut_x > safe_x)
+        {
+            safe_w -= (strut_x - safe_x);
+            safe_x = strut_x;
+        }
+        if (strut_y > safe_y)
+        {
+            safe_h -= (strut_y - safe_y);
+            safe_y = strut_y;
+        }
+        if (safe_x + safe_w > strut_x + strut_w)
+            safe_w = (strut_x + strut_w) - safe_x;
+        if (safe_y + safe_h > strut_y + strut_h)
+            safe_h = (strut_y + strut_h) - safe_y;
+
+        // Ensure we don't get negative dimensions
+        if (safe_w < 0) safe_w = 0;
+        if (safe_h < 0) safe_h = 0;
+    }
+
     // Clip the physical monitor against the global safe zone
     // This is the logic that supports multiple monitors of different sizes
     int monitor_right = bounds->x + bounds->width;

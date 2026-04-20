@@ -114,6 +114,8 @@ _window_excluded_border (gf_display_t display, gf_handle_t window)
 
     if (_window_has_excluded_state (display, window))
         return true;
+    if (_window_has_excluded_type (display, window))
+        return true;
 
     return false;
 }
