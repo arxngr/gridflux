@@ -1,6 +1,8 @@
 #include "../../utils/logger.h"
 #include "internal.h"
 #include <X11/Xatom.h>
+#include <X11/Xlib.h>
+#include <unistd.h>
 
 static void
 _gf_get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms,
@@ -134,6 +136,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
     if (!dpy || !bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
+    XSync(dpy, False);
     int screen = DefaultScreen (dpy);
     Window root = DefaultRootWindow (dpy);
     Screen *scr = ScreenOfDisplay (dpy, screen);
@@ -336,7 +339,12 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
     if (!display || !bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
+    // Force X server roundtrip to ensure we see the latest property changes
+    // (like _NET_WORKAREA) after the dock visibility changes.
+    XSync(display, False);
+    
     int screen_count = 0;
+
     XineramaScreenInfo *screens = XineramaQueryScreens (display, &screen_count);
     bool found = false;
 
