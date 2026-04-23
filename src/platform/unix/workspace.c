@@ -1,6 +1,8 @@
 #include "../../utils/logger.h"
 #include "internal.h"
 #include <X11/Xatom.h>
+#include <X11/Xlib.h>
+#include <unistd.h>
 
 static void
 _gf_get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms,
@@ -134,6 +136,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
     if (!dpy || !bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
+    XSync(dpy, False);
     int screen = DefaultScreen (dpy);
     Window root = DefaultRootWindow (dpy);
     Screen *scr = ScreenOfDisplay (dpy, screen);
@@ -336,7 +339,12 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
     if (!display || !bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
+    // Force X server roundtrip to ensure we see the latest property changes
+    // (like _NET_WORKAREA) after the dock visibility changes.
+    XSync(display, False);
+    
     int screen_count = 0;
+
     XineramaScreenInfo *screens = XineramaQueryScreens (display, &screen_count);
     bool found = false;
 
@@ -397,6 +405,43 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
 
     if (data)
         XFree (data);
+
+    // Always check Struts to be safe, because GNOME's _NET_WORKAREA can be unreliable
+    // especially during or after workspace transitions or dynamic dock visibility changes.
+    int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
+    _gf_get_global_struts (display, root, atoms, &panel_left, &panel_right, &panel_top,
+                           &panel_bottom);
+
+    int sw = DisplayWidth (display, DefaultScreen (display));
+    int sh = DisplayHeight (display, DefaultScreen (display));
+
+    if (panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0)
+    {
+        int strut_x = panel_left;
+        int strut_y = panel_top;
+        int strut_w = sw - panel_left - panel_right;
+        int strut_h = sh - panel_top - panel_bottom;
+
+        // Intersect strut area with the currently determined safe area
+        if (strut_x > safe_x)
+        {
+            safe_w -= (strut_x - safe_x);
+            safe_x = strut_x;
+        }
+        if (strut_y > safe_y)
+        {
+            safe_h -= (strut_y - safe_y);
+            safe_y = strut_y;
+        }
+        if (safe_x + safe_w > strut_x + strut_w)
+            safe_w = (strut_x + strut_w) - safe_x;
+        if (safe_y + safe_h > strut_y + strut_h)
+            safe_h = (strut_y + strut_h) - safe_y;
+
+        // Ensure we don't get negative dimensions
+        if (safe_w < 0) safe_w = 0;
+        if (safe_h < 0) safe_h = 0;
+    }
 
     // Clip the physical monitor against the global safe zone
     // This is the logic that supports multiple monitors of different sizes

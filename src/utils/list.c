@@ -128,7 +128,8 @@ gf_window_list_update (gf_win_list_t *list, const gf_win_info_t *window)
                     || existing->geometry.y != window->geometry.y
                     || existing->geometry.width != window->geometry.width
                     || existing->geometry.height != window->geometry.height
-                    || existing->workspace_id != window->workspace_id);
+                    || existing->workspace_id != window->workspace_id
+                    || existing->is_maximized != window->is_maximized);
 
     // Save the needs_update flag before the struct copy overwrites it.
     // The platform-enumerated window data has needs_update = false,

@@ -59,7 +59,6 @@ install_dependencies() {
     case "$ID" in
     ubuntu | debian)
         echo "Installing dependencies for Ubuntu/Debian..."
-        sudo apt update
         sudo apt install -y libx11-dev libxi-dev libjson-c-dev libdbus-1-dev cmake gcc make pkg-config
         sudo apt install -y libgtk-4-dev libglib2.0-dev
         ;;
@@ -70,7 +69,6 @@ install_dependencies() {
         ;;
     arch | manjaro)
         echo "Installing dependencies for Arch/Manjaro..."
-        sudo pacman -Syu --noconfirm
         sudo pacman -S --noconfirm libx11 libxi json-c dbus cmake gcc make pkgconf
         sudo pacman -S --noconfirm gtk4 glib2
         ;;
@@ -225,8 +223,6 @@ install_kwin_script() {
     fi
 }
 
-
-
 install_systemd_service() {
     local SERVICE_DIR="$HOME/.config/systemd/user"
     echo "Installing systemd user service..."
@@ -354,10 +350,7 @@ create_default_config
 create_desktop_entry
 install_icons
 
-
-
 install_systemd_service
-
 
 echo ""
 echo "=== Installation Complete ==="

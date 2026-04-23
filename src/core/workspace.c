@@ -211,6 +211,7 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
         {
             platform->dock_hide (platform);
             m->state.dock_hidden = true;
+            
             if (target_ws && !target_ws->is_custom_layout)
                 gf_window_list_mark_all_needs_update (wm_windows (m),
                                                       &current_workspace);
@@ -222,6 +223,9 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
         {
             platform->dock_restore (platform);
             m->state.dock_hidden = false;
+            
+            gf_usleep (950000);
+
             if (target_ws && !target_ws->is_custom_layout)
                 gf_window_list_mark_all_needs_update (wm_windows (m), &current_workspace);
         }

@@ -293,8 +293,8 @@ gf_platform_get_frame_extents (Display *dpy, Window win, int *left, int *right, 
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
 
     Atom candidates[] = {
-        atoms->net_frame_extents, // Standard
         atoms->gtk_frame_extents, // GTK CSD
+        atoms->net_frame_extents, // Standard
         atoms->qt_frame_extents   // KDE Qt apps
     };
 
