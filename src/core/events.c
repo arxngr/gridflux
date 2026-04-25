@@ -150,12 +150,26 @@ gf_wm_watch (gf_wm_t *m)
                 _handle_new_window (m, win, NULL);
             else
             {
+                char class_name[256];
+                gf_wm_window_class (m, ws_windows->id, class_name, sizeof (class_name));
+                const gf_window_rule_t *rule = gf_rules_find (m->config, class_name);
+
+                if (!rule && workspaces->items[wsi].has_rule)
+                {
+
+                    gf_ws_id_t free_ws = gf_workspace_list_find_free (workspaces);
+                    _move_window_between_workspaces (m, ws_windows, free_ws);
+                    win->workspace_id = free_ws;
+                }
+                else if (rule && !workspaces->items[wsi].has_rule)
+                    continue;
+
+                win->workspace_id = existing->workspace_id;
                 // Preserve internally managed fields that the window manager
                 // has set (e.g. via _move_window_between_workspaces for
                 // maximized windows). The platform scan returns the raw
                 // desktop number which would overwrite our virtual workspace
                 // assignment, causing maximized workspace to report 0 windows.
-                win->workspace_id = existing->workspace_id;
                 win->is_maximized = existing->is_maximized;
                 win->is_minimized = existing->is_minimized;
 

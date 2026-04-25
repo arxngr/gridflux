@@ -132,6 +132,7 @@ _move_window_between_workspaces (gf_wm_t *m, gf_win_info_t *win, gf_ws_id_t new_
     gf_workspace_list_add_window (new, windows, win->id);
 
     win->workspace_id = new_ws_id;
+    m->platform->window_minimize (m->display, win->id);
 }
 
 bool
@@ -211,10 +212,9 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
         {
             platform->dock_hide (platform);
             m->state.dock_hidden = true;
-            
+
             if (target_ws && !target_ws->is_custom_layout)
-                gf_window_list_mark_all_needs_update (wm_windows (m),
-                                                      &current_workspace);
+                gf_window_list_mark_all_needs_update (wm_windows (m), &current_workspace);
         }
     }
     else
@@ -223,7 +223,7 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
         {
             platform->dock_restore (platform);
             m->state.dock_hidden = false;
-            
+
             gf_usleep (950000);
 
             if (target_ws && !target_ws->is_custom_layout)
@@ -235,9 +235,13 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
 void
 _sync_workspaces (gf_wm_t *m)
 {
+    if (!m || !m->config)
+        return;
+
     gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
+
     uint32_t platform_count = platform->workspace_get_count (display);
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
 
@@ -245,12 +249,28 @@ _sync_workspaces (gf_wm_t *m)
     {
         gf_workspace_list_ensure (workspaces, i, max_per_ws);
         gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, i);
+
         if (!ws)
             continue;
 
-        ws->is_locked = gf_config_workspace_is_locked (m->config, i);
-        ws->available_space = ws->is_locked ? 0 : (max_per_ws - ws->window_count);
+        ws->is_locked = false;
+
+        // Only consider locking if there are windows present
+        if (ws->window_count > 0)
+        {
+            if (ws->has_rule)
+            {
+                ws->is_locked = true;
+            }
+            else
+            {
+                ws->is_locked = gf_config_workspace_is_locked (m->config, i);
+            }
+        }
+
+        // Calculate space based on the final lock state
         ws->max_windows = max_per_ws;
+        ws->available_space = ws->is_locked ? 0 : (max_per_ws - ws->window_count);
     }
 }
 
@@ -406,7 +426,7 @@ _find_or_create_ws (gf_wm_t *m)
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         if (!workspaces->items[i].has_maximized_state
-            && workspaces->items[i].available_space > 0)
+            && workspaces->items[i].available_space > 0 && !workspaces->items[i].has_rule)
         {
             return workspaces->items[i].id;
         }
@@ -459,14 +479,30 @@ _handle_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
         if (rule)
         {
             gf_ws_id_t target = rule->workspace_id;
-            gf_workspace_list_ensure (workspaces, target, max_per_ws);
-
             gf_ws_info_t *target_ws = gf_workspace_list_find_by_id (workspaces, target);
 
             // If workspace is full, evict a non-rule window
             if (target_ws && target_ws->window_count >= max_per_ws)
             {
                 _evict_non_rule_window (m, target);
+            }
+            else if (!target_ws)
+            {
+                gf_ws_info_t info = { .id = target,
+                                      .window_count = 1,
+                                      .max_windows = max_per_ws,
+                                      .available_space = max_per_ws,
+                                      .has_rule = true,
+                                      .has_maximized_state = false,
+                                      .is_locked = true };
+
+                gf_workspace_list_add (workspaces, &info);
+                GF_LOG_INFO ("Creating workspace rule id : %d", target_ws);
+            }
+            else
+            {
+                _move_window_between_workspaces (m, win, target);
+                target_ws->has_rule = true;
             }
 
             win->workspace_id = target;

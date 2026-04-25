@@ -263,14 +263,13 @@ _detect_minimization_changes (gf_wm_t *m, gf_ws_id_t current_workspace)
 
             // Since we are re-arranging, it's no longer a 'custom' layout
             gf_ws_info_t *ws
-                = gf_workspace_list_find_by_id (wm_workspaces (m),
-                                               current_workspace);
+                = gf_workspace_list_find_by_id (wm_workspaces (m), current_workspace);
             if (ws)
                 ws->is_custom_layout = false;
 
-            GF_LOG_INFO (
-                "[EVENT] Window %p minimize state changed to %d, triggering layout update",
-                (void *)win->id, currently_minimized);
+            GF_LOG_INFO ("[EVENT] Window %p minimize state changed to %d, triggering "
+                         "layout update",
+                         (void *)win->id, currently_minimized);
         }
     }
 }

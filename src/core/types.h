@@ -135,6 +135,7 @@ typedef struct
     bool is_locked;
     bool has_maximized_state;
     bool is_custom_layout;
+    bool has_rule;
 } gf_ws_info_t;
 
 // Resize direction flags (bitmask for corner drags)
@@ -179,27 +180,31 @@ typedef enum
 } gf_geom_flags_t;
 
 // Alignment references for layout segments
-typedef enum {
+typedef enum
+{
     GF_ALIGN_TOP,
     GF_ALIGN_BOTTOM,
     GF_ALIGN_LEFT,
     GF_ALIGN_RIGHT
 } gf_align_type_t;
 
-typedef struct {
+typedef struct
+{
     gf_win_info_t *win;
     gf_align_type_t align;
 } gf_segment_neighbor_t;
 
 // Corner references for 2D corner drags
-typedef enum {
+typedef enum
+{
     GF_CORNER_TOP_LEFT,
     GF_CORNER_TOP_RIGHT,
     GF_CORNER_BOTTOM_LEFT,
     GF_CORNER_BOTTOM_RIGHT
 } gf_corner_type_t;
 
-typedef struct {
+typedef struct
+{
     gf_win_info_t *win;
     gf_corner_type_t corner;
 } gf_corner_neighbor_t;
