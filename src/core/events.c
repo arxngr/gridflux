@@ -150,21 +150,22 @@ gf_wm_watch (gf_wm_t *m)
                 _handle_new_window (m, win, NULL);
             else
             {
+                win->workspace_id = existing->workspace_id;
+
                 char class_name[256];
-                gf_wm_window_class (m, ws_windows->id, class_name, sizeof (class_name));
+                gf_wm_window_class (m, win->id, class_name, sizeof (class_name));
                 const gf_window_rule_t *rule = gf_rules_find (m->config, class_name);
 
-                if (!rule && workspaces->items[wsi].has_rule)
+                gf_ws_info_t *current_ws = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
+
+                if (current_ws && !rule && current_ws->has_rule)
                 {
-
                     gf_ws_id_t free_ws = gf_workspace_list_find_free (workspaces);
-                    _move_window_between_workspaces (m, ws_windows, free_ws);
-                    win->workspace_id = free_ws;
+                    if (gf_workspace_list_find_by_id (workspaces, free_ws))
+                    {
+                        _move_window_between_workspaces (m, win, free_ws);
+                    }
                 }
-                else if (rule && !workspaces->items[wsi].has_rule)
-                    continue;
-
-                win->workspace_id = existing->workspace_id;
                 // Preserve internally managed fields that the window manager
                 // has set (e.g. via _move_window_between_workspaces for
                 // maximized windows). The platform scan returns the raw

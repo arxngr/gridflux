@@ -253,11 +253,6 @@ _sync_workspaces (gf_wm_t *m)
         if (!ws)
             continue;
 
-        ws->is_locked = false;
-
-        // Only consider locking if there are windows present
-        if (ws->window_count > 0)
-        {
             if (ws->has_rule)
             {
                 ws->is_locked = true;
@@ -266,7 +261,7 @@ _sync_workspaces (gf_wm_t *m)
             {
                 ws->is_locked = gf_config_workspace_is_locked (m->config, i);
             }
-        }
+        
 
         // Calculate space based on the final lock state
         ws->max_windows = max_per_ws;
