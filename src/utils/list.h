@@ -51,7 +51,6 @@ gf_ws_info_t *gf_workspace_list_find_by_id (const gf_ws_list_t *list,
                                             gf_ws_id_t workspace_id);
 gf_ws_info_t *gf_workspace_list_get_current (gf_ws_list_t *ws);
 gf_err_t gf_workspace_list_init (gf_ws_list_t *list, uint32_t initial_capacity);
-void gf_workspace_list_rebuild_stats (gf_ws_list_t *ws, const gf_win_list_t *windows);
 bool gf_workspace_list_remove_window (gf_ws_info_t *ws, gf_win_list_t *windows,
                                       gf_handle_t win_id);
 #endif
