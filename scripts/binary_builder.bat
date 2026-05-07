@@ -15,19 +15,10 @@ where cmake >nul 2>nul || (
     exit /b 1
 )
 
-:: WiX Toolset path (default install)
-set WIX_PATH=C:\Program Files (x86)\WiX Toolset v3.14\bin
-set PATH=%WIX_PATH%;%PATH%
-
-:: Check for WiX binaries
-where candle.exe >nul 2>nul || (
+:: Check for WiX Toolset v4+ (wix.exe)
+where wix.exe >nul 2>nul || (
     echo ERROR: WiX Toolset not found.
-    echo Install with: winget install WiX.Toolset
-    exit /b 1
-)
-where light.exe >nul 2>nul || (
-    echo ERROR: WiX Toolset not found.
-    echo Install with: winget install WiX.Toolset
+    echo Install with: dotnet tool install --global wix
     exit /b 1
 )
 
@@ -105,6 +96,18 @@ if exist "C:\msys64\mingw64\share\glib-2.0\schemas\gschemas.compiled" (
     copy /y "C:\msys64\mingw64\share\glib-2.0\schemas\gschemas.compiled" "build\share\glib-2.0\schemas\" >nul
 )
 
+:: Fallback: compile schemas if precompiled file was not found
+if not exist "build\share\glib-2.0\schemas\gschemas.compiled" (
+    echo Precompiled gschemas not found, attempting to compile...
+    set "GLIB_COMPILE=C:\msys64\mingw64\bin\glib-compile-schemas.exe"
+    if exist "!GLIB_COMPILE!" (
+        "!GLIB_COMPILE!" "C:\msys64\mingw64\share\glib-2.0\schemas" --targetdir="build\share\glib-2.0\schemas"
+    ) else (
+        echo WARNING: glib-compile-schemas not found, creating empty placeholder.
+        type nul > "build\share\glib-2.0\schemas\gschemas.compiled"
+    )
+)
+
 echo Stripping collected DLLs and executables to reduce size...
 for %%f in (build\bin\*.dll) do strip "%%f"
 strip build\gridflux.exe build\gridflux-gui.exe build\gridflux-cli.exe 2>nul
@@ -127,7 +130,7 @@ set WIX_DLL_FILE=build\wix_dlls.wxs
 
 (
 echo ^<?xml version="1.0" encoding="UTF-8"?^>
-echo ^<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"^>
+echo ^<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"^>
 echo ^<Fragment^>
 echo   ^<DirectoryRef Id="INSTALLDIR"^>
 ) > %WIX_DLL_FILE%
@@ -144,8 +147,8 @@ for %%f in (build\bin\*.dll) do (
 
     for /f %%G in ('powershell -NoProfile -Command "[guid]::NewGuid().ToString()"') do set "COMP_GUID=%%G"
 
-    :: FIXED: Added Win64="yes" here
-    echo     ^<Component Id="!DLL_ID!" Guid="{!COMP_GUID!}" KeyPath="yes" Win64="yes"^> >> %WIX_DLL_FILE%
+    :: FIXED: Added Bitness="always64" for WiX v4+
+    echo     ^<Component Id="!DLL_ID!" Guid="{!COMP_GUID!}" KeyPath="yes" Bitness="always64"^> >> %WIX_DLL_FILE%
     echo       ^<File Source="%%f" /^> >> %WIX_DLL_FILE%
     echo     ^</Component^> >> %WIX_DLL_FILE%
 )
@@ -185,17 +188,10 @@ echo.
 
 set MSI_NAME=GridFlux-1.0.0.msi
 
-:: ADDED: -ext WixUIExtension -ext WixUtilExtension
-candle.exe -ext WixUIExtension -ext WixUtilExtension gridflux.wxs build\wix_dlls.wxs -out build\
+:: Build MSI with WiX v4+ command
+wix build -acceptEula wix7 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out %MSI_NAME%
 if %ERRORLEVEL% neq 0 (
-    echo ERROR: candle.exe failed
-    exit /b 1
-)
-
-:: ADDED: -ext WixUIExtension -ext WixUtilExtension
-light.exe -ext WixUIExtension -ext WixUtilExtension build\*.wixobj -out %MSI_NAME%
-if %ERRORLEVEL% neq 0 (
-    echo ERROR: light.exe failed
+    echo ERROR: wix build failed
     exit /b 1
 )
 
