@@ -11,16 +11,16 @@ gf_dock_hide (gf_platform_t *platform)
     HWND taskbar = FindWindowA ("Shell_TrayWnd", NULL);
     if (taskbar)
     {
-        // Set auto-hide via the appbar API (works when not elevated)
+        // Set auto-hide via the appbar API. 
+        // This allows the taskbar to still "preview" on hover.
         APPBARDATA abd = { .cbSize = sizeof (abd), .hWnd = taskbar };
         abd.lParam = ABS_AUTOHIDE;
         SHAppBarMessage (ABM_SETSTATE, &abd);
-
-        // Also directly hide the taskbar as a reliable fallback
-        ShowWindow (taskbar, SW_HIDE);
     }
 
     // Handle multi-monitor secondary taskbars (Windows 10/11)
+    // Note: Secondary taskbars don't reliably support the AppBar API auto-hide toggle,
+    // so we keep them hidden for now to ensure a clean maximized experience.
     HWND secondary = NULL;
     while ((secondary = FindWindowExA (NULL, secondary, "Shell_SecondaryTrayWnd", NULL)))
     {
@@ -40,8 +40,8 @@ gf_dock_restore (gf_platform_t *platform)
         APPBARDATA abd = { .cbSize = sizeof (abd), .hWnd = taskbar };
         abd.lParam = ABS_ALWAYSONTOP;
         SHAppBarMessage (ABM_SETSTATE, &abd);
-
-        // Show the taskbar window again
+        
+        // Ensure it's visible (in case it was previously SW_HIDDEN)
         ShowWindow (taskbar, SW_SHOW);
     }
 
