@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
-     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
-  <Product Id="*" Name="GridFlux Window Manager" Manufacturer="Ardi Nugraha"
+  <Package Name="GridFlux Window Manager" Manufacturer="Ardi Nugraha"
            Version="1.0.0" Language="1033"
-           UpgradeCode="f47ac10b-58cc-4372-a567-0e02b2c3d479">
-
-    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64" />
+           UpgradeCode="f47ac10b-58cc-4372-a567-0e02b2c3d479"
+           InstallerVersion="500" Compressed="yes" Scope="perMachine">
 
     <MajorUpgrade AllowSameVersionUpgrades="yes" Schedule="afterInstallExecute" DowngradeErrorMessage="A newer version of GridFlux is already installed." />
 
@@ -17,21 +17,22 @@
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
 
     <Property Id="WixShellExecTarget" Value="[INSTALLDIR]gridflux-launcher.exe" />
-    <CustomAction Id="LaunchApplication" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" />
+    <CustomAction Id="LaunchApplication" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixShellExec" Impersonate="yes" />
 
     <CustomAction Id="InstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --install-task" Execute="deferred" Impersonate="no" Return="ignore" />
     <CustomAction Id="UninstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --uninstall-task" Execute="deferred" Impersonate="no" Return="ignore" />
     <CustomAction Id="LaunchAfterRepair" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot;" Execute="immediate" Impersonate="yes" Return="asyncNoWait" />
 
     <InstallExecuteSequence>
-      <Custom Action="InstallTask" After="InstallFiles">NOT REMOVE="ALL"</Custom>
-      <Custom Action="UninstallTask" Before="RemoveFiles">REMOVE="ALL"</Custom>
-      <Custom Action="LaunchAfterRepair" After="InstallFinalize">REINSTALL</Custom>
+      <Custom Action="InstallTask" After="InstallFiles" Condition="NOT REMOVE=&quot;ALL&quot;" />
+      <Custom Action="UninstallTask" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
+      <Custom Action="LaunchAfterRepair" After="InstallFinalize" Condition="REINSTALL" />
     </InstallExecuteSequence>
 
+    <ui:WixUI Id="WixUI_InstallDir" />
+
     <UI>
-      <UIRef Id="WixUI_InstallDir" />
-      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication" Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
     </UI>
 
     <!-- Kill running processes before uninstall removes files -->
@@ -58,60 +59,58 @@
       <ComponentGroupRef Id="Shortcuts" />
       <ComponentGroupRef Id="GtkRuntime" />
     </Feature>
-  </Product>
+  </Package>
 
   <Fragment>
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLDIR" Name="GridFlux">
-          <Directory Id="IconsDir" Name="icons" />
-          <Directory Id="BinDir" Name="bin" />
-          <Directory Id="ShareDir" Name="share">
-            <Directory Id="GlibDir" Name="glib-2.0">
-              <Directory Id="SchemasDir" Name="schemas" />
-            </Directory>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="GridFlux">
+        <Directory Id="IconsDir" Name="icons" />
+        <Directory Id="BinDir" Name="bin" />
+        <Directory Id="ShareDir" Name="share">
+          <Directory Id="GlibDir" Name="glib-2.0">
+            <Directory Id="SchemasDir" Name="schemas" />
           </Directory>
         </Directory>
       </Directory>
+    </StandardDirectory>
 
-      <Directory Id="ProgramMenuFolder">
-        <Directory Id="GridFluxMenu" Name="GridFlux" />
-      </Directory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="GridFluxMenu" Name="GridFlux" />
+    </StandardDirectory>
 
-      <Directory Id="DesktopFolder" />
+    <StandardDirectory Id="DesktopFolder" />
       
-      <Directory Id="CommonAppDataFolder">
-        <Directory Id="GridFluxConfig" Name="GridFlux" />
-      </Directory>
-    </Directory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="GridFluxConfig" Name="GridFlux" />
+    </StandardDirectory>
   </Fragment>
 
   <Fragment>
     <DirectoryRef Id="INSTALLDIR">
-      <Component Id="GridFluxExe" Guid="{12222222-2222-2222-2222-222222222222}" Win64="yes" KeyPath="yes">
+      <Component Id="GridFluxExe" Guid="{12222222-2222-2222-2222-222222222222}" Bitness="always64" KeyPath="yes">
         <File Source="build\gridflux.exe" />
       </Component>
 
-      <Component Id="GridFluxGui" Guid="{22222222-2222-2222-2222-222222222222}" Win64="yes">
+      <Component Id="GridFluxGui" Guid="{22222222-2222-2222-2222-222222222222}" Bitness="always64">
         <File Source="build\gridflux-gui.exe" />
       </Component>
 
-      <Component Id="GridFluxCli" Guid="{33333333-3333-3333-3333-333333333333}" Win64="yes">
+      <Component Id="GridFluxCli" Guid="{33333333-3333-3333-3333-333333333333}" Bitness="always64">
         <File Source="build\gridflux-cli.exe" />
       </Component>
 
-      <Component Id="LauncherExe" Guid="{44444444-4444-4444-4444-444444444444}" Win64="yes">
+      <Component Id="LauncherExe" Guid="{44444444-4444-4444-4444-444444444444}" Bitness="always64">
         <File Source="build\gridflux-launcher.exe" />
       </Component>
 
-      <Component Id="Registry" Guid="{88888888-8888-8888-8888-888888888888}" Win64="yes">
+      <Component Id="Registry" Guid="{88888888-8888-8888-8888-888888888888}" Bitness="always64">
         <RegistryValue Root="HKLM" Key="Software\GridFlux" Name="Install_Dir" Value="[INSTALLDIR]" Type="string" KeyPath="yes"/>
         <RegistryValue Root="HKLM" Key="Software\GridFlux" Name="Version" Value="1.0.0" Type="string" />
       </Component>
     </DirectoryRef>
 
     <DirectoryRef Id="IconsDir">
-      <Component Id="Icons" Guid="{55555555-5555-5555-5555-555555555555}" Win64="yes">
+      <Component Id="Icons" Guid="{55555555-5555-5555-5555-555555555555}" Bitness="always64">
         <File Source="icons\gridflux-16.png" />
         <File Source="icons\gridflux-32.png" />
         <File Source="icons\gridflux-48.png" />
@@ -121,13 +120,13 @@
     </DirectoryRef>    
 
     <DirectoryRef Id="GridFluxConfig">
-      <Component Id="DefaultConfig" Guid="{77777777-7777-7777-7777-777777777777}" Win64="yes">
+      <Component Id="DefaultConfig" Guid="{77777777-7777-7777-7777-777777777777}" Bitness="always64">
         <File Source="config.default.json" Name="config.json" KeyPath="yes" />
       </Component>
     </DirectoryRef>
 
     <DirectoryRef Id="SchemasDir">
-      <Component Id="GSchemaCompiled" Guid="{99999999-9999-9999-9999-999999999999}" Win64="yes">
+      <Component Id="GSchemaCompiled" Guid="{99999999-9999-9999-9999-999999999999}" Bitness="always64">
         <File Source="build\share\glib-2.0\schemas\gschemas.compiled" KeyPath="yes" />
       </Component>
     </DirectoryRef>
@@ -145,8 +144,8 @@
   </Fragment>
 
   <Fragment>
-    <DirectoryRef Id="DesktopFolder">
-      <Component Id="DesktopShortcut" Guid="{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}" Win64="yes">
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}" Bitness="always64">
         <Shortcut Id="DesktopShortcutId" 
                   Directory="DesktopFolder" 
                   Name="GridFlux Control Panel" 
@@ -155,10 +154,10 @@
                   Icon="GridFluxIcon.ico" />
         <RegistryValue Root="HKCU" Key="Software\GridFlux" Name="Desktop" Value="1" Type="integer" KeyPath="yes"/>
       </Component>
-    </DirectoryRef>
+    </StandardDirectory>
 
     <DirectoryRef Id="GridFluxMenu">
-      <Component Id="StartMenuShortcut" Guid="{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}" Win64="yes">
+      <Component Id="StartMenuShortcut" Guid="{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}" Bitness="always64">
         <Shortcut Id="StartMenuGuiShortcut" 
                   Name="GridFlux Control Panel" 
                   Target="[INSTALLDIR]gridflux-gui.exe" 

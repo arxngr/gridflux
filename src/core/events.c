@@ -261,7 +261,6 @@ gf_wm_event (gf_wm_t *m)
         {
             platform->dock_restore (platform);
             m->state.dock_hidden = false;
-            gf_usleep (950000);
             gf_window_list_mark_all_needs_update (windows, &focused->workspace_id);
         }
     }

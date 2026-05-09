@@ -15,19 +15,10 @@ where cmake >nul 2>nul || (
     exit /b 1
 )
 
-:: WiX Toolset path (default install)
-set WIX_PATH=C:\Program Files (x86)\WiX Toolset v3.14\bin
-set PATH=%WIX_PATH%;%PATH%
-
-:: Check for WiX binaries
-where candle.exe >nul 2>nul || (
+:: Check for WiX Toolset v4+ (wix.exe)
+where wix.exe >nul 2>nul || (
     echo ERROR: WiX Toolset not found.
-    echo Install with: winget install WiX.Toolset
-    exit /b 1
-)
-where light.exe >nul 2>nul || (
-    echo ERROR: WiX Toolset not found.
-    echo Install with: winget install WiX.Toolset
+    echo Install with: dotnet tool install --global wix
     exit /b 1
 )
 
@@ -41,7 +32,7 @@ echo Building GridFlux...
 cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=MinSizeRel .
 if %ERRORLEVEL% neq 0 exit /b 1
 
-cmake --build build --config MinSizeRel
+cmake --build build --config MinSizeRel -j
 if %ERRORLEVEL% neq 0 exit /b 1
 
 for %%f in (gridflux.exe gridflux-gui.exe gridflux-cli.exe) do (
@@ -57,9 +48,37 @@ echo.
 echo Collecting GTK DLLs...
 mkdir build\bin 2>nul
 
-set MINGW_PATH=C:\msys64\mingw64\bin
-if not exist "%MINGW_PATH%" (
-    echo ERROR: MinGW runtime not found
+:: Auto-detect MSYS2 subsystem (ucrt64, mingw64, clang64, etc.)
+:: Check which gcc is on PATH to determine the active environment
+set "MSYS2_ENV="
+for %%E in (ucrt64 mingw64 clang64 mingw32) do (
+    if exist "C:\msys64\%%E\bin\gcc.exe" (
+        where gcc 2>nul | findstr /i "%%E" >nul 2>nul
+        if !ERRORLEVEL! equ 0 (
+            set "MSYS2_ENV=%%E"
+        )
+    )
+)
+
+:: Fallback: if PATH detection didn't work, check which environment has pkg-config for gtk4
+if not defined MSYS2_ENV (
+    for %%E in (ucrt64 mingw64 clang64) do (
+        if exist "C:\msys64\%%E\lib\pkgconfig\gtk4.pc" (
+            set "MSYS2_ENV=%%E"
+        )
+    )
+)
+
+:: Final fallback to mingw64
+if not defined MSYS2_ENV set "MSYS2_ENV=mingw64"
+
+echo Detected MSYS2 environment: %MSYS2_ENV%
+
+set "MSYS2_PREFIX=C:\msys64\!MSYS2_ENV!"
+set "MINGW_PATH=!MSYS2_PREFIX!\bin"
+
+if not exist "!MINGW_PATH!" (
+    echo ERROR: MSYS2 runtime not found at !MINGW_PATH!
     exit /b 1
 )
 
@@ -74,16 +93,17 @@ if not exist "%LDD_CMD%" (
 :: Put all gridflux binaries into a single ldd invocation, output to a temp file
 "%LDD_CMD%" build\gridflux.exe build\gridflux-gui.exe build\gridflux-cli.exe > build\ldd_out.txt
 
-:: Extract /mingw64/bin/... paths, convert them to Windows paths, and copy
-for /f "tokens=3" %%A in ('findstr /i "mingw64" build\ldd_out.txt') do (
+:: Extract DLL paths from ldd output for the detected MSYS2 environment
+:: This handles /mingw64/, /ucrt64/, /clang64/, etc.
+for /f "tokens=3" %%A in ('findstr /i "!MSYS2_ENV!" build\ldd_out.txt') do (
     set "DLL_PATH=%%A"
-    :: Strip leading /mingw64/ and convert / to \ 
-    set "DLL_PATH=!DLL_PATH:/mingw64/=>!"
+    :: Strip leading /env_name/ and convert / to backslash
+    set "DLL_PATH=!DLL_PATH:/!MSYS2_ENV!/=>"
     set "DLL_PATH=!DLL_PATH:>=!"
     set "DLL_PATH=!DLL_PATH:/=\!"
-    
+
     :: Final path
-    set "FULL_PATH=C:\msys64\mingw64\!DLL_PATH!"
+    set "FULL_PATH=!MSYS2_PREFIX!\!DLL_PATH!"
     if exist "!FULL_PATH!" (
         copy /y "!FULL_PATH!" build\bin\ >nul
     )
@@ -94,15 +114,27 @@ echo Adding dynamically loaded GTK runtime DLLs missed by ldd...
 set "GTK_RUNTIME_DLLS=libgdk_pixbuf-2.0-0.dll libglib-2.0-0.dll libgobject-2.0-0.dll libgio-2.0-0.dll libgmodule-2.0-0.dll libpangocairo-1.0-0.dll libpango-1.0-0.dll libcairo-gobject-2.dll libcairo-2.dll libepoxy-0.dll libharfbuzz-0.dll libintl-8.dll libsqlite3-0.dll libtiff-6.dll libjpeg-8.dll libpng16-16.dll zlib1.dll libffi-8.dll libgcc_s_seh-1.dll libwinpthread-1.dll libstdc++-6.dll"
 
 for %%D in (%GTK_RUNTIME_DLLS%) do (
-    if exist "C:\msys64\mingw64\bin\%%D" (
-        copy /y "C:\msys64\mingw64\bin\%%D" build\bin\ >nul
+    if exist "!MINGW_PATH!\%%D" (
+        copy /y "!MINGW_PATH!\%%D" build\bin\ >nul
     )
 )
 
 echo Adding GTK/GLib compiled schemas...
 mkdir "build\share\glib-2.0\schemas" 2>nul
-if exist "C:\msys64\mingw64\share\glib-2.0\schemas\gschemas.compiled" (
-    copy /y "C:\msys64\mingw64\share\glib-2.0\schemas\gschemas.compiled" "build\share\glib-2.0\schemas\" >nul
+if exist "!MSYS2_PREFIX!\share\glib-2.0\schemas\gschemas.compiled" (
+    copy /y "!MSYS2_PREFIX!\share\glib-2.0\schemas\gschemas.compiled" "build\share\glib-2.0\schemas\" >nul
+)
+
+:: Fallback: compile schemas if precompiled file was not found
+if not exist "build\share\glib-2.0\schemas\gschemas.compiled" (
+    echo Precompiled gschemas not found, attempting to compile...
+    set "GLIB_COMPILE=!MSYS2_PREFIX!\bin\glib-compile-schemas.exe"
+    if exist "!GLIB_COMPILE!" (
+        "!GLIB_COMPILE!" "!MSYS2_PREFIX!\share\glib-2.0\schemas" --targetdir="build\share\glib-2.0\schemas"
+    ) else (
+        echo WARNING: glib-compile-schemas not found, creating empty placeholder.
+        type nul > "build\share\glib-2.0\schemas\gschemas.compiled"
+    )
 )
 
 echo Stripping collected DLLs and executables to reduce size...
@@ -110,7 +142,7 @@ for %%f in (build\bin\*.dll) do strip "%%f"
 strip build\gridflux.exe build\gridflux-gui.exe build\gridflux-cli.exe 2>nul
 
 echo Compressing DLLs and executables with UPX...
-set "UPX_CMD=C:\msys64\mingw64\bin\upx.exe"
+set "UPX_CMD=!MSYS2_PREFIX!\bin\upx.exe"
 if exist "%UPX_CMD%" (
     for %%f in (build\bin\*.dll) do "%UPX_CMD%" -9 "%%f" >nul 2>nul
     "%UPX_CMD%" -9 build\gridflux.exe build\gridflux-gui.exe build\gridflux-cli.exe >nul 2>nul
@@ -127,7 +159,7 @@ set WIX_DLL_FILE=build\wix_dlls.wxs
 
 (
 echo ^<?xml version="1.0" encoding="UTF-8"?^>
-echo ^<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"^>
+echo ^<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"^>
 echo ^<Fragment^>
 echo   ^<DirectoryRef Id="INSTALLDIR"^>
 ) > %WIX_DLL_FILE%
@@ -144,8 +176,8 @@ for %%f in (build\bin\*.dll) do (
 
     for /f %%G in ('powershell -NoProfile -Command "[guid]::NewGuid().ToString()"') do set "COMP_GUID=%%G"
 
-    :: FIXED: Added Win64="yes" here
-    echo     ^<Component Id="!DLL_ID!" Guid="{!COMP_GUID!}" KeyPath="yes" Win64="yes"^> >> %WIX_DLL_FILE%
+    :: FIXED: Added Bitness="always64" for WiX v4+
+    echo     ^<Component Id="!DLL_ID!" Guid="{!COMP_GUID!}" KeyPath="yes" Bitness="always64"^> >> %WIX_DLL_FILE%
     echo       ^<File Source="%%f" /^> >> %WIX_DLL_FILE%
     echo     ^</Component^> >> %WIX_DLL_FILE%
 )
@@ -185,17 +217,10 @@ echo.
 
 set MSI_NAME=GridFlux-1.0.0.msi
 
-:: ADDED: -ext WixUIExtension -ext WixUtilExtension
-candle.exe -ext WixUIExtension -ext WixUtilExtension gridflux.wxs build\wix_dlls.wxs -out build\
+:: Build MSI with WiX v4+ command
+wix build -acceptEula wix7 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out %MSI_NAME%
 if %ERRORLEVEL% neq 0 (
-    echo ERROR: candle.exe failed
-    exit /b 1
-)
-
-:: ADDED: -ext WixUIExtension -ext WixUtilExtension
-light.exe -ext WixUIExtension -ext WixUtilExtension build\*.wixobj -out %MSI_NAME%
-if %ERRORLEVEL% neq 0 (
-    echo ERROR: light.exe failed
+    echo ERROR: wix build failed
     exit /b 1
 )
 
