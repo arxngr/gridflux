@@ -55,6 +55,10 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
         return;
     }
 
+    // Detect if the overlay was previously hidden — we'll need to force a
+    // full reposition including Z-order when transitioning back to visible.
+    bool was_hidden = !IsWindowVisible (b->overlay);
+
     RECT d_rect;
     if (!SUCCEEDED (DwmGetWindowAttribute (b->target, DWMWA_EXTENDED_FRAME_BOUNDS,
                                            &d_rect, sizeof (d_rect))))
@@ -112,10 +116,15 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
         }
     }
 
-    if (shape_changed)
+    if (shape_changed || was_hidden)
     {
-        SetWindowPos (b->overlay, NULL, win_x, win_y, win_w, win_h,
-                      SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOREDRAW);
+        // Always re-assert HWND_TOPMOST when repositioning.
+        // When a window is re-tiled (e.g. after another app closes),
+        // the target's SetWindowPos can push it above the overlay,
+        // making the border invisible.  Using SWP_NOZORDER would
+        // preserve that wrong order, so we force TOPMOST every time.
+        SetWindowPos (b->overlay, HWND_TOPMOST, win_x, win_y, win_w, win_h,
+                      SWP_NOACTIVATE | SWP_NOREDRAW);
 
         // Hollow ring region: full rect minus the inner window area
         HRGN full_rgn = CreateRectRgn (0, 0, win_w, win_h);
@@ -142,10 +151,18 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
                     intersect_count * sizeof (RECT));
     }
 
-    if (!IsWindowVisible (b->overlay))
+    if (was_hidden)
+    {
         ShowWindow (b->overlay, SW_SHOWNOACTIVATE);
-
-    InvalidateRect (b->overlay, NULL, TRUE);
+        // Force a full repaint after re-showing to ensure the border color
+        // is drawn — the cached DC content may be stale after being hidden.
+        InvalidateRect (b->overlay, NULL, TRUE);
+        UpdateWindow (b->overlay);
+    }
+    else
+    {
+        InvalidateRect (b->overlay, NULL, TRUE);
+    }
 
     (void)shadow_right;
     (void)shadow_bottom;
