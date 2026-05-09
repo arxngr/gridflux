@@ -183,6 +183,33 @@ install_task (const wchar_t *launcher_path, const wchar_t *dir)
 static void
 uninstall_task (void)
 {
+    // Restore the Windows taskbar to its normal state.
+    // When gridflux.exe is force-terminated during uninstall,
+    // gf_platform_cleanup never runs, so the taskbar may be stuck
+    // in auto-hide mode.  Restore it here before files are removed.
+    HWND taskbar = FindWindowA ("Shell_TrayWnd", NULL);
+    if (taskbar)
+    {
+        APPBARDATA abd = { .cbSize = sizeof (abd), .hWnd = taskbar };
+        abd.lParam = ABS_ALWAYSONTOP;
+        SHAppBarMessage (ABM_SETSTATE, &abd);
+
+        ShowWindow (taskbar, SW_SHOW);
+        SetWindowPos (taskbar, HWND_TOPMOST, 0, 0, 0, 0,
+                      SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
+
+        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE,
+                            SPI_SETWORKAREA, 0);
+    }
+
+    // Restore secondary taskbars (multi-monitor)
+    HWND secondary = NULL;
+    while ((secondary = FindWindowExA (NULL, secondary, "Shell_SecondaryTrayWnd", NULL)))
+    {
+        ShowWindow (secondary, SW_SHOW);
+    }
+
+    // Remove the scheduled task
     wchar_t sys_dir[MAX_PATH];
     GetSystemDirectoryW (sys_dir, MAX_PATH);
 

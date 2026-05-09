@@ -25,6 +25,7 @@ static const gf_config_t DEFAULT_CONFIG
         .min_window_size = GF_MIN_WINDOW_SIZE,
         .border_color = 0x00F49D2A,
         .enable_borders = true,
+        .enable_live_resize = true,
         .locked_workspaces_count = 0,
         .window_rules_count = 0 };
 
@@ -48,21 +49,21 @@ gf_config_get_path (void)
 
     snprintf (config_path, sizeof (config_path), "%s\\gridflux\\config.json", appdata);
 
-        // Ensure the directory exists
+    // Ensure the directory exists
     char gridflux_dir[PATH_MAX];
     snprintf (gridflux_dir, sizeof (gridflux_dir), "%s\\gridflux", appdata);
     _mkdir (gridflux_dir);
 
     return config_path;
 #else
-        // Unix-like systems
+    // Unix-like systems
     const char *xdg_config = getenv ("XDG_CONFIG_HOME");
     if (xdg_config && xdg_config[0] != '\0')
     {
         snprintf (config_path, sizeof (config_path), "%s/gridflux/config.json",
                   xdg_config);
 
-                // Ensure the directory exists
+        // Ensure the directory exists
         char gridflux_dir[PATH_MAX];
         snprintf (gridflux_dir, sizeof (gridflux_dir), "%s/gridflux", xdg_config);
         mkdir (gridflux_dir, 0755);
@@ -79,7 +80,7 @@ gf_config_get_path (void)
 
     snprintf (config_path, sizeof (config_path), "%s/.config/gridflux/config.json", home);
 
-        // Ensure the directory exists
+    // Ensure the directory exists
     char config_dir[PATH_MAX];
     snprintf (config_dir, sizeof (config_dir), "%s/.config", home);
     mkdir (config_dir, 0755);
@@ -154,6 +155,8 @@ gf_config_save (const char *filename, const gf_config_t *cfg)
                             json_object_new_int64 (cfg->border_color));
     json_object_object_add (json, "enable_borders",
                             json_object_new_boolean (cfg->enable_borders));
+    json_object_object_add (json, "enable_live_resize",
+                            json_object_new_boolean (cfg->enable_live_resize));
 
     struct json_object *arr = json_object_new_array ();
     for (uint32_t i = 0; i < cfg->locked_workspaces_count; i++)
@@ -162,7 +165,7 @@ gf_config_save (const char *filename, const gf_config_t *cfg)
     }
     json_object_object_add (json, "locked_workspaces", arr);
 
-        // Serialize window rules
+    // Serialize window rules
     struct json_object *rules_arr = json_object_new_array ();
     for (uint32_t i = 0; i < cfg->window_rules_count; i++)
     {
@@ -192,6 +195,7 @@ gf_config_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
             || old_cfg->min_window_size != new_cfg->min_window_size
             || old_cfg->border_color != new_cfg->border_color
             || old_cfg->enable_borders != new_cfg->enable_borders
+            || old_cfg->enable_live_resize != new_cfg->enable_live_resize
             || old_cfg->locked_workspaces_count != new_cfg->locked_workspaces_count
             || old_cfg->window_rules_count != new_cfg->window_rules_count);
 }
@@ -258,6 +262,17 @@ load_or_create_config (const char *filename)
         cfg.enable_borders = json_object_get_boolean (border_obj);
     }
 
+    struct json_object *live_resize_obj = NULL;
+    if (!json_object_object_get_ex (json, "enable_live_resize", &live_resize_obj))
+    {
+        cfg.enable_live_resize = DEFAULT_CONFIG.enable_live_resize;
+        changed = true;
+    }
+    else
+    {
+        cfg.enable_live_resize = json_object_get_boolean (live_resize_obj);
+    }
+
     struct json_object *arr_obj = NULL;
     if (json_object_object_get_ex (json, "locked_workspaces", &arr_obj)
         && json_object_is_type (arr_obj, json_type_array))
@@ -288,7 +303,7 @@ load_or_create_config (const char *filename)
         changed = true;
     }
 
-        // Parse window rules
+    // Parse window rules
     struct json_object *rules_obj = NULL;
     if (json_object_object_get_ex (json, "window_rules", &rules_obj)
         && json_object_is_type (rules_obj, json_type_array))

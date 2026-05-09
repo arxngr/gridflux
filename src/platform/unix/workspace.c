@@ -1,6 +1,8 @@
 #include "../../utils/logger.h"
 #include "internal.h"
 #include <X11/Xatom.h>
+#include <X11/Xlib.h>
+#include <unistd.h>
 
 static void
 _gf_get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms,
@@ -15,9 +17,9 @@ _gf_get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms,
 
     *panel_left = *panel_right = *panel_top = *panel_bottom = 0;
 
-    if ((XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 4096, False,
-                             XA_WINDOW, &actual_type, &actual_format, &clients_count,
-                             &bytes_after, &clients_data)
+    if ((XGetWindowProperty (dpy, root, atoms->net_client_list, 0, 4096, False, XA_WINDOW,
+                             &actual_type, &actual_format, &clients_count, &bytes_after,
+                             &clients_data)
          == Success)
         && clients_data)
     {
@@ -27,9 +29,9 @@ _gf_get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms,
             long *strut = NULL;
             unsigned long nitems_strut = 0;
 
-            if (gf_platform_get_window_property (
-                    dpy, clients[i], atoms->net_wm_strut_partial, XA_CARDINAL,
-                    (unsigned char **)&strut, &nitems_strut)
+            if (gf_platform_get_window_property (dpy, clients[i],
+                                                 atoms->net_wm_strut_partial, XA_CARDINAL,
+                                                 (unsigned char **)&strut, &nitems_strut)
                     == GF_SUCCESS
                 && strut && nitems_strut >= 12)
             {
@@ -43,15 +45,40 @@ _gf_get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms,
                     *panel_bottom = strut[3];
                 XFree (strut);
             }
-            else if (strut)
+            else
             {
-                XFree (strut);
+                if (strut)
+                {
+                    XFree (strut);
+                    strut = NULL;
+                }
+
+                // Fallback to legacy _NET_WM_STRUT
+                if (gf_platform_get_window_property (
+                        dpy, clients[i], atoms->net_wm_strut, XA_CARDINAL,
+                        (unsigned char **)&strut, &nitems_strut)
+                        == GF_SUCCESS
+                    && strut && nitems_strut >= 4)
+                {
+                    if (strut[0] > *panel_left)
+                        *panel_left = strut[0];
+                    if (strut[1] > *panel_right)
+                        *panel_right = strut[1];
+                    if (strut[2] > *panel_top)
+                        *panel_top = strut[2];
+                    if (strut[3] > *panel_bottom)
+                        *panel_bottom = strut[3];
+                    XFree (strut);
+                }
+                else if (strut)
+                {
+                    XFree (strut);
+                }
             }
         }
         XFree (clients_data);
     }
 }
-
 
 gf_ws_id_t
 gf_workspace_get_current (gf_display_t display)
@@ -109,6 +136,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
     if (!dpy || !bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
+    XSync(dpy, False);
     int screen = DefaultScreen (dpy);
     Window root = DefaultRootWindow (dpy);
     Screen *scr = ScreenOfDisplay (dpy, screen);
@@ -117,7 +145,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
 
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
 
-        // Initialize with full screen
+    // Initialize with full screen
     bounds->x = 0;
     bounds->y = 0;
     bounds->width = sw;
@@ -125,7 +153,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
 
     bool workarea_valid = false;
 
-        // Try _NET_WORKAREA first
+    // Try _NET_WORKAREA first
     unsigned char *data = NULL;
     unsigned long nitems = 0;
 
@@ -134,16 +162,16 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
             == GF_SUCCESS
         && data && nitems >= 4)
     {
-                // _NET_WORKAREA is an array of 4 integers (x, y, w, h) per desktop
+        // _NET_WORKAREA is an array of 4 integers (x, y, w, h) per desktop
         const int EWMH_WORKAREA_STRIDE = 4;
         gf_ws_id_t workspace = gf_workspace_get_current (dpy);
         unsigned long offset = workspace * EWMH_WORKAREA_STRIDE;
 
-                // Ensure we don't go out of bounds
+        // Ensure we don't go out of bounds
         if (offset + (EWMH_WORKAREA_STRIDE - 1) < nitems)
         {
             long *workarea = (long *)data;
-                        // Validate workarea makes sense (smaller than screen, non-zero)
+            // Validate workarea makes sense (smaller than screen, non-zero)
             if (workarea[offset + 2] > 0 && workarea[offset + 3] > 0
                 && (workarea[offset + 1] > 0 || workarea[offset + 2] < sw
                     || workarea[offset + 3] < sh))
@@ -160,25 +188,26 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
     if (data)
         XFree (data);
 
-        // If Workarea gave full screen (or failed), try Struts to be safe
+    // If Workarea gave full screen (or failed), try Struts to be safe
     if (!workarea_valid
         || (bounds->x == 0 && bounds->y == 0 && bounds->width == sw
             && bounds->height == sh))
     {
         int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
-        _gf_get_global_struts(dpy, root, atoms, &panel_left, &panel_right, &panel_top, &panel_bottom);
+        _gf_get_global_struts (dpy, root, atoms, &panel_left, &panel_right, &panel_top,
+                               &panel_bottom);
 
-                // If Struts found reserved space, use it (intersect with current bounds if valid,
-                // else replace)
+        // If Struts found reserved space, use it (intersect with current bounds if valid,
+        // else replace)
         if (panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0)
         {
-                        // Struts are reserved space logic.
+            // Struts are reserved space logic.
             int new_x = panel_left;
             int new_y = panel_top;
             int new_w = sw - panel_left - panel_right;
             int new_h = sh - panel_top - panel_bottom;
 
-                        // Prefer the "smaller" area (most restrictive)
+            // Prefer the "smaller" area (most restrictive)
             if (new_x > bounds->x)
                 bounds->x = new_x;
             if (new_y > bounds->y)
@@ -256,7 +285,7 @@ gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors, uint32_t 
         }
     }
 
-        // Fallback: single monitor
+    // Fallback: single monitor
     *count = 1;
     monitors[0].id = 0;
     monitors[0].is_primary = true;
@@ -286,7 +315,7 @@ gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window)
         XTranslateCoordinates (dpy, (Window)window, DefaultRootWindow (dpy), 0, 0, &x, &y,
                                &child);
 
-                // Center point check
+        // Center point check
         int cx = x + attrs.width / 2;
         int cy = y + attrs.height / 2;
 
@@ -310,8 +339,16 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
     if (!display || !bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
+    // Force X server roundtrip to ensure we see the latest property changes
+    // (like _NET_WORKAREA) after the dock visibility changes.
+    XSync(display, False);
+    
     int screen_count = 0;
+
     XineramaScreenInfo *screens = XineramaQueryScreens (display, &screen_count);
+    bool found = false;
+
+    // Get Physical Geometry from Xinerama
     if (screens)
     {
         for (int i = 0; i < screen_count; i++)
@@ -322,53 +359,108 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
                 bounds->y = screens[i].y_org;
                 bounds->width = screens[i].width;
                 bounds->height = screens[i].height;
-                XFree (screens);
-
-                                // Apply struts to the physical monitor bounds
-                int screen = DefaultScreen (display);
-                Window root = DefaultRootWindow (display);
-                Screen *scr = ScreenOfDisplay (display, screen);
-                int sw = scr->width;
-                int sh = scr->height;
-
-                int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
-                gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
-                _gf_get_global_struts(display, root, atoms, &panel_left, &panel_right, &panel_top, &panel_bottom);
-
-                if (panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0)
-                {
-                    int new_x = panel_left;
-                    int new_y = panel_top;
-                    int new_w = sw - panel_left - panel_right;
-                    int new_h = sh - panel_top - panel_bottom;
-
-                                        // Prefer the "smaller" area (most restrictive)
-                                        // Intersect monitor physical bounds with the strut-reduced global bounds
-                    if (new_x > bounds->x)
-                    {
-                        bounds->width -= (new_x - bounds->x);
-                        bounds->x = new_x;
-                    }
-                    if (new_y > bounds->y)
-                    {
-                        bounds->height -= (new_y - bounds->y);
-                        bounds->y = new_y;
-                    }
-                    if (bounds->x + bounds->width > new_x + new_w)
-                    {
-                        bounds->width = (new_x + new_w) - bounds->x;
-                    }
-                    if (bounds->y + bounds->height > new_y + new_h)
-                    {
-                        bounds->height = (new_y + new_h) - bounds->y;
-                    }
-                }
-
-                return GF_SUCCESS;
+                found = true;
+                break;
             }
         }
         XFree (screens);
     }
 
-    return gf_screen_get_bounds (display, bounds);
+    if (!found)
+    {
+        return gf_screen_get_bounds (display, bounds);
+    }
+
+    // Get the "Global Safe Zone" via gf_platform_get_window_property
+    Window root = DefaultRootWindow (display);
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    unsigned char *data = NULL;
+    unsigned long nitems = 0;
+
+    // Default the safe zone to the whole display in case the property fails
+    int safe_x = 0, safe_y = 0;
+    int safe_w = DisplayWidth (display, DefaultScreen (display));
+    int safe_h = DisplayHeight (display, DefaultScreen (display));
+
+    if (gf_platform_get_window_property (display, root, atoms->net_workarea, XA_CARDINAL,
+                                         &data, &nitems)
+        == GF_SUCCESS)
+    {
+        if (data && nitems >= 4)
+        {
+            // _NET_WORKAREA is an array of 4 longs per workspace
+            long *workareas = (long *)data;
+            gf_ws_id_t workspace = gf_workspace_get_current (display);
+            unsigned long offset = workspace * 4;
+
+            if (offset + 3 < nitems)
+            {
+                safe_x = (int)workareas[offset];
+                safe_y = (int)workareas[offset + 1];
+                safe_w = (int)workareas[offset + 2];
+                safe_h = (int)workareas[offset + 3];
+            }
+        }
+    }
+
+    if (data)
+        XFree (data);
+
+    // Always check Struts to be safe, because GNOME's _NET_WORKAREA can be unreliable
+    // especially during or after workspace transitions or dynamic dock visibility changes.
+    int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
+    _gf_get_global_struts (display, root, atoms, &panel_left, &panel_right, &panel_top,
+                           &panel_bottom);
+
+    int sw = DisplayWidth (display, DefaultScreen (display));
+    int sh = DisplayHeight (display, DefaultScreen (display));
+
+    if (panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0)
+    {
+        int strut_x = panel_left;
+        int strut_y = panel_top;
+        int strut_w = sw - panel_left - panel_right;
+        int strut_h = sh - panel_top - panel_bottom;
+
+        // Intersect strut area with the currently determined safe area
+        if (strut_x > safe_x)
+        {
+            safe_w -= (strut_x - safe_x);
+            safe_x = strut_x;
+        }
+        if (strut_y > safe_y)
+        {
+            safe_h -= (strut_y - safe_y);
+            safe_y = strut_y;
+        }
+        if (safe_x + safe_w > strut_x + strut_w)
+            safe_w = (strut_x + strut_w) - safe_x;
+        if (safe_y + safe_h > strut_y + strut_h)
+            safe_h = (strut_y + strut_h) - safe_y;
+
+        // Ensure we don't get negative dimensions
+        if (safe_w < 0) safe_w = 0;
+        if (safe_h < 0) safe_h = 0;
+    }
+
+    // Clip the physical monitor against the global safe zone
+    // This is the logic that supports multiple monitors of different sizes
+    int monitor_right = bounds->x + bounds->width;
+    int monitor_bottom = bounds->y + bounds->height;
+    int safe_right = safe_x + safe_w;
+    int safe_bottom = safe_y + safe_h;
+
+    // Calculate the overlap
+    int final_x = (bounds->x > safe_x) ? bounds->x : safe_x;
+    int final_y = (bounds->y > safe_y) ? bounds->y : safe_y;
+    int final_r = (monitor_right < safe_right) ? monitor_right : safe_right;
+    int final_b = (monitor_bottom < safe_bottom) ? monitor_bottom : safe_bottom;
+
+    // Final assignment with safety checks
+    bounds->x = final_x;
+    bounds->y = final_y;
+    bounds->width = (final_r > final_x) ? (final_r - final_x) : 0;
+    bounds->height = (final_b > final_y) ? (final_b - final_y) : 0;
+
+    return GF_SUCCESS;
 }

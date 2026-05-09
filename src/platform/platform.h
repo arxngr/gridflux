@@ -75,6 +75,11 @@ struct gf_platform
     void (*keymap_cleanup) (gf_platform_t *platform);
     gf_key_action_t (*keymap_poll) (gf_platform_t *platform, gf_display_t display);
 
+        // --- Resize Interaction ---
+    gf_err_t (*resize_hook_install) (gf_platform_t *platform);
+    void (*resize_hook_uninstall) (gf_platform_t *platform);
+    bool (*resize_poll) (gf_platform_t *platform, gf_resize_event_t *event);
+
     void *platform_data;
 };
 
