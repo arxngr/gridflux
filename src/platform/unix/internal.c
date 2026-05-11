@@ -4,10 +4,12 @@
 #include <X11/Xutil.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 bool
@@ -129,24 +131,20 @@ _remove_size_constraints (Display *dpy, Window win)
 }
 
 void
-_run_bg_command (const char *cmd, char *const argv[])
+_run_cmd_sync (const char *cmd, char *const argv[])
 {
-    pid_t pid = fork ();
-    if (pid == 0)
-    {
-                // Child process
-                // Redirect stdout/stderr to /dev/null to avoid cluttering logs
-        int null_fd = open ("/dev/null", O_WRONLY);
-        if (null_fd >= 0)
-        {
-            dup2 (null_fd, STDOUT_FILENO);
-            dup2 (null_fd, STDERR_FILENO);
-            close (null_fd);
-        }
+    pid_t pid;
+    posix_spawnattr_t attr;
+    posix_spawnattr_init (&attr);
 
-        execvp (cmd, argv);
-        _exit (1); // Exit if exec fails
+    // posix_spawnp uses the PATH to find the executable
+    if (posix_spawnp (&pid, cmd, NULL, &attr, argv, environ) == 0)
+    {
+        // Removing WNOHANG makes the parent wait here until the child exits
+        waitpid (pid, NULL, 0);
     }
+
+    posix_spawnattr_destroy (&attr);
 }
 
 bool
