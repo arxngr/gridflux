@@ -116,16 +116,17 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
         }
     }
 
+    // Always re-assert HWND_TOPMOST to fix async Z-order inconsistency.
+    // When a window is re-tiled (e.g. after another app closes), or gains focus,
+    // the OS can push it above the overlay asynchronously, making the border invisible.
+    // We force TOPMOST every time to prevent this.
+    UINT swp_flags = SWP_NOACTIVATE | SWP_NOREDRAW;
+    if (!shape_changed && !was_hidden)
+        swp_flags |= SWP_NOMOVE | SWP_NOSIZE;
+    SetWindowPos (b->overlay, HWND_TOPMOST, win_x, win_y, win_w, win_h, swp_flags);
+
     if (shape_changed || was_hidden)
     {
-        // Always re-assert HWND_TOPMOST when repositioning.
-        // When a window is re-tiled (e.g. after another app closes),
-        // the target's SetWindowPos can push it above the overlay,
-        // making the border invisible.  Using SWP_NOZORDER would
-        // preserve that wrong order, so we force TOPMOST every time.
-        SetWindowPos (b->overlay, HWND_TOPMOST, win_x, win_y, win_w, win_h,
-                      SWP_NOACTIVATE | SWP_NOREDRAW);
-
         // Hollow ring region: full rect minus the inner window area
         HRGN full_rgn = CreateRectRgn (0, 0, win_w, win_h);
         HRGN hollow_rgn = CreateRectRgn (t, t, win_w - t, win_h - t);
