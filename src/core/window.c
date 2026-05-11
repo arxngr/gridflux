@@ -46,8 +46,9 @@ _remove_stale_windows (gf_wm_t *m, gf_win_list_t *windows)
                 }
             }
 
-            gf_window_list_remove (windows, win->id);
-            m->platform->border_remove (m->platform, win->id);
+            gf_handle_t stale_id = win->id;
+            m->platform->border_remove (m->platform, stale_id);
+            gf_window_list_remove (windows, stale_id);
             removed_windows++;
             continue;
         }
