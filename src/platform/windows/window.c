@@ -276,7 +276,7 @@ gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
     if (!_validate_window (window))
         return;
 
-        // Use GetClassNameA to get the window class
+    // Use GetClassNameA to get the window class
     char class_name[128] = { 0 };
     if (GetClassNameA ((HWND)window, class_name, sizeof (class_name)))
     {
@@ -284,6 +284,33 @@ gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
         char exe_name[MAX_PATH] = { 0 };
         DWORD pid = 0;
         GetWindowThreadProcessId ((HWND)window, &pid);
+
+        // UWP Window Host handling (ApplicationFrameWindow)
+        if (strcmp (class_name, "ApplicationFrameWindow") == 0)
+        {
+            HWND child = FindWindowExA ((HWND)window, NULL, "Windows.UI.Core.CoreWindow", NULL);
+            if (child)
+            {
+                GetWindowThreadProcessId (child, &pid);
+            }
+            else
+            {
+                // Fallback: try to find any child window and get its PID
+                HWND c = GetWindow ((HWND)window, GW_CHILD);
+                while (c)
+                {
+                    DWORD child_pid = 0;
+                    GetWindowThreadProcessId (c, &child_pid);
+                    if (child_pid != 0 && child_pid != pid)
+                    {
+                        pid = child_pid;
+                        break;
+                    }
+                    c = GetWindow (c, GW_HWNDNEXT);
+                }
+            }
+        }
+
         HANDLE hProcess = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
         if (hProcess)
         {

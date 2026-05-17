@@ -42,7 +42,8 @@ get_app_icon_for_card (const char *wm_class)
 
 void
 gf_gui_workspace_card_add_to_grid (GtkGrid *grid, gf_ws_info_t *ws,
-                                    const gf_win_list_t *windows, int row)
+                                    const gf_win_list_t *windows, int row,
+                                    gf_app_state_t *app)
 {
     char id_str[16];
     snprintf (id_str, sizeof (id_str), "%d", ws->id);
@@ -85,12 +86,22 @@ gf_gui_workspace_card_add_to_grid (GtkGrid *grid, gf_ws_info_t *ws,
 
             GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
             
-            GdkPaintable *icon = get_app_icon_for_card (name);
+            GdkPaintable *icon = NULL;
+            if (app && app->platform && app->platform->get_window_icon)
+            {
+                icon = app->platform->get_window_icon (app->platform, windows->items[i].id);
+            }
+            if (!icon)
+            {
+                icon = get_app_icon_for_card (name);
+            }
+
             if (icon)
             {
                 GtkWidget *img = gtk_image_new_from_paintable (icon);
                 gtk_widget_set_size_request (img, 16, 16);
                 gtk_box_append (GTK_BOX (box), img);
+                g_object_unref (icon);
             }
             else
             {

@@ -96,7 +96,24 @@ refresh_rules_list (rules_panel_data_t *data)
             gtk_box_append (GTK_BOX (app_box), gtk_label_new ("📦"));
         }
 
-        GtkWidget *class_label = gtk_label_new (config.window_rules[i].wm_class);
+        const char *friendly = NULL;
+        if (data->app->platform->get_friendly_name)
+        {
+            friendly = data->app->platform->get_friendly_name (data->app->platform, config.window_rules[i].wm_class);
+        }
+
+        char display_name[256];
+        if (friendly)
+        {
+            snprintf (display_name, sizeof (display_name), "%s (%s)", friendly, config.window_rules[i].wm_class);
+        }
+        else
+        {
+            strncpy (display_name, config.window_rules[i].wm_class, sizeof (display_name) - 1);
+            display_name[sizeof (display_name) - 1] = '\0';
+        }
+
+        GtkWidget *class_label = gtk_label_new (display_name);
         gtk_widget_add_css_class (class_label, "table-cell");
         gtk_box_append (GTK_BOX (app_box), class_label);
 
@@ -132,39 +149,6 @@ refresh_rules_list (rules_panel_data_t *data)
 static void
 populate_app_dropdown (gf_app_state_t *app, GtkStringList *model)
 {
-        // First: add apps from running windows via IPC
-    gf_ipc_response_t resp = gf_run_client_command ("query apps");
-    if (resp.status == GF_IPC_SUCCESS)
-    {
-        gf_command_response_t *cmd_resp = (gf_command_response_t *)resp.message;
-                // Copy message to avoid strtok modifying original
-        char apps_buf[sizeof (cmd_resp->message)];
-        strncpy (apps_buf, cmd_resp->message, sizeof (apps_buf) - 1);
-        apps_buf[sizeof (apps_buf) - 1] = '\0';
-
-        char *line = strtok (apps_buf, "\n");
-        while (line)
-        {
-            if (line[0] != '\0')
-            {
-                guint n = g_list_model_get_n_items (G_LIST_MODEL (model));
-                bool duplicate = false;
-                for (guint i = 0; i < n; i++)
-                {
-                    const char *existing = gtk_string_list_get_string (model, i);
-                    if (existing && strcmp (existing, line) == 0)
-                    {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (!duplicate)
-                    gtk_string_list_append (model, line);
-            }
-            line = strtok (NULL, "\n");
-        }
-    }
-
     if (app && app->platform && app->platform->populate_app_dropdown)
     {
         app->platform->populate_app_dropdown (app->platform, model);
@@ -199,10 +183,6 @@ bind_app_list_item (GtkSignalListItemFactory *factory, GtkListItem *list_item,
     GtkWidget *icon = gtk_widget_get_first_child (box);
     GtkWidget *label = gtk_widget_get_next_sibling (icon);
 
-        // We use the app state embedded in the list item's parent view to fetch the icon
-        // Actually, we need to pass app to this bound context if possible.
-        // The easiest way is to lookup the ancestor or use an object attached to the factory.
-        // For now, let's pull app from the factory user data if we can hook it up.
     gf_app_state_t *app = (gf_app_state_t *)data;
 
     gpointer item = gtk_list_item_get_item (list_item);
@@ -234,7 +214,19 @@ on_add_rule_clicked (GtkButton *btn, gpointer user_data)
     if (!item)
         return;
 
-    const char *wm_class = gtk_string_object_get_string (item);
+    const char *full_str = gtk_string_object_get_string (item);
+    char wm_class[256];
+    strncpy (wm_class, full_str, sizeof (wm_class) - 1);
+    wm_class[sizeof (wm_class) - 1] = '\0';
+
+    char *open = strchr (wm_class, '[');
+    char *close = strchr (wm_class, ']');
+    if (open && close && close > open)
+    {
+        *close = '\0';
+        memmove (wm_class, open + 1, strlen (open + 1) + 1);
+    }
+
     int workspace_id = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (data->ws_spin));
 
     char command[256];

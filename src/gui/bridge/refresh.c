@@ -13,7 +13,7 @@ is_window_itself (const gf_win_info_t *win)
 
 void
 gf_build_workspace_grid (GtkGrid *grid, gf_ws_list_t *workspaces,
-                         const gf_win_list_t *windows)
+                         const gf_win_list_t *windows, gf_app_state_t *app)
 {
     const char *headers[]
         = { "Workspace", "Window Count", "Windows", "Available Slots", "Layout",
@@ -28,7 +28,7 @@ gf_build_workspace_grid (GtkGrid *grid, gf_ws_list_t *workspaces,
 
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
-        gf_gui_workspace_card_add_to_grid (grid, &workspaces->items[i], windows, i + 2);
+        gf_gui_workspace_card_add_to_grid (grid, &workspaces->items[i], windows, i + 2, app);
     }
 }
 
@@ -118,7 +118,7 @@ gf_refresh_workspaces (gf_app_state_t *app)
     gtk_widget_set_margin_top (GTK_WIDGET (grid), 12);
     gtk_widget_set_margin_bottom (GTK_WIDGET (grid), 12);
 
-    gf_build_workspace_grid (grid, workspaces, windows);
+    gf_build_workspace_grid (grid, workspaces, windows, app);
     gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (app->workspace_table),
                                    GTK_WIDGET (grid));
 
