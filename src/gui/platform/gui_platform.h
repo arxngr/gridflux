@@ -15,6 +15,7 @@ struct gf_gui_platform
 
         // --- Application Icons & Discovery ---
     GdkPaintable *(*get_app_icon) (gf_gui_platform_t *platform, const char *wm_class);
+    const char *(*get_friendly_name) (gf_gui_platform_t *platform, const char *wm_class);
     void (*populate_app_dropdown) (gf_gui_platform_t *platform, GtkStringList *model);
 
         // --- Window Information ---
