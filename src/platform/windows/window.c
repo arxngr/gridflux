@@ -3,8 +3,95 @@
 #include "internal.h"
 #include <stdio.h>
 #include <time.h>
+#include <ctype.h>
 
 #define MAX_WINDOWS 1024
+
+static const char *
+_strcasestr (const char *haystack, const char *needle)
+{
+    if (!haystack || !needle)
+        return NULL;
+    if (*needle == '\0')
+        return haystack;
+
+    for (; *haystack != '\0'; haystack++)
+    {
+        if (tolower ((unsigned char)*haystack) == tolower ((unsigned char)*needle))
+        {
+            const char *h = haystack;
+            const char *n = needle;
+            while (*h != '\0' && *n != '\0' && tolower ((unsigned char)*h) == tolower ((unsigned char)*n))
+            {
+                h++;
+                n++;
+            }
+            if (*n == '\0')
+                return haystack;
+        }
+    }
+    return NULL;
+}
+
+static bool
+_is_installer_window (HWND window)
+{
+    char class_name[256] = { 0 };
+    GetClassNameA (window, class_name, sizeof (class_name));
+
+    char title[256] = { 0 };
+    GetWindowTextA (window, title, sizeof (title) - 1);
+
+    char exe_name[MAX_PATH] = { 0 };
+    DWORD pid = 0;
+    GetWindowThreadProcessId (window, &pid);
+    HANDLE hProcess = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (hProcess)
+    {
+        char process_path[MAX_PATH] = { 0 };
+        DWORD size = MAX_PATH;
+        if (QueryFullProcessImageNameA (hProcess, 0, process_path, &size))
+        {
+            char *filename = strrchr (process_path, '\\');
+            if (filename)
+                filename++;
+            else
+                filename = process_path;
+            strncpy (exe_name, filename, sizeof (exe_name) - 1);
+        }
+        CloseHandle (hProcess);
+    }
+
+    if (exe_name[0] != '\0')
+    {
+        if (_strcasestr (exe_name, "setup") != NULL
+            || _strcasestr (exe_name, "install") != NULL
+            || _strcasestr (exe_name, "uninst") != NULL
+            || _strcasestr (exe_name, "msiexec") != NULL)
+        {
+            return true;
+        }
+    }
+
+    if (strcmp (class_name, "#32770") == 0
+        || strncmp (class_name, "TSetup", 6) == 0
+        || _strcasestr (class_name, "Setup") != NULL
+        || _strcasestr (class_name, "Install") != NULL)
+    {
+        if (title[0] != '\0')
+        {
+            if (_strcasestr (title, "setup") != NULL
+                || _strcasestr (title, "install") != NULL
+                || _strcasestr (title, "wizard") != NULL
+                || _strcasestr (title, "uninstaller") != NULL)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 gf_err_t
 gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
@@ -166,6 +253,9 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
         return true;
 
     if (_window_it_self (display, window))
+        return true;
+
+    if (_is_installer_window ((HWND)window))
         return true;
 
     char title[MAX_TITLE_LENGTH];
