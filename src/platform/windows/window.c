@@ -1,9 +1,9 @@
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "internal.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <time.h>
-#include <ctype.h>
 
 #define MAX_WINDOWS 1024
 
@@ -21,7 +21,8 @@ _strcasestr (const char *haystack, const char *needle)
         {
             const char *h = haystack;
             const char *n = needle;
-            while (*h != '\0' && *n != '\0' && tolower ((unsigned char)*h) == tolower ((unsigned char)*n))
+            while (*h != '\0' && *n != '\0'
+                   && tolower ((unsigned char)*h) == tolower ((unsigned char)*n))
             {
                 h++;
                 n++;
@@ -73,8 +74,7 @@ _is_installer_window (HWND window)
         }
     }
 
-    if (strcmp (class_name, "#32770") == 0
-        || strncmp (class_name, "TSetup", 6) == 0
+    if (strcmp (class_name, "#32770") == 0 || strncmp (class_name, "TSetup", 6) == 0
         || _strcasestr (class_name, "Setup") != NULL
         || _strcasestr (class_name, "Install") != NULL)
     {
@@ -195,7 +195,7 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
     int new_w = geometry->width;
     int new_h = geometry->height;
 
-        // Compensate for the invisible DWM shadow/border that shifts the window rect
+    // Compensate for the invisible DWM shadow/border that shifts the window rect
     RECT d_rect, w_rect;
     if (SUCCEEDED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &d_rect,
                                           sizeof (d_rect)))
@@ -212,7 +212,7 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
         new_h += top_border + bottom_border;
     }
 
-        // Use SetWindowPos with SWP_NOSENDCHANGING so that apps like Discord
+    // Use SetWindowPos with SWP_NOSENDCHANGING so that apps like Discord
     // (CEF/Electron) cannot intercept the resize via WM_WINDOWPOSCHANGING
     // and silently enforce their own minimum size.
     UINT swp_flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING;
@@ -370,7 +370,7 @@ gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
     char class_name[128] = { 0 };
     if (GetClassNameA ((HWND)window, class_name, sizeof (class_name)))
     {
-                // Get the executable name so rules can match against the .exe
+        // Get the executable name so rules can match against the .exe
         char exe_name[MAX_PATH] = { 0 };
         DWORD pid = 0;
         GetWindowThreadProcessId ((HWND)window, &pid);
@@ -378,7 +378,8 @@ gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
         // UWP Window Host handling (ApplicationFrameWindow)
         if (strcmp (class_name, "ApplicationFrameWindow") == 0)
         {
-            HWND child = FindWindowExA ((HWND)window, NULL, "Windows.UI.Core.CoreWindow", NULL);
+            HWND child
+                = FindWindowExA ((HWND)window, NULL, "Windows.UI.Core.CoreWindow", NULL);
             if (child)
             {
                 GetWindowThreadProcessId (child, &pid);
@@ -453,8 +454,8 @@ gf_platform_window_hidden (gf_display_t display, gf_handle_t window)
     if (!_validate_window (window))
         return false;
 
-        // Window is hidden if it's not visible AND not minimized to taskbar
-        // This catches windows that are closed to system tray
+    // Window is hidden if it's not visible AND not minimized to taskbar
+    // This catches windows that are closed to system tray
     return !IsWindowVisible ((HWND)window) && !IsIconic ((HWND)window);
 }
 

@@ -136,7 +136,7 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
     if (!dpy || !bounds)
         return GF_ERROR_INVALID_PARAMETER;
 
-    XSync(dpy, False);
+    XSync (dpy, False);
     int screen = DefaultScreen (dpy);
     Window root = DefaultRootWindow (dpy);
     Screen *scr = ScreenOfDisplay (dpy, screen);
@@ -341,8 +341,8 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
 
     // Force X server roundtrip to ensure we see the latest property changes
     // (like _NET_WORKAREA) after the dock visibility changes.
-    XSync(display, False);
-    
+    XSync (display, False);
+
     int screen_count = 0;
 
     XineramaScreenInfo *screens = XineramaQueryScreens (display, &screen_count);
@@ -407,7 +407,8 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
         XFree (data);
 
     // Always check Struts to be safe, because GNOME's _NET_WORKAREA can be unreliable
-    // especially during or after workspace transitions or dynamic dock visibility changes.
+    // especially during or after workspace transitions or dynamic dock visibility
+    // changes.
     int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
     _gf_get_global_struts (display, root, atoms, &panel_left, &panel_right, &panel_top,
                            &panel_bottom);
@@ -439,8 +440,10 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
             safe_h = (strut_y + strut_h) - safe_y;
 
         // Ensure we don't get negative dimensions
-        if (safe_w < 0) safe_w = 0;
-        if (safe_h < 0) safe_h = 0;
+        if (safe_w < 0)
+            safe_w = 0;
+        if (safe_h < 0)
+            safe_h = 0;
     }
 
     // Clip the physical monitor against the global safe zone

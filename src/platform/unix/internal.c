@@ -27,10 +27,10 @@ bool
 _window_app_exception (gf_display_t display, gf_handle_t window)
 {
     const char *screenshot_classes[]
-        = { "flameshot", "Gnome-screenshot", "Spectacle",
-            "Shutter",   "Plasma",           "plasmashell",
-            "dunst",     "xfce4-notifyd",    "notification-daemon",
-            "update-notifier", "update-manager", "gpk-update-viewer",
+        = { "flameshot",       "Gnome-screenshot", "Spectacle",
+            "Shutter",         "Plasma",           "plasmashell",
+            "dunst",           "xfce4-notifyd",    "notification-daemon",
+            "update-notifier", "update-manager",   "gpk-update-viewer",
             "gnome-software" };
 
     XClassHint hint;

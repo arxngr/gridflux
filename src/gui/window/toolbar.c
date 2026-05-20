@@ -135,4 +135,3 @@ gf_gui_toolbar_new (gf_app_state_t *app)
 
     return box;
 }
-

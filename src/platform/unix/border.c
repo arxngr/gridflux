@@ -22,26 +22,33 @@ static bool g_notification_threads_started = false;
 static void *
 _dbus_monitor_thread (void *arg)
 {
-    FILE *fp = popen ("dbus-monitor "
-                      "\"type='method_call',interface='org.freedesktop.Notifications',member='Notify'\" "
-                      "\"type='signal',interface='org.freedesktop.Notifications',member='NotificationClosed'\" "
-                      "\"type='method_call',interface='org.gtk.Notifications',member='AddNotification'\" "
-                      "\"type='method_call',interface='org.gtk.Notifications',member='RemoveNotification'\" "
-                      "\"type='method_call',interface='org.gnome.Shell.Screenshot'\" 2>/dev/null",
-                      "r");
+    FILE *fp = popen (
+        "dbus-monitor "
+        "\"type='method_call',interface='org.freedesktop.Notifications',member='Notify'"
+        "\" "
+        "\"type='signal',interface='org.freedesktop.Notifications',member='"
+        "NotificationClosed'\" "
+        "\"type='method_call',interface='org.gtk.Notifications',member='AddNotification'"
+        "\" "
+        "\"type='method_call',interface='org.gtk.Notifications',member='"
+        "RemoveNotification'\" "
+        "\"type='method_call',interface='org.gnome.Shell.Screenshot'\" 2>/dev/null",
+        "r");
     if (!fp)
         return NULL;
 
     char line[512];
     while (fgets (line, sizeof (line), fp))
     {
-        if (strstr (line, "member=Notify") || strstr (line, "member=AddNotification") || strstr (line, "interface=org.gnome.Shell.Screenshot"))
+        if (strstr (line, "member=Notify") || strstr (line, "member=AddNotification")
+            || strstr (line, "interface=org.gnome.Shell.Screenshot"))
         {
             pthread_mutex_lock (&g_notification_mutex);
             g_notification_expire_time = time (NULL) + 15; // 15-second fail-safe timeout
             pthread_mutex_unlock (&g_notification_mutex);
         }
-        else if (strstr (line, "member=NotificationClosed") || strstr (line, "member=RemoveNotification"))
+        else if (strstr (line, "member=NotificationClosed")
+                 || strstr (line, "member=RemoveNotification"))
         {
             pthread_mutex_lock (&g_notification_mutex);
             g_notification_expire_time = 0; // instantly clear and restore borders
@@ -63,7 +70,8 @@ _gsettings_monitor_thread (void *arg)
     while (fgets (line, sizeof (line), fp))
     {
         pthread_mutex_lock (&g_notification_mutex);
-        g_notification_expire_time = time (NULL) + 6; // 6-second timeout for favorite-apps settings sync
+        g_notification_expire_time
+            = time (NULL) + 6; // 6-second timeout for favorite-apps settings sync
         pthread_mutex_unlock (&g_notification_mutex);
     }
     pclose (fp);
@@ -81,7 +89,8 @@ _get_pictures_dir (char *dest, size_t max_len)
     }
     else
     {
-        if (fp) pclose (fp);
+        if (fp)
+            pclose (fp);
         const char *home = getenv ("HOME");
         snprintf (dest, max_len, "%s/Pictures", home ? home : "/");
     }
@@ -114,19 +123,23 @@ _inotify_monitor_thread (void *arg)
         int retval = select (fd + 1, &rfds, NULL, NULL, &tv);
         if (retval > 0)
         {
-            char buffer[4096] __attribute__ ((aligned(__alignof__(struct inotify_event))));
+            char buffer[4096]
+                __attribute__ ((aligned (__alignof__ (struct inotify_event))));
             ssize_t len = read (fd, buffer, sizeof (buffer));
             if (len > 0)
             {
                 pthread_mutex_lock (&g_notification_mutex);
-                g_notification_expire_time = time (NULL) + 12; // 12-second timeout for screenshot toast
+                g_notification_expire_time
+                    = time (NULL) + 12; // 12-second timeout for screenshot toast
                 pthread_mutex_unlock (&g_notification_mutex);
             }
         }
     }
 
-    if (wd1 >= 0) inotify_rm_watch (fd, wd1);
-    if (wd2 >= 0) inotify_rm_watch (fd, wd2);
+    if (wd1 >= 0)
+        inotify_rm_watch (fd, wd1);
+    if (wd2 >= 0)
+        inotify_rm_watch (fd, wd2);
     close (fd);
     return NULL;
 }
@@ -153,8 +166,8 @@ _ensure_notification_threads_started (void)
         pthread_detach (tid3);
     }
 
-    GF_LOG_INFO (
-        "Native GNOME notification, GSettings, and screenshot watchers started successfully.");
+    GF_LOG_INFO ("Native GNOME notification, GSettings, and screenshot watchers started "
+                 "successfully.");
 }
 
 static bool
@@ -649,9 +662,11 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         // Native notification/favorites sync exclusion box injection
         if (notification_active && intersect_count < 32)
         {
-            gf_monitor_id_t monitor_id = gf_monitor_from_window (platform, (gf_handle_t)b->target);
+            gf_monitor_id_t monitor_id
+                = gf_monitor_from_window (platform, (gf_handle_t)b->target);
             gf_rect_t monitor_bounds;
-            gf_err_t err = gf_screen_get_bounds_for_monitor (dpy, monitor_id, &monitor_bounds);
+            gf_err_t err
+                = gf_screen_get_bounds_for_monitor (dpy, monitor_id, &monitor_bounds);
             if (err != GF_SUCCESS)
             {
                 // Fallback to primary screen dimensions

@@ -156,7 +156,8 @@ gf_wm_watch (gf_wm_t *m)
                 gf_wm_window_class (m, win->id, class_name, sizeof (class_name));
                 const gf_window_rule_t *rule = gf_rules_find (m->config, class_name);
 
-                gf_ws_info_t *current_ws = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
+                gf_ws_info_t *current_ws
+                    = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
 
                 if (current_ws && !rule && current_ws->has_rule)
                 {

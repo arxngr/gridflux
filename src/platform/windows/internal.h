@@ -19,7 +19,8 @@ BOOL _is_excluded_style (HWND hwnd);
 BOOL _is_fullscreen_window (HWND hwnd);
 BOOL _is_cloaked_window (HWND hwnd);
 BOOL _is_notification_center (HWND hwnd);
-void gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer, size_t bufsize);
+void gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
+                          size_t bufsize);
 
 // --- Workspace & System ---
 void _get_taskbar_dimensions (int *left, int *right, int *top, int *bottom);

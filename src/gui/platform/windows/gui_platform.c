@@ -1,12 +1,12 @@
 #include "../gui_platform.h"
 #include "../../../utils/logger.h"
 #include "../../bridge/ipc_client.h"
+#include <appmodel.h>
 #include <objbase.h>
 #include <shlobj.h>
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
-#include <appmodel.h>
 
 typedef struct
 {
@@ -14,10 +14,12 @@ typedef struct
     GHashTable *friendly_names;
 } gf_win32_gui_data_t;
 
-typedef LONG (WINAPI *GetPackagePathByFullName_t)(PCWSTR packageFullName, UINT32 *pathLength, PWSTR packagePath);
+typedef LONG (WINAPI *GetPackagePathByFullName_t) (PCWSTR packageFullName,
+                                                   UINT32 *pathLength, PWSTR packagePath);
 
 static bool
-find_uwp_logo_file (const char *pkg_path, const char *logo_rel_path, char *out_path, size_t out_len)
+find_uwp_logo_file (const char *pkg_path, const char *logo_rel_path, char *out_path,
+                    size_t out_len)
 {
     if (!pkg_path || !logo_rel_path || logo_rel_path[0] == '\0')
         return false;
@@ -69,16 +71,22 @@ find_uwp_logo_file (const char *pkg_path, const char *logo_rel_path, char *out_p
             if (flen > 4 && _stricmp (fd.cFileName + flen - 4, ".png") == 0)
             {
                 int score = 0;
-                if (strstr (fd.cFileName, "targetsize-48") != NULL) score = 100;
-                else if (strstr (fd.cFileName, "targetsize") != NULL) score = 90;
-                else if (strstr (fd.cFileName, "scale-200") != NULL) score = 80;
-                else if (strstr (fd.cFileName, "scale-100") != NULL) score = 70;
-                else score = 50;
+                if (strstr (fd.cFileName, "targetsize-48") != NULL)
+                    score = 100;
+                else if (strstr (fd.cFileName, "targetsize") != NULL)
+                    score = 90;
+                else if (strstr (fd.cFileName, "scale-200") != NULL)
+                    score = 80;
+                else if (strstr (fd.cFileName, "scale-100") != NULL)
+                    score = 70;
+                else
+                    score = 50;
 
                 if (score > best_score)
                 {
                     best_score = score;
-                    snprintf (best_match, sizeof (best_match), "%s\\%s", dir_path, fd.cFileName);
+                    snprintf (best_match, sizeof (best_match), "%s\\%s", dir_path,
+                              fd.cFileName);
                     found = true;
                 }
             }
@@ -96,7 +104,8 @@ find_uwp_logo_file (const char *pkg_path, const char *logo_rel_path, char *out_p
 }
 
 static bool
-find_file_in_subdirs (const char *parent_dir, const char *filename, char *out_path, size_t out_len)
+find_file_in_subdirs (const char *parent_dir, const char *filename, char *out_path,
+                      size_t out_len)
 {
     char search_pattern[MAX_PATH];
     snprintf (search_pattern, sizeof (search_pattern), "%s\\*", parent_dir);
@@ -114,7 +123,8 @@ find_file_in_subdirs (const char *parent_dir, const char *filename, char *out_pa
             if (strcmp (fd.cFileName, ".") != 0 && strcmp (fd.cFileName, "..") != 0)
             {
                 char sub_path[MAX_PATH];
-                snprintf (sub_path, sizeof (sub_path), "%s\\%s\\%s", parent_dir, fd.cFileName, filename);
+                snprintf (sub_path, sizeof (sub_path), "%s\\%s\\%s", parent_dir,
+                          fd.cFileName, filename);
                 if (GetFileAttributesA (sub_path) != INVALID_FILE_ATTRIBUTES)
                 {
                     strncpy (out_path, sub_path, out_len - 1);
@@ -297,7 +307,7 @@ gf_get_hwnd_icon (HWND hwnd)
 
     HICON hicon = NULL;
 
-        // 1. Try SendMessageTimeout to avoid hanging the GUI if the app is unresponsive
+    // 1. Try SendMessageTimeout to avoid hanging the GUI if the app is unresponsive
     DWORD_PTR result = 0;
     if (SendMessageTimeout (hwnd, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG, 50,
                             &result))
@@ -321,7 +331,7 @@ gf_get_hwnd_icon (HWND hwnd)
     if (hicon)
         return gf_hicon_to_paintable (hicon);
 
-        // 2. Fallback: Get the associated process executable and extract its icon
+    // 2. Fallback: Get the associated process executable and extract its icon
     DWORD pid = 0;
     GetWindowThreadProcessId (hwnd, &pid);
     if (pid)
@@ -366,7 +376,8 @@ gf_get_hwnd_icon (HWND hwnd)
 }
 
 static void
-handle_squirrel_update_shortcut (IShellLinkA *shell_link, char *target_path, size_t target_len)
+handle_squirrel_update_shortcut (IShellLinkA *shell_link, char *target_path,
+                                 size_t target_len)
 {
     const char *filename = strrchr (target_path, '\\');
     filename = filename ? filename + 1 : target_path;
@@ -405,7 +416,8 @@ handle_squirrel_update_shortcut (IShellLinkA *shell_link, char *target_path, siz
             *last_slash = '\0';
 
         char real_exe_path[MAX_PATH] = { 0 };
-        if (find_file_in_subdirs (parent_dir, exe_name, real_exe_path, sizeof (real_exe_path)))
+        if (find_file_in_subdirs (parent_dir, exe_name, real_exe_path,
+                                  sizeof (real_exe_path)))
         {
             strncpy (target_path, real_exe_path, target_len - 1);
             target_path[target_len - 1] = '\0';
@@ -418,7 +430,8 @@ handle_squirrel_update_shortcut (IShellLinkA *shell_link, char *target_path, siz
 }
 
 static bool
-resolve_shortcut (const char *lnk_path, char *target_path, size_t target_len, char *icon_path, size_t icon_len)
+resolve_shortcut (const char *lnk_path, char *target_path, size_t target_len,
+                  char *icon_path, size_t icon_len)
 {
     IShellLinkA *shell_link = NULL;
     IPersistFile *persist_file = NULL;
@@ -431,7 +444,7 @@ resolve_shortcut (const char *lnk_path, char *target_path, size_t target_len, ch
                                      &IID_IShellLinkA, (void **)&shell_link)))
     {
         if (SUCCEEDED (shell_link->lpVtbl->QueryInterface (shell_link, &IID_IPersistFile,
-                                                            (void **)&persist_file)))
+                                                           (void **)&persist_file)))
         {
             WCHAR wpath[MAX_PATH];
             MultiByteToWideChar (CP_UTF8, 0, lnk_path, -1, wpath, MAX_PATH);
@@ -446,15 +459,20 @@ resolve_shortcut (const char *lnk_path, char *target_path, size_t target_len, ch
 
                     if (success)
                     {
-                        handle_squirrel_update_shortcut (shell_link, target_path, target_len);
+                        handle_squirrel_update_shortcut (shell_link, target_path,
+                                                         target_len);
 
                         if (icon_path && icon_len > 0)
                         {
                             char raw_icon_path[MAX_PATH] = { 0 };
                             int icon_idx = 0;
-                            if (SUCCEEDED (shell_link->lpVtbl->GetIconLocation (shell_link, raw_icon_path, sizeof (raw_icon_path), &icon_idx)) && raw_icon_path[0] != '\0')
+                            if (SUCCEEDED (shell_link->lpVtbl->GetIconLocation (
+                                    shell_link, raw_icon_path, sizeof (raw_icon_path),
+                                    &icon_idx))
+                                && raw_icon_path[0] != '\0')
                             {
-                                ExpandEnvironmentStringsA (raw_icon_path, icon_path, (DWORD)icon_len);
+                                ExpandEnvironmentStringsA (raw_icon_path, icon_path,
+                                                           (DWORD)icon_len);
                             }
                             else
                             {
@@ -473,7 +491,8 @@ resolve_shortcut (const char *lnk_path, char *target_path, size_t target_len, ch
 }
 
 static void
-extract_class_from_display_string (const char *display_string, char *out_class, size_t out_size)
+extract_class_from_display_string (const char *display_string, char *out_class,
+                                   size_t out_size)
 {
     if (!display_string || !out_class || out_size == 0)
         return;
@@ -504,7 +523,8 @@ model_has_class (GtkStringList *model, const char *wm_class)
         if (existing)
         {
             char existing_class[MAX_PATH];
-            extract_class_from_display_string (existing, existing_class, sizeof (existing_class));
+            extract_class_from_display_string (existing, existing_class,
+                                               sizeof (existing_class));
             if (_stricmp (existing_class, wm_class) == 0)
                 return true;
         }
@@ -558,7 +578,8 @@ get_fallback_friendly_name (const char *exe_name, char *out_name, size_t out_siz
 }
 
 static bool
-extract_xml_attribute (const char *xml_block, const char *attribute_name, char *out_val, size_t out_size)
+extract_xml_attribute (const char *xml_block, const char *attribute_name, char *out_val,
+                       size_t out_size)
 {
     if (!xml_block || !attribute_name || !out_val || out_size == 0)
         return false;
@@ -583,7 +604,8 @@ extract_xml_attribute (const char *xml_block, const char *attribute_name, char *
 }
 
 static bool
-extract_xml_tag_content (const char *xml_block, const char *tag_name, char *out_val, size_t out_size)
+extract_xml_tag_content (const char *xml_block, const char *tag_name, char *out_val,
+                         size_t out_size)
 {
     if (!xml_block || !tag_name || !out_val || out_size == 0)
         return false;
@@ -613,14 +635,16 @@ extract_xml_tag_content (const char *xml_block, const char *tag_name, char *out_
 }
 
 static void
-add_app_to_model (gf_win32_gui_data_t *data, GtkStringList *model, 
-                  const char *friendly_name, const char *wm_class, const char *icon_or_exe_path)
+add_app_to_model (gf_win32_gui_data_t *data, GtkStringList *model,
+                  const char *friendly_name, const char *wm_class,
+                  const char *icon_or_exe_path)
 {
     if (model_has_class (model, wm_class))
         return;
 
     char display_string[MAX_PATH * 2];
-    snprintf (display_string, sizeof (display_string), "%s [%s]", friendly_name, wm_class);
+    snprintf (display_string, sizeof (display_string), "%s [%s]", friendly_name,
+              wm_class);
     gtk_string_list_append (model, display_string);
 
     char clean_key[MAX_PATH];
@@ -630,17 +654,19 @@ add_app_to_model (gf_win32_gui_data_t *data, GtkStringList *model,
     {
         if (!g_hash_table_contains (data->app_paths, clean_key))
         {
-            g_hash_table_insert (data->app_paths, g_strdup (clean_key), g_strdup (icon_or_exe_path));
+            g_hash_table_insert (data->app_paths, g_strdup (clean_key),
+                                 g_strdup (icon_or_exe_path));
         }
     }
     if (!g_hash_table_contains (data->friendly_names, clean_key))
     {
-        g_hash_table_insert (data->friendly_names, g_strdup (clean_key), g_strdup (friendly_name));
+        g_hash_table_insert (data->friendly_names, g_strdup (clean_key),
+                             g_strdup (friendly_name));
     }
 }
 
 static void
-process_shortcut_file (gf_win32_gui_data_t *data, GtkStringList *model, 
+process_shortcut_file (gf_win32_gui_data_t *data, GtkStringList *model,
                        const char *dir_path, const char *lnk_filename)
 {
     char lnk_path[MAX_PATH];
@@ -648,7 +674,8 @@ process_shortcut_file (gf_win32_gui_data_t *data, GtkStringList *model,
 
     char target_path[MAX_PATH] = { 0 };
     char icon_path[MAX_PATH] = { 0 };
-    if (resolve_shortcut (lnk_path, target_path, sizeof (target_path), icon_path, sizeof (icon_path)))
+    if (resolve_shortcut (lnk_path, target_path, sizeof (target_path), icon_path,
+                          sizeof (icon_path)))
     {
         size_t tlen = strlen (target_path);
         if (tlen > 4 && _stricmp (target_path + tlen - 4, ".exe") == 0)
@@ -697,17 +724,20 @@ scan_windows_start_menu (gf_win32_gui_data_t *data, GtkStringList *model,
                 && strcmp (fd.cFileName, ".") != 0 && strcmp (fd.cFileName, "..") != 0)
             {
                 char subdir_path[MAX_PATH];
-                snprintf (subdir_path, sizeof (subdir_path), "%s\\%s", dir_path, fd.cFileName);
+                snprintf (subdir_path, sizeof (subdir_path), "%s\\%s", dir_path,
+                          fd.cFileName);
 
                 char subdir_search[MAX_PATH];
-                snprintf (subdir_search, sizeof (subdir_search), "%s\\*.lnk", subdir_path);
+                snprintf (subdir_search, sizeof (subdir_search), "%s\\*.lnk",
+                          subdir_path);
                 WIN32_FIND_DATAA subd_fd;
                 HANDLE hdFind = FindFirstFileA (subdir_search, &subd_fd);
                 if (hdFind != INVALID_HANDLE_VALUE)
                 {
                     do
                     {
-                        process_shortcut_file (data, model, subdir_path, subd_fd.cFileName);
+                        process_shortcut_file (data, model, subdir_path,
+                                               subd_fd.cFileName);
                     } while (FindNextFileA (hdFind, &subd_fd));
                     FindClose (hdFind);
                 }
@@ -767,7 +797,9 @@ parse_manifest_and_add_app (gf_win32_gui_data_t *data, GtkStringList *model,
                             const char *manifest_content, const char *pkg_path)
 {
     char exe_name[MAX_PATH] = { 0 };
-    if (!extract_xml_attribute (manifest_content, "Executable", exe_name, sizeof (exe_name)) || exe_name[0] == '\0')
+    if (!extract_xml_attribute (manifest_content, "Executable", exe_name,
+                                sizeof (exe_name))
+        || exe_name[0] == '\0')
         return;
 
     if (is_app_list_entry_none (manifest_content))
@@ -777,11 +809,13 @@ parse_manifest_and_add_app (gf_win32_gui_data_t *data, GtkStringList *model,
         return;
 
     char friendly_name[MAX_PATH] = { 0 };
-    extract_xml_tag_content (manifest_content, "DisplayName", friendly_name, sizeof (friendly_name));
+    extract_xml_tag_content (manifest_content, "DisplayName", friendly_name,
+                             sizeof (friendly_name));
 
     if (friendly_name[0] == '\0' || strncmp (friendly_name, "ms-resource:", 12) == 0)
     {
-        extract_xml_attribute (manifest_content, "DisplayName", friendly_name, sizeof (friendly_name));
+        extract_xml_attribute (manifest_content, "DisplayName", friendly_name,
+                               sizeof (friendly_name));
     }
 
     if (friendly_name[0] == '\0' || strncmp (friendly_name, "ms-resource:", 12) == 0)
@@ -791,13 +825,16 @@ parse_manifest_and_add_app (gf_win32_gui_data_t *data, GtkStringList *model,
 
     char icon_path[MAX_PATH] = { 0 };
     char logo_rel_path[MAX_PATH] = { 0 };
-    extract_xml_attribute (manifest_content, "Square44x44Logo", logo_rel_path, sizeof (logo_rel_path));
+    extract_xml_attribute (manifest_content, "Square44x44Logo", logo_rel_path,
+                           sizeof (logo_rel_path));
     if (logo_rel_path[0] == '\0')
     {
-        extract_xml_attribute (manifest_content, "Logo", logo_rel_path, sizeof (logo_rel_path));
+        extract_xml_attribute (manifest_content, "Logo", logo_rel_path,
+                               sizeof (logo_rel_path));
     }
 
-    if (logo_rel_path[0] != '\0' && find_uwp_logo_file (pkg_path, logo_rel_path, icon_path, sizeof (icon_path)))
+    if (logo_rel_path[0] != '\0'
+        && find_uwp_logo_file (pkg_path, logo_rel_path, icon_path, sizeof (icon_path)))
     {
         // Successfully resolved PNG logo
     }
@@ -811,7 +848,8 @@ parse_manifest_and_add_app (gf_win32_gui_data_t *data, GtkStringList *model,
 
 static void
 process_uwp_package (gf_win32_gui_data_t *data, GtkStringList *model,
-                     const char *subkey_name, GetPackagePathByFullName_t pGetPackagePathByFullName)
+                     const char *subkey_name,
+                     GetPackagePathByFullName_t pGetPackagePathByFullName)
 {
     WCHAR wfullname[MAX_PATH];
     MultiByteToWideChar (CP_UTF8, 0, subkey_name, -1, wfullname, MAX_PATH);
@@ -870,14 +908,17 @@ scan_uwp_apps (gf_win32_gui_data_t *data, GtkStringList *model)
     if (!hAppModel)
         return;
 
-    GetPackagePathByFullName_t pGetPackagePathByFullName = 
-        (GetPackagePathByFullName_t)GetProcAddress (hAppModel, "GetPackagePathByFullName");
+    GetPackagePathByFullName_t pGetPackagePathByFullName
+        = (GetPackagePathByFullName_t)GetProcAddress (hAppModel,
+                                                      "GetPackagePathByFullName");
     if (!pGetPackagePathByFullName)
         return;
 
     HKEY hKey;
     LONG result = RegOpenKeyExA (HKEY_CURRENT_USER,
-                                 "Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\CurrentVersion\\AppModel\\Repository\\Packages",
+                                 "Software\\Classes\\Local "
+                                 "Settings\\Software\\Microsoft\\Windows\\CurrentVersion"
+                                 "\\AppModel\\Repository\\Packages",
                                  0, KEY_READ, &hKey);
     if (result != ERROR_SUCCESS)
         return;
@@ -886,7 +927,8 @@ scan_uwp_apps (gf_win32_gui_data_t *data, GtkStringList *model)
     DWORD subkey_len = sizeof (subkey_name);
     DWORD index = 0;
 
-    while (RegEnumKeyExA (hKey, index, subkey_name, &subkey_len, NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
+    while (RegEnumKeyExA (hKey, index, subkey_name, &subkey_len, NULL, NULL, NULL, NULL)
+           == ERROR_SUCCESS)
     {
         process_uwp_package (data, model, subkey_name, pGetPackagePathByFullName);
         index++;
@@ -901,7 +943,8 @@ win32_init (gf_gui_platform_t *platform)
 {
     gf_win32_gui_data_t *data = (gf_win32_gui_data_t *)platform->platform_data;
     data->app_paths = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
-    data->friendly_names = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    data->friendly_names
+        = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
     CoInitializeEx (NULL, COINIT_APARTMENTTHREADED);
     return true;
 }
@@ -954,7 +997,8 @@ win32_get_app_icon (gf_gui_platform_t *platform, const char *wm_class)
         else
         {
             SHFILEINFOA sfi;
-            if (SHGetFileInfoA (full_path, 0, &sfi, sizeof (sfi), SHGFI_ICON | SHGFI_LARGEICON))
+            if (SHGetFileInfoA (full_path, 0, &sfi, sizeof (sfi),
+                                SHGFI_ICON | SHGFI_LARGEICON))
             {
                 GdkPaintable *paintable = gf_hicon_to_paintable (sfi.hIcon);
                 DestroyIcon (sfi.hIcon);
@@ -998,7 +1042,8 @@ win32_populate_app_dropdown (gf_gui_platform_t *platform, GtkStringList *model)
 
     scan_uwp_apps (data, model);
 
-    // 2. Query running apps from the server via IPC to get the clean active taskbar applications!
+    // 2. Query running apps from the server via IPC to get the clean active taskbar
+    // applications!
     gf_ipc_response_t resp = gf_run_client_command ("query apps");
     if (resp.status == GF_IPC_SUCCESS)
     {
@@ -1018,11 +1063,13 @@ win32_populate_app_dropdown (gf_gui_platform_t *platform, GtkStringList *model)
                 char clean_key[MAX_PATH];
                 get_clean_exe_key (exe_part, clean_key, sizeof (clean_key));
 
-                const char *friendly = lookup_friendly_name_fuzzy (data->friendly_names, clean_key);
+                const char *friendly
+                    = lookup_friendly_name_fuzzy (data->friendly_names, clean_key);
                 char friendly_fallback[MAX_PATH];
                 if (!friendly)
                 {
-                    get_fallback_friendly_name (exe_part, friendly_fallback, sizeof (friendly_fallback));
+                    get_fallback_friendly_name (exe_part, friendly_fallback,
+                                                sizeof (friendly_fallback));
                     friendly = friendly_fallback;
                 }
 
