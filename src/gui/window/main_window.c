@@ -47,8 +47,8 @@ on_window_realize (GtkWidget *widget, gpointer user_data)
 #ifdef __linux__
     if (GDK_IS_X11_SURFACE (surface))
     {
-        gdk_x11_surface_set_skip_taskbar_hint (GDK_X11_SURFACE (surface), TRUE);
-        gdk_x11_surface_set_skip_pager_hint (GDK_X11_SURFACE (surface), TRUE);
+        gdk_x11_surface_set_skip_taskbar_hint (GDK_X11_SURFACE (surface), FALSE);
+        gdk_x11_surface_set_skip_pager_hint (GDK_X11_SURFACE (surface), FALSE);
     }
 #endif
 }
@@ -66,25 +66,25 @@ on_close_request_hide (GtkWindow *window, gpointer user_data)
 void
 gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
 {
-        // CSS Provider
+    // CSS Provider
     GtkCssProvider *provider = gtk_css_provider_new ();
     gtk_css_provider_load_from_string (
         provider,
-                // Table styles - hardcoded to match gradient
+        // Table styles - hardcoded to match gradient
         ".table-cell { border: 1px solid rgba(255,255,255,0.1); padding: 4px; "
         "background-color: transparent; color: #f0f9ff; }"
         ".table-header { border: 1px solid rgba(255,255,255,0.1); padding: 4px; "
         "background-color: rgba(255,255,255,0.05); color: #f0f9ff; font-weight: bold; }"
 
-                // Gradient background (cyan to blue)
+        // Gradient background (cyan to blue)
         "window.background { background: linear-gradient(180deg, #032045, #020912); }"
 
-                // Scrolled window / list backgrounds to match gradient
+        // Scrolled window / list backgrounds to match gradient
         "scrolledwindow { background: transparent; }"
         "viewport { background: transparent; }"
         "grid { background: transparent; }"
 
-                // Statusbar styles
+        // Statusbar styles
         ".statusbar { padding: 4px 8px; border-top: 1px solid rgba(255,255,255,0.15); }"
         ".status-indicator { font-size: 8px; }"
         ".status-ready { color: #22c55e; }"
@@ -92,15 +92,15 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
         ".status-text-ready { color: #bbf7d0; font-weight: bold; }"
         ".status-text-not-ready { color: #fca5a5; font-weight: bold; }"
 
-                // Make text visible on gradient
+        // Make text visible on gradient
         "label { color: #f0f9ff; }"
 
-                // Dropdown button styling
+        // Dropdown button styling
         "dropdown > button { background-color: rgba(255, 255, 255, 0.05); border: 1px "
         "solid rgba(255, 255, 255, 0.2); color: #f0f9ff; border-radius: 4px; }"
         "dropdown > button:hover { background-color: rgba(255, 255, 255, 0.15); }"
 
-                // Dropdown popover and its internal list - override white OS default
+        // Dropdown popover and its internal list - override white OS default
         "popover.background { background-color: #032045; }"
         "popover.background contents { background-color: #02152fff; border: 1px solid "
         "rgba(255, 255, 255, 0.2); color: #f0f9ff; }"
@@ -117,7 +117,7 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
                                                 GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref (provider);
 
-        // Request dark window decorations (dark title bar on Windows)
+    // Request dark window decorations (dark title bar on Windows)
     g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", TRUE,
                   NULL);
 
@@ -126,7 +126,7 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
     gtk_window_set_default_size (GTK_WINDOW (widgets->window), 900, 600);
     gtk_window_set_icon_name (GTK_WINDOW (widgets->window), "gridflux");
 
-        // Add icon theme search path so gtk_window_set_icon_name("gridflux")
+    // Add icon theme search path so gtk_window_set_icon_name("gridflux")
     // resolves to our icons for alt+tab, taskbar, etc.
     // Dev mode:  uses local "icons/" directory (hicolor structure)
     // Production: uses system icon dir (e.g. /usr/local/share/icons)
@@ -134,7 +134,7 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
         = gtk_icon_theme_get_for_display (gdk_display_get_default ());
     gtk_icon_theme_add_search_path (icon_theme, GF_ICON_THEME_PATH);
 
-        // Try loading logo, with fallback for builds running from build/ dir
+    // Try loading logo, with fallback for builds running from build/ dir
     GError *error = NULL;
     GdkPixbuf *icon
         = gdk_pixbuf_new_from_file_at_scale (GF_LOGO_PATH, 256, 256, FALSE, &error);
@@ -142,7 +142,7 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
     {
         g_error_free (error);
         error = NULL;
-                // Fallback: try parent directory (exe in build/, icons in project root)
+        // Fallback: try parent directory (exe in build/, icons in project root)
         icon = gdk_pixbuf_new_from_file_at_scale ("../" GF_LOGO_PATH, 256, 256, FALSE,
                                                   &error);
     }

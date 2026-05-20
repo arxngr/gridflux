@@ -9,15 +9,16 @@ typedef struct gf_gui_platform gf_gui_platform_t;
 
 struct gf_gui_platform
 {
-        // --- Lifecycle ---
+    // --- Lifecycle ---
     bool (*init) (gf_gui_platform_t *platform);
     void (*cleanup) (gf_gui_platform_t *platform);
 
-        // --- Application Icons & Discovery ---
+    // --- Application Icons & Discovery ---
     GdkPaintable *(*get_app_icon) (gf_gui_platform_t *platform, const char *wm_class);
+    const char *(*get_friendly_name) (gf_gui_platform_t *platform, const char *wm_class);
     void (*populate_app_dropdown) (gf_gui_platform_t *platform, GtkStringList *model);
 
-        // --- Window Information ---
+    // --- Window Information ---
     GdkPaintable *(*get_window_icon) (gf_gui_platform_t *platform, gf_handle_t window);
 
     void *platform_data;

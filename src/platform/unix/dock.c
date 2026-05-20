@@ -27,7 +27,7 @@ gf_dock_hide (gf_platform_t *platform)
         _run_cmd_sync ("gsettings", args_ubuntu);
 
         char *args_ubuntu_ih[]
-            = { "gsettings",  "set",   "org.gnome.shell.extensions.ubuntu-dock",
+            = { "gsettings",   "set",  "org.gnome.shell.extensions.ubuntu-dock",
                 "intellihide", "true", NULL };
         _run_cmd_sync ("gsettings", args_ubuntu_ih);
 
@@ -38,7 +38,7 @@ gf_dock_hide (gf_platform_t *platform)
         _run_cmd_sync ("gsettings", args_dash);
 
         char *args_dash_ih[]
-            = { "gsettings",  "set",   "org.gnome.shell.extensions.dash-to-dock",
+            = { "gsettings",   "set",  "org.gnome.shell.extensions.dash-to-dock",
                 "intellihide", "true", NULL };
         _run_cmd_sync ("gsettings", args_dash_ih);
 

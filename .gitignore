@@ -33,9 +33,14 @@ Makefile
 # Windows
 Thumbs.db
 
+# Explicitly track Windows resource files (some global gitignores exclude *.rc/*.manifest)
+!*.rc
+!*.manifest
+
 config.json
 gridflux
 gridflux-cli
 gridflux-gui
 packages/
 GridFlux-*
+.desktop
