@@ -1,0 +1,4 @@
+// Resource file for gridflux-launcher.exe
+// Embeds the GridFlux icon so it appears correctly in Task Manager / Explorer.
+1 24 "../../gridflux-launcher.manifest"
+101 ICON "../../icons/gridflux.ico"
