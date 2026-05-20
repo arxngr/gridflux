@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, development ]
+  pull_request:
+
+jobs:
+  lint:
+    name: Code Formatting Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Clang-Format Style Check
+        uses: DoozyX/clang-format-lint-action@v0.16
+        with:
+          source: 'src'
+          extensions: 'c,h'
+          clangFormatVersion: 18
+          style: file
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Linux Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            pkg-config \
+            libx11-dev \
+            libxext-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libjson-c-dev \
+            libdbus-1-dev \
+            libgtk-4-dev
+
+      - name: Configure CMake (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Codebase (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cmake --build build --config Release
+
+      - name: Setup MSYS2 (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-json-c
+            mingw-w64-x86_64-gtk4
+
+      - name: Configure & Build (Windows MSYS2)
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release

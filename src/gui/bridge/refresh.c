@@ -15,9 +15,8 @@ void
 gf_build_workspace_grid (GtkGrid *grid, gf_ws_list_t *workspaces,
                          const gf_win_list_t *windows, gf_app_state_t *app)
 {
-    const char *headers[]
-        = { "Workspace", "Window Count", "Windows", "Available Slots", "Layout",
-            "Status" };
+    const char *headers[] = { "Workspace",       "Window Count", "Windows",
+                              "Available Slots", "Layout",       "Status" };
     for (int i = 0; i < 6; i++)
     {
         GtkWidget *h = gtk_label_new (headers[i]);
@@ -28,7 +27,8 @@ gf_build_workspace_grid (GtkGrid *grid, gf_ws_list_t *workspaces,
 
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
-        gf_gui_workspace_card_add_to_grid (grid, &workspaces->items[i], windows, i + 2, app);
+        gf_gui_workspace_card_add_to_grid (grid, &workspaces->items[i], windows, i + 2,
+                                           app);
     }
 }
 
@@ -75,7 +75,7 @@ gf_refresh_workspaces (gf_app_state_t *app)
         return;
     }
 
-        // Update models
+    // Update models
     GtkStringList *new_ws_model = gtk_string_list_new (NULL);
     GtkStringList *new_target_ws_model = gtk_string_list_new (NULL);
     for (uint32_t i = 0; i < workspaces->count; i++)
@@ -109,7 +109,7 @@ gf_refresh_workspaces (gf_app_state_t *app)
                              G_LIST_MODEL (new_target_ws_model));
     app->target_ws_model = new_target_ws_model;
 
-        // Update grid
+    // Update grid
     GtkGrid *grid = GTK_GRID (gtk_grid_new ());
     gtk_grid_set_row_spacing (grid, 5);
     gtk_grid_set_column_spacing (grid, 10);

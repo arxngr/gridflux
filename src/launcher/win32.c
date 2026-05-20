@@ -124,7 +124,7 @@ install_task (const wchar_t *launcher_path, const wchar_t *dir)
     if (!f)
         return;
 
-        // Write UTF-16 LE BOM
+    // Write UTF-16 LE BOM
     fputc (0xFF, f);
     fputc (0xFE, f);
 
@@ -198,8 +198,7 @@ uninstall_task (void)
         SetWindowPos (taskbar, HWND_TOPMOST, 0, 0, 0, 0,
                       SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
 
-        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE,
-                            SPI_SETWORKAREA, 0);
+        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
     }
 
     // Restore secondary taskbars (multi-monitor)
@@ -237,7 +236,7 @@ WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd
     (void)hPrevInstance;
     (void)nCmdShow;
 
-        // Detect MSI commands
+    // Detect MSI commands
     const wchar_t *cmdline = GetCommandLineW ();
     if (wcsstr (cmdline, L"--install-task"))
     {
@@ -254,7 +253,7 @@ WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd
         return 0;
     }
 
-        // Single-instance guard
+    // Single-instance guard
     HANDLE mutex = CreateMutexW (NULL, TRUE, MUTEX_NAME);
     if (mutex == NULL || GetLastError () == ERROR_ALREADY_EXISTS)
     {
@@ -263,14 +262,14 @@ WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd
         return 0;
     }
 
-        // Build paths
+    // Build paths
     wchar_t dir[MAX_PATH] = { 0 };
     wchar_t exe_path[MAX_PATH] = { 0 };
 
     get_self_dir (dir, MAX_PATH);
     _snwprintf (exe_path, MAX_PATH, L"%s" EXE_NAME, dir);
 
-        // If gridflux.exe is already running, nothing to do
+    // If gridflux.exe is already running, nothing to do
     if (is_process_running (EXE_NAME))
     {
         CloseHandle (mutex);
