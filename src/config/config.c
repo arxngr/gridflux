@@ -381,7 +381,8 @@ load_or_create_config (const char *filename)
         size_t exclude_len = json_object_array_length (exclude_obj);
         cfg.exclude_zones_count = 0;
 
-        for (size_t i = 0; i < exclude_len && cfg.exclude_zones_count < GF_MAX_EXCLUDE_ZONES; i++)
+        for (size_t i = 0;
+             i < exclude_len && cfg.exclude_zones_count < GF_MAX_EXCLUDE_ZONES; i++)
         {
             struct json_object *zone_item = json_object_array_get_idx (exclude_obj, i);
             struct json_object *x_obj = NULL;
@@ -394,10 +395,14 @@ load_or_create_config (const char *filename)
                 && json_object_object_get_ex (zone_item, "width", &w_obj)
                 && json_object_object_get_ex (zone_item, "height", &h_obj))
             {
-                cfg.exclude_zones[cfg.exclude_zones_count].x = json_object_get_int (x_obj);
-                cfg.exclude_zones[cfg.exclude_zones_count].y = json_object_get_int (y_obj);
-                cfg.exclude_zones[cfg.exclude_zones_count].width = json_object_get_int (w_obj);
-                cfg.exclude_zones[cfg.exclude_zones_count].height = json_object_get_int (h_obj);
+                cfg.exclude_zones[cfg.exclude_zones_count].x
+                    = json_object_get_int (x_obj);
+                cfg.exclude_zones[cfg.exclude_zones_count].y
+                    = json_object_get_int (y_obj);
+                cfg.exclude_zones[cfg.exclude_zones_count].width
+                    = json_object_get_int (w_obj);
+                cfg.exclude_zones[cfg.exclude_zones_count].height
+                    = json_object_get_int (h_obj);
                 cfg.exclude_zones_count++;
             }
         }
