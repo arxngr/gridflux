@@ -27,7 +27,8 @@ static const gf_config_t DEFAULT_CONFIG
         .enable_borders = true,
         .enable_live_resize = true,
         .locked_workspaces_count = 0,
-        .window_rules_count = 0 };
+        .window_rules_count = 0,
+        .exclude_zones_count = 0 };
 
 const char *
 gf_config_get_path (void)
@@ -178,6 +179,23 @@ gf_config_save (const char *filename, const gf_config_t *cfg)
     }
     json_object_object_add (json, "window_rules", rules_arr);
 
+    // Serialize exclude zones
+    struct json_object *exclude_arr = json_object_new_array ();
+    for (uint32_t i = 0; i < cfg->exclude_zones_count; i++)
+    {
+        struct json_object *zone_obj = json_object_new_object ();
+        json_object_object_add (zone_obj, "x",
+                                json_object_new_int (cfg->exclude_zones[i].x));
+        json_object_object_add (zone_obj, "y",
+                                json_object_new_int (cfg->exclude_zones[i].y));
+        json_object_object_add (zone_obj, "width",
+                                json_object_new_int (cfg->exclude_zones[i].width));
+        json_object_object_add (zone_obj, "height",
+                                json_object_new_int (cfg->exclude_zones[i].height));
+        json_object_array_add (exclude_arr, zone_obj);
+    }
+    json_object_object_add (json, "exclude_zones", exclude_arr);
+
     const char *out = json_object_to_json_string_ext (json, JSON_C_TO_STRING_PRETTY);
     write_file (filename, out);
 
@@ -190,14 +208,32 @@ gf_config_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
     if (!old_cfg || !new_cfg)
         return false;
 
-    return (old_cfg->max_windows_per_workspace != new_cfg->max_windows_per_workspace
-            || old_cfg->max_workspaces != new_cfg->max_workspaces
-            || old_cfg->min_window_size != new_cfg->min_window_size
-            || old_cfg->border_color != new_cfg->border_color
-            || old_cfg->enable_borders != new_cfg->enable_borders
-            || old_cfg->enable_live_resize != new_cfg->enable_live_resize
-            || old_cfg->locked_workspaces_count != new_cfg->locked_workspaces_count
-            || old_cfg->window_rules_count != new_cfg->window_rules_count);
+    bool basic_changed
+        = (old_cfg->max_windows_per_workspace != new_cfg->max_windows_per_workspace
+           || old_cfg->max_workspaces != new_cfg->max_workspaces
+           || old_cfg->min_window_size != new_cfg->min_window_size
+           || old_cfg->border_color != new_cfg->border_color
+           || old_cfg->enable_borders != new_cfg->enable_borders
+           || old_cfg->enable_live_resize != new_cfg->enable_live_resize
+           || old_cfg->locked_workspaces_count != new_cfg->locked_workspaces_count
+           || old_cfg->window_rules_count != new_cfg->window_rules_count
+           || old_cfg->exclude_zones_count != new_cfg->exclude_zones_count);
+
+    if (basic_changed)
+        return true;
+
+    for (uint32_t i = 0; i < old_cfg->exclude_zones_count; i++)
+    {
+        if (old_cfg->exclude_zones[i].x != new_cfg->exclude_zones[i].x
+            || old_cfg->exclude_zones[i].y != new_cfg->exclude_zones[i].y
+            || old_cfg->exclude_zones[i].width != new_cfg->exclude_zones[i].width
+            || old_cfg->exclude_zones[i].height != new_cfg->exclude_zones[i].height)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static void
@@ -333,6 +369,36 @@ load_or_create_config (const char *filename)
                     cfg.window_rules[cfg.window_rules_count].workspace_id = ws;
                     cfg.window_rules_count++;
                 }
+            }
+        }
+    }
+
+    // Parse exclude zones
+    struct json_object *exclude_obj = NULL;
+    if (json_object_object_get_ex (json, "exclude_zones", &exclude_obj)
+        && json_object_is_type (exclude_obj, json_type_array))
+    {
+        size_t exclude_len = json_object_array_length (exclude_obj);
+        cfg.exclude_zones_count = 0;
+
+        for (size_t i = 0; i < exclude_len && cfg.exclude_zones_count < GF_MAX_EXCLUDE_ZONES; i++)
+        {
+            struct json_object *zone_item = json_object_array_get_idx (exclude_obj, i);
+            struct json_object *x_obj = NULL;
+            struct json_object *y_obj = NULL;
+            struct json_object *w_obj = NULL;
+            struct json_object *h_obj = NULL;
+
+            if (json_object_object_get_ex (zone_item, "x", &x_obj)
+                && json_object_object_get_ex (zone_item, "y", &y_obj)
+                && json_object_object_get_ex (zone_item, "width", &w_obj)
+                && json_object_object_get_ex (zone_item, "height", &h_obj))
+            {
+                cfg.exclude_zones[cfg.exclude_zones_count].x = json_object_get_int (x_obj);
+                cfg.exclude_zones[cfg.exclude_zones_count].y = json_object_get_int (y_obj);
+                cfg.exclude_zones[cfg.exclude_zones_count].width = json_object_get_int (w_obj);
+                cfg.exclude_zones[cfg.exclude_zones_count].height = json_object_get_int (h_obj);
+                cfg.exclude_zones_count++;
             }
         }
     }

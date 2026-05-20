@@ -47,8 +47,8 @@ on_window_realize (GtkWidget *widget, gpointer user_data)
 #ifdef __linux__
     if (GDK_IS_X11_SURFACE (surface))
     {
-        gdk_x11_surface_set_skip_taskbar_hint (GDK_X11_SURFACE (surface), TRUE);
-        gdk_x11_surface_set_skip_pager_hint (GDK_X11_SURFACE (surface), TRUE);
+        gdk_x11_surface_set_skip_taskbar_hint (GDK_X11_SURFACE (surface), FALSE);
+        gdk_x11_surface_set_skip_pager_hint (GDK_X11_SURFACE (surface), FALSE);
     }
 #endif
 }

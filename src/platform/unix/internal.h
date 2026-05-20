@@ -9,7 +9,7 @@
 void _run_cmd_sync (const char *cmd, char *const argv[]);
 
 // --- Window Identification & State ---
-bool _window_screenshot_app (gf_display_t display, gf_handle_t window);
+bool _window_app_exception (gf_display_t display, gf_handle_t window);
 bool _process_window_for_list (Display *display, Window window,
                                gf_platform_atoms_t *atoms, gf_ws_id_t *workspace_id,
                                gf_win_info_t *info);
