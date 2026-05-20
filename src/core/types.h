@@ -117,11 +117,11 @@ typedef struct
 #if defined(_WIN32)
     RECT last_rect;
     int last_intersect_count;
-    RECT last_intersections[16];
+    RECT last_intersections[32];
 #elif defined(__linux__)
     gf_rect_t last_rect;
     int last_intersect_count;
-    XRectangle last_intersections[16];
+    XRectangle last_intersections[32];
 #endif
 } gf_border_t;
 

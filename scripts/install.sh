@@ -284,7 +284,7 @@ Terminal=false
 Categories=System;Settings;
 Keywords=window;manager;tiling;grid;layout;workspace;
 StartupNotify=true
-StartupWMClass=GridFlux
+StartupWMClass=dev.gridflux.gui
 EOF
     log_info "Desktop entry created"
     update-desktop-database ~/.local/share/applications 2>/dev/null || true
