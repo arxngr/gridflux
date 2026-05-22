@@ -10,6 +10,7 @@
 #include "../platform/platform_compat.h" // Centralized platform-specific includes
 
 #define GF_MAX_LOCKED_WORKSPACES 32
+#define GF_MAX_EXCLUDE_ZONES 8
 
 typedef struct gf_config gf_config_t;
 
@@ -26,6 +27,8 @@ struct gf_config
     uint32_t locked_workspaces_count;
     gf_window_rule_t window_rules[GF_MAX_RULES];
     uint32_t window_rules_count;
+    gf_rect_t exclude_zones[GF_MAX_EXCLUDE_ZONES];
+    uint32_t exclude_zones_count;
 };
 // --- Configuration Lifecycle ---
 const char *gf_config_get_path (void);

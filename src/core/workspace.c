@@ -224,8 +224,6 @@ _handle_workspace_switch (gf_wm_t *m, gf_ws_id_t current_workspace)
             platform->dock_restore (platform);
             m->state.dock_hidden = false;
 
-
-
             if (target_ws && !target_ws->is_custom_layout)
                 gf_window_list_mark_all_needs_update (wm_windows (m), &current_workspace);
         }
@@ -253,15 +251,14 @@ _sync_workspaces (gf_wm_t *m)
         if (!ws)
             continue;
 
-            if (ws->has_rule)
-            {
-                ws->is_locked = true;
-            }
-            else
-            {
-                ws->is_locked = gf_config_workspace_is_locked (m->config, i);
-            }
-        
+        if (ws->has_rule)
+        {
+            ws->is_locked = true;
+        }
+        else
+        {
+            ws->is_locked = gf_config_workspace_is_locked (m->config, i);
+        }
 
         // Calculate space based on the final lock state
         ws->max_windows = max_per_ws;

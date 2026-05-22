@@ -109,7 +109,7 @@ _window_excluded_border (gf_display_t display, gf_handle_t window)
     if (_window_it_self (display, window))
         return true;
 
-    if (_window_screenshot_app (display, window))
+    if (_window_app_exception (display, window))
         return true;
 
     if (_window_has_excluded_state (display, window))
@@ -147,7 +147,7 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (_window_it_self (display, window))
         return true;
 
-    if (_window_screenshot_app (display, window))
+    if (_window_app_exception (display, window))
         return true;
 
     // Exclude fullscreen OR maximized NORMAL windows

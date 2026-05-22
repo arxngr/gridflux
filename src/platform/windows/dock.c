@@ -26,8 +26,7 @@ gf_dock_hide (gf_platform_t *platform)
 
         // 3. Broadcast a settings-change notification so Explorer
         //    re-reads the taskbar state immediately.
-        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE,
-                            SPI_SETWORKAREA, 0);
+        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
     }
 
     // Handle multi-monitor secondary taskbars (Windows 10/11)
@@ -63,8 +62,7 @@ gf_dock_restore (gf_platform_t *platform)
 
         // 4. Broadcast settings-change so Explorer refreshes the work area
         //    and the taskbar redraws at its normal position.
-        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE,
-                            SPI_SETWORKAREA, 0);
+        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
     }
 
     // Restore secondary taskbars

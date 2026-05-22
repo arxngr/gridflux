@@ -88,6 +88,7 @@ if(UNIX AND NOT APPLE)
         Xi
         Xinerama
         m
+        pthread
         ${JSONC_LIBRARIES}
     )
 

@@ -50,7 +50,7 @@ refresh_rules_list (rules_panel_data_t *data)
 {
     GtkWidget *grid = data->rules_grid;
 
-        // Clear existing children
+    // Clear existing children
     GtkWidget *child = gtk_widget_get_first_child (grid);
     while (child != NULL)
     {
@@ -59,7 +59,7 @@ refresh_rules_list (rules_panel_data_t *data)
         child = next;
     }
 
-        // Headers: Icon | Application | Workspace | Action
+    // Headers: Icon | Application | Workspace | Action
     const char *headers[] = { "Application", "Workspace", "Action" };
     for (int i = 0; i < 3; i++)
     {
@@ -69,7 +69,7 @@ refresh_rules_list (rules_panel_data_t *data)
         gtk_grid_attach (GTK_GRID (grid), h, i, 0, 1, 1);
     }
 
-        // Load rules from config
+    // Load rules from config
     const char *config_path = gf_config_get_path ();
     if (!config_path)
         return;
@@ -80,7 +80,7 @@ refresh_rules_list (rules_panel_data_t *data)
     {
         int row = (int)i + 1;
 
-                // Application column (Icon + Name)
+        // Application column (Icon + Name)
         GtkWidget *app_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
         gtk_widget_set_halign (app_box, GTK_ALIGN_START);
 
@@ -96,13 +96,33 @@ refresh_rules_list (rules_panel_data_t *data)
             gtk_box_append (GTK_BOX (app_box), gtk_label_new ("📦"));
         }
 
-        GtkWidget *class_label = gtk_label_new (config.window_rules[i].wm_class);
+        const char *friendly = NULL;
+        if (data->app->platform->get_friendly_name)
+        {
+            friendly = data->app->platform->get_friendly_name (
+                data->app->platform, config.window_rules[i].wm_class);
+        }
+
+        char display_name[256];
+        if (friendly)
+        {
+            snprintf (display_name, sizeof (display_name), "%s (%s)", friendly,
+                      config.window_rules[i].wm_class);
+        }
+        else
+        {
+            strncpy (display_name, config.window_rules[i].wm_class,
+                     sizeof (display_name) - 1);
+            display_name[sizeof (display_name) - 1] = '\0';
+        }
+
+        GtkWidget *class_label = gtk_label_new (display_name);
         gtk_widget_add_css_class (class_label, "table-cell");
         gtk_box_append (GTK_BOX (app_box), class_label);
 
         gtk_grid_attach (GTK_GRID (grid), app_box, 0, row, 1, 1);
 
-                // Workspace ID
+        // Workspace ID
         char ws_str[16];
         snprintf (ws_str, sizeof (ws_str), "%d", config.window_rules[i].workspace_id);
         GtkWidget *ws_label = gtk_label_new (ws_str);
@@ -110,7 +130,7 @@ refresh_rules_list (rules_panel_data_t *data)
         gtk_widget_set_halign (ws_label, GTK_ALIGN_START);
         gtk_grid_attach (GTK_GRID (grid), ws_label, 1, row, 1, 1);
 
-                // Remove button
+        // Remove button
         GtkWidget *remove_btn = gtk_button_new_with_label ("✕ Remove");
         char *class_copy = g_strdup (config.window_rules[i].wm_class);
         g_object_set_data_full (G_OBJECT (remove_btn), "wm_class", class_copy, g_free);
@@ -132,39 +152,6 @@ refresh_rules_list (rules_panel_data_t *data)
 static void
 populate_app_dropdown (gf_app_state_t *app, GtkStringList *model)
 {
-        // First: add apps from running windows via IPC
-    gf_ipc_response_t resp = gf_run_client_command ("query apps");
-    if (resp.status == GF_IPC_SUCCESS)
-    {
-        gf_command_response_t *cmd_resp = (gf_command_response_t *)resp.message;
-                // Copy message to avoid strtok modifying original
-        char apps_buf[sizeof (cmd_resp->message)];
-        strncpy (apps_buf, cmd_resp->message, sizeof (apps_buf) - 1);
-        apps_buf[sizeof (apps_buf) - 1] = '\0';
-
-        char *line = strtok (apps_buf, "\n");
-        while (line)
-        {
-            if (line[0] != '\0')
-            {
-                guint n = g_list_model_get_n_items (G_LIST_MODEL (model));
-                bool duplicate = false;
-                for (guint i = 0; i < n; i++)
-                {
-                    const char *existing = gtk_string_list_get_string (model, i);
-                    if (existing && strcmp (existing, line) == 0)
-                    {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (!duplicate)
-                    gtk_string_list_append (model, line);
-            }
-            line = strtok (NULL, "\n");
-        }
-    }
-
     if (app && app->platform && app->platform->populate_app_dropdown)
     {
         app->platform->populate_app_dropdown (app->platform, model);
@@ -199,10 +186,6 @@ bind_app_list_item (GtkSignalListItemFactory *factory, GtkListItem *list_item,
     GtkWidget *icon = gtk_widget_get_first_child (box);
     GtkWidget *label = gtk_widget_get_next_sibling (icon);
 
-        // We use the app state embedded in the list item's parent view to fetch the icon
-        // Actually, we need to pass app to this bound context if possible.
-        // The easiest way is to lookup the ancestor or use an object attached to the factory.
-        // For now, let's pull app from the factory user data if we can hook it up.
     gf_app_state_t *app = (gf_app_state_t *)data;
 
     gpointer item = gtk_list_item_get_item (list_item);
@@ -234,7 +217,19 @@ on_add_rule_clicked (GtkButton *btn, gpointer user_data)
     if (!item)
         return;
 
-    const char *wm_class = gtk_string_object_get_string (item);
+    const char *full_str = gtk_string_object_get_string (item);
+    char wm_class[256];
+    strncpy (wm_class, full_str, sizeof (wm_class) - 1);
+    wm_class[sizeof (wm_class) - 1] = '\0';
+
+    char *open = strchr (wm_class, '[');
+    char *close = strchr (wm_class, ']');
+    if (open && close && close > open)
+    {
+        *close = '\0';
+        memmove (wm_class, open + 1, strlen (open + 1) + 1);
+    }
+
     int workspace_id = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (data->ws_spin));
 
     char command[256];
@@ -287,7 +282,7 @@ on_rules_button_clicked (GtkButton *btn, gpointer data)
     gtk_widget_set_margin_bottom (main_box, 20);
     gtk_window_set_child (GTK_WINDOW (rules_window), main_box);
 
-        // --- Add Rule Section ---
+    // --- Add Rule Section ---
     GtkWidget *add_label = gtk_label_new ("Add New Rule");
     gtk_widget_set_halign (add_label, GTK_ALIGN_START);
     PangoAttrList *attrs = pango_attr_list_new ();
@@ -297,7 +292,7 @@ on_rules_button_clicked (GtkButton *btn, gpointer data)
     pango_attr_list_unref (attrs);
     gtk_box_append (GTK_BOX (main_box), add_label);
 
-        // Form row 1: Application dropdown
+    // Form row 1: Application dropdown
     GtkWidget *form1 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append (GTK_BOX (main_box), form1);
 
@@ -309,7 +304,7 @@ on_rules_button_clicked (GtkButton *btn, gpointer data)
     panel_data->app_model = gtk_string_list_new (NULL);
     populate_app_dropdown (app, panel_data->app_model);
 
-        // Use GtkExpression for search to work properly
+    // Use GtkExpression for search to work properly
     GtkExpression *expression
         = gtk_property_expression_new (GTK_TYPE_STRING_OBJECT, NULL, "string");
 
@@ -329,7 +324,7 @@ on_rules_button_clicked (GtkButton *btn, gpointer data)
     gtk_widget_set_hexpand (panel_data->app_dropdown, TRUE);
     gtk_box_append (GTK_BOX (form1), panel_data->app_dropdown);
 
-        // Form row 2: Workspace + Add button
+    // Form row 2: Workspace + Add button
     GtkWidget *form2 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_append (GTK_BOX (main_box), form2);
 
@@ -347,10 +342,10 @@ on_rules_button_clicked (GtkButton *btn, gpointer data)
     g_signal_connect (add_btn, "clicked", G_CALLBACK (on_add_rule_clicked), panel_data);
     gtk_box_append (GTK_BOX (form2), add_btn);
 
-        // --- Separator ---
+    // --- Separator ---
     gtk_box_append (GTK_BOX (main_box), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
 
-        // --- Current Rules Section ---
+    // --- Current Rules Section ---
     GtkWidget *rules_label = gtk_label_new ("Current Rules");
     gtk_widget_set_halign (rules_label, GTK_ALIGN_START);
     PangoAttrList *attrs2 = pango_attr_list_new ();
@@ -374,7 +369,7 @@ on_rules_button_clicked (GtkButton *btn, gpointer data)
 
     refresh_rules_list (panel_data);
 
-        // --- Bottom buttons ---
+    // --- Bottom buttons ---
     GtkWidget *btn_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_widget_set_halign (btn_box, GTK_ALIGN_END);
     gtk_box_append (GTK_BOX (main_box), btn_box);
