@@ -53,30 +53,88 @@ remove_existing_service() {
     fi
 }
 
+# Resolve the distro family by checking $ID first, then $ID_LIKE.
+# This handles derivatives like elementary OS, Linux Mint, Pop!_OS, Zorin, etc.
+detect_pkg_family() {
+    . /etc/os-release
+    local ids="$ID ${ID_LIKE:-}"
+    for id in $ids; do
+        case "$id" in
+            ubuntu|debian|linuxmint|elementary|pop|zorin|kali|mx|neon|deepin|pureos|raspbian)
+                echo "apt"; return ;;
+            fedora|rhel|centos|almalinux|rocky|nobara|ultramarine)
+                echo "dnf"; return ;;
+            arch|manjaro|endeavouros|garuda|artix|cachyos)
+                echo "pacman"; return ;;
+            opensuse*|suse|sles)
+                echo "zypper"; return ;;
+            void)
+                echo "xbps"; return ;;
+            alpine)
+                echo "apk"; return ;;
+            gentoo)
+                echo "emerge"; return ;;
+            nixos)
+                echo "nix"; return ;;
+        esac
+    done
+    echo "unknown"
+}
+
 install_dependencies() {
     echo "Installing dependencies..."
     . /etc/os-release
-    case "$ID" in
-    ubuntu | debian)
-        echo "Installing dependencies for Ubuntu/Debian..."
-        sudo apt install -y libx11-dev libxi-dev libjson-c-dev libdbus-1-dev cmake gcc make pkg-config
+    local pkg_family
+    pkg_family=$(detect_pkg_family)
+
+    echo "Detected distro: $PRETTY_NAME ($ID) → package manager: $pkg_family"
+
+    case "$pkg_family" in
+    apt)
+        sudo apt update
+        sudo apt install -y libx11-dev libxi-dev libxext-dev libxinerama-dev \
+            libjson-c-dev libdbus-1-dev cmake gcc make pkg-config
         sudo apt install -y libgtk-4-dev libglib2.0-dev
         ;;
-    fedora | rhel | centos | almalinux | rocky)
-        echo "Installing dependencies for Fedora/RHEL..."
-        sudo dnf install -y libX11-devel libXi-devel json-c-devel dbus-devel cmake gcc make pkgconfig
+    dnf)
+        sudo dnf install -y libX11-devel libXi-devel libXext-devel libXinerama-devel \
+            json-c-devel dbus-devel cmake gcc make pkgconfig
         sudo dnf install -y gtk4-devel glib2-devel
         ;;
-    arch | manjaro)
-        echo "Installing dependencies for Arch/Manjaro..."
-        sudo pacman -S --noconfirm libx11 libxi json-c dbus cmake gcc make pkgconf
+    pacman)
+        sudo pacman -Sy --noconfirm libx11 libxi libxext libxinerama \
+            json-c dbus cmake gcc make pkgconf
         sudo pacman -S --noconfirm gtk4 glib2
         ;;
+    zypper)
+        sudo zypper --non-interactive refresh
+        sudo zypper --non-interactive install -y diffutils libX11-devel libXi-devel libXext-devel libXinerama-devel \
+            libjson-c-devel dbus-1-devel cmake gcc make pkgconf-pkg-config
+        sudo zypper --non-interactive install -y gtk4-devel glib2-devel
+        ;;
+    xbps)
+        sudo xbps-install -Sy libX11-devel libXi-devel libXext-devel libXinerama-devel \
+            json-c-devel dbus-devel cmake gcc make pkg-config
+        sudo xbps-install -Sy gtk4-devel glib2-devel
+        ;;
+    apk)
+        sudo apk add libx11-dev libxi-dev libxext-dev libxinerama-dev \
+            json-c-dev dbus-dev cmake gcc make pkgconf
+        sudo apk add gtk4.0-dev glib-dev
+        ;;
     *)
-        log_error "Unsupported distro"
-        echo "Please install: libx11-dev, libxi-dev, libjson-c-dev, libdbus-1-dev, cmake, gcc, make, pkg-config"
-        echo "For GUI: libgtk-4-dev, libglib2.0-dev"
-        exit 1
+        log_warn "Could not auto-detect package manager for: $PRETTY_NAME ($ID)"
+        echo ""
+        echo "Please install the following dependencies manually:"
+        echo "  Build: cmake, gcc, make, pkg-config"
+        echo "  Libs:  libx11-dev, libxi-dev, libxext-dev, libxinerama-dev,"
+        echo "         libjson-c-dev, libdbus-1-dev"
+        echo "  GUI:   libgtk-4-dev, libglib2.0-dev"
+        echo ""
+        echo "Then re-run this script."
+        echo ""
+        read -p "Continue anyway? [y/N] " choice
+        [[ "$choice" =~ ^[Yy]$ ]] || exit 1
         ;;
     esac
 }
