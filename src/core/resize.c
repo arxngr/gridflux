@@ -3,7 +3,7 @@
 #include "internal.h"
 #include "types.h"
 #include "wm.h"
-
+#include <stdlib.h>
 static uint32_t
 _find_segment_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
                          const gf_rect_t *initial, gf_resize_dir_t dir,

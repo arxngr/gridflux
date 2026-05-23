@@ -71,9 +71,103 @@ jobs:
             mingw-w64-x86_64-json-c
             mingw-w64-x86_64-gtk4
 
-      - name: Configure & Build (Windows MSYS2)
+      - name: Install WiX Toolset (Windows)
+        if: matrix.os == 'windows-latest'
+        run: dotnet tool install --global wix
+
+      - name: Build MSI Installer (Windows)
         if: matrix.os == 'windows-latest'
         shell: msys2 {0}
         run: |
-          cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release
+          DOTNET_PATH="$(cygpath -u "$USERPROFILE")/.dotnet/tools"
+          export PATH="$DOTNET_PATH:$PATH"
+          
+          echo "Accepting WiX v7 EULA..."
+          wix eula accept wix7 || true
+          
+          echo "Adding WiX extensions..."
+          wix extension add -g WixToolset.UI.wixext || true
+          wix extension add -g WixToolset.Util.wixext || true
+          
+          echo "Running binary_builder.bat..."
+          cmd.exe //c "scripts\\binary_builder.bat" > build_log.txt 2>&1 || true
+          
+          if [ ! -f "GridFlux-1.0.0.msi" ]; then
+            echo "--- BUILD LOG ---"
+            cat build_log.txt
+            echo "Build failed! GridFlux-1.0.0.msi was not created."
+            exit 1
+          fi
+          echo "Build completed successfully."
+
+      - name: Test MSI Installation (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $msiPath = "$PWD\GridFlux-1.0.0.msi"
+          $logPath = "$PWD\msi_install.log"
+          if (-not (Test-Path $msiPath)) {
+            Write-Error "MSI file NOT found at $msiPath! Directory contents:"
+            Get-ChildItem
+            exit 1
+          }
+          Write-Host "Found MSI at $msiPath. Installing..."
+          $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$logPath`"" -Wait -NoNewWindow -PassThru
+          Write-Host "msiexec exited with code $($proc.ExitCode)"
+          if (Test-Path "C:\Program Files\GridFlux\gridflux-launcher.exe") {
+            Write-Host "Installation successful! Found in Program Files."
+          } elseif (Test-Path "C:\Program Files (x86)\GridFlux\gridflux-launcher.exe") {
+            Write-Host "Installation successful! Found in Program Files (x86)."
+          } else {
+            Write-Host "Installation failed! Outputting log..."
+            if (Test-Path $logPath) { Get-Content $logPath }
+            exit 1
+          }
+
+  test-linux-distros:
+    name: Test Install (${{ matrix.distro }})
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - ubuntu:latest
+          - debian:stable-slim
+          - fedora:latest
+          - archlinux:latest
+          - opensuse/tumbleweed:latest
+          - alpine:latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Installer on ${{ matrix.distro }}
+        run: |
+          BOOTSTRAP=""
+          if [[ "${{ matrix.distro }}" == *"alpine"* ]]; then
+            BOOTSTRAP="apk update && apk add --no-cache bash build-base"
+          fi
+
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            -e DISPLAY=:99 \
+            -e CI=true \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e BOOTSTRAP="$BOOTSTRAP" \
+            ${{ matrix.distro }} \
+            sh -c '
+              eval "$BOOTSTRAP" && \
+              mkdir -p /tmp/mock && \
+              echo "#!/bin/sh" > /tmp/mock/sudo && \
+              echo "exec \"\$@\"" >> /tmp/mock/sudo && \
+              echo "#!/bin/sh" > /tmp/mock/systemctl && \
+              echo "exit 0" >> /tmp/mock/systemctl && \
+              chmod +x /tmp/mock/sudo /tmp/mock/systemctl && \
+              export PATH="/tmp/mock:$PATH" && \
+              ./scripts/install.sh
+            '
+
+
+

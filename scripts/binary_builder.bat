@@ -28,12 +28,50 @@ echo Cleaning previous build...
 if exist build rmdir /s /q build
 if exist CMakeCache.txt del CMakeCache.txt
 
+:: Detect MSYS2 environment from PATH
+set "MINGW_PATH="
+for /f "delims=" %%I in ('where gcc 2^>nul') do (
+    if not defined MINGW_PATH (
+        set "GCC_PATH=%%~dpI"
+        :: Remove trailing backslash
+        set "MINGW_PATH=!GCC_PATH:~0,-1!"
+    )
+)
+
+if not defined MINGW_PATH (
+    echo ERROR: gcc not found in PATH. Please ensure your MSYS2 MinGW environment is activated.
+    exit /b 1
+)
+
+set "MSYS2_ENV="
+echo !MINGW_PATH! | findstr /i "ucrt64" >nul && set "MSYS2_ENV=ucrt64"
+echo !MINGW_PATH! | findstr /i "mingw64" >nul && set "MSYS2_ENV=mingw64"
+echo !MINGW_PATH! | findstr /i "clang64" >nul && set "MSYS2_ENV=clang64"
+echo !MINGW_PATH! | findstr /i "mingw32" >nul && set "MSYS2_ENV=mingw32"
+
+if not defined MSYS2_ENV (
+    echo WARNING: Could not determine MSYS2 subsystem from !MINGW_PATH!
+    set "MSYS2_ENV=mingw64"
+)
+
+echo Detected MSYS2 environment: !MSYS2_ENV!
+echo MinGW Path: !MINGW_PATH!
+
+:: Get MSYS2 root directory (two levels up from bin, e.g. C:\msys64\mingw64\bin -> C:\msys64)
+for %%I in ("!MINGW_PATH!\..") do set "MSYS2_PREFIX=%%~fI"
+for %%I in ("!MSYS2_PREFIX!\..") do set "MSYS2_ROOT=%%~fI"
+
+set "PKG_CONFIG_EXE=!MINGW_PATH!\pkgconf.exe"
+if not exist "!PKG_CONFIG_EXE!" (
+    set "PKG_CONFIG_EXE=!MINGW_PATH!\pkg-config.exe"
+)
+
 echo Building GridFlux...
-cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=MinSizeRel .
-if %ERRORLEVEL% neq 0 exit /b 1
+cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_C_COMPILER="!MINGW_PATH!\gcc.exe" -DPKG_CONFIG_EXECUTABLE="!PKG_CONFIG_EXE!" .
+if !ERRORLEVEL! neq 0 exit /b 1
 
 cmake --build build --config MinSizeRel -j
-if %ERRORLEVEL% neq 0 exit /b 1
+if !ERRORLEVEL! neq 0 exit /b 1
 
 for %%f in (gridflux.exe gridflux-gui.exe gridflux-cli.exe) do (
     if not exist build\%%f (
@@ -48,43 +86,9 @@ echo.
 echo Collecting GTK DLLs...
 mkdir build\bin 2>nul
 
-:: Auto-detect MSYS2 subsystem (ucrt64, mingw64, clang64, etc.)
-:: Check which gcc is on PATH to determine the active environment
-set "MSYS2_ENV="
-for %%E in (ucrt64 mingw64 clang64 mingw32) do (
-    if exist "C:\msys64\%%E\bin\gcc.exe" (
-        where gcc 2>nul | findstr /i "%%E" >nul 2>nul
-        if !ERRORLEVEL! equ 0 (
-            set "MSYS2_ENV=%%E"
-        )
-    )
-)
-
-:: Fallback: if PATH detection didn't work, check which environment has pkg-config for gtk4
-if not defined MSYS2_ENV (
-    for %%E in (ucrt64 mingw64 clang64) do (
-        if exist "C:\msys64\%%E\lib\pkgconfig\gtk4.pc" (
-            set "MSYS2_ENV=%%E"
-        )
-    )
-)
-
-:: Final fallback to mingw64
-if not defined MSYS2_ENV set "MSYS2_ENV=mingw64"
-
-echo Detected MSYS2 environment: %MSYS2_ENV%
-
-set "MSYS2_PREFIX=C:\msys64\!MSYS2_ENV!"
-set "MINGW_PATH=!MSYS2_PREFIX!\bin"
-
-if not exist "!MINGW_PATH!" (
-    echo ERROR: MSYS2 runtime not found at !MINGW_PATH!
-    exit /b 1
-)
-
 :: Gather dependencies dynamically using ldd
 echo Resolving and copying exact DLL dependencies...
-set "LDD_CMD=C:\msys64\usr\bin\ldd.exe"
+set "LDD_CMD=!MSYS2_ROOT!\usr\bin\ldd.exe"
 if not exist "%LDD_CMD%" (
     echo ERROR: ldd not found in MSYS2.
     exit /b 1
@@ -238,8 +242,8 @@ echo.
 set MSI_NAME=GridFlux-1.0.0.msi
 
 :: Build MSI with WiX v4+ command
-wix build -acceptEula wix7 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out %MSI_NAME%
-if %ERRORLEVEL% neq 0 (
+wix build -arch x64 -acceptEula wix7 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out %MSI_NAME%
+if !ERRORLEVEL! neq 0 (
     echo ERROR: wix build failed
     exit /b 1
 )
