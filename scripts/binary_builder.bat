@@ -93,30 +93,50 @@ if not exist "%LDD_CMD%" (
 :: Put all gridflux binaries into a single ldd invocation, output to a temp file
 "%LDD_CMD%" build\gridflux.exe build\gridflux-gui.exe build\gridflux-cli.exe > build\ldd_out.txt
 
-:: Extract DLL paths from ldd output for the detected MSYS2 environment
-:: This handles /mingw64/, /ucrt64/, /clang64/, etc.
-for /f "tokens=3" %%A in ('findstr /i "!MSYS2_ENV!" build\ldd_out.txt') do (
-    set "DLL_PATH=%%A"
-    :: Strip leading /env_name/ and convert / to backslash
-    set "DLL_PATH=!DLL_PATH:/!MSYS2_ENV!/=>"
-    set "DLL_PATH=!DLL_PATH:>=!"
-    set "DLL_PATH=!DLL_PATH:/=\!"
-
-    :: Final path
-    set "FULL_PATH=!MSYS2_PREFIX!\!DLL_PATH!"
-    if exist "!FULL_PATH!" (
-        copy /y "!FULL_PATH!" build\bin\ >nul
+:: Extract DLL filenames from ldd output for the detected MSYS2 environment
+:: Note: We extract just the DLL filename and copy from MINGW_PATH to avoid
+:: batch delayed-expansion issues with path string substitution.
+set "ENV_PATTERN=/%MSYS2_ENV%/"
+for /f "tokens=1,3" %%A in ('findstr /i "%MSYS2_ENV%" build\ldd_out.txt') do (
+    set "DLL_NAME=%%A"
+    :: Only copy .dll files (skip header lines)
+    echo !DLL_NAME! | findstr /i "\.dll" >nul 2>nul
+    if !ERRORLEVEL! equ 0 (
+        if exist "!MINGW_PATH!\!DLL_NAME!" (
+            copy /y "!MINGW_PATH!\!DLL_NAME!" build\bin\ >nul
+        )
     )
 )
 
-echo Adding dynamically loaded GTK runtime DLLs missed by ldd...
-:: GTK4 dynamically loads these at runtime for icons, parsing, and rendering
-set "GTK_RUNTIME_DLLS=libgdk_pixbuf-2.0-0.dll libglib-2.0-0.dll libgobject-2.0-0.dll libgio-2.0-0.dll libgmodule-2.0-0.dll libpangocairo-1.0-0.dll libpango-1.0-0.dll libcairo-gobject-2.dll libcairo-2.dll libepoxy-0.dll libharfbuzz-0.dll libintl-8.dll libsqlite3-0.dll libtiff-6.dll libjpeg-8.dll libpng16-16.dll zlib1.dll libffi-8.dll libgcc_s_seh-1.dll libwinpthread-1.dll libstdc++-6.dll"
+echo Adding dynamically loaded DLLs that ldd may miss...
+:: Complete list of all required runtime DLLs including json-c, GTK4, and transitive deps
+set "RUNTIME_DLLS=libjson-c-5.dll libgtk-4-1.dll libgdk_pixbuf-2.0-0.dll libglib-2.0-0.dll libgobject-2.0-0.dll libgio-2.0-0.dll libgmodule-2.0-0.dll libpangocairo-1.0-0.dll libpango-1.0-0.dll libcairo-gobject-2.dll libcairo-2.dll libepoxy-0.dll libharfbuzz-0.dll libintl-8.dll libsqlite3-0.dll libtiff-6.dll libjpeg-8.dll libpng16-16.dll zlib1.dll libffi-8.dll libgcc_s_seh-1.dll libwinpthread-1.dll libstdc++-6.dll libfribidi-0.dll libthai-0.dll libiconv-2.dll libpcre2-8-0.dll libdatrie-1.dll libjbig-0.dll libdeflate.dll liblzma-5.dll libzstd.dll libwebp-7.dll libLerc.dll libfreetype-6.dll libbrotlidec.dll libbz2-1.dll libbrotlicommon.dll libgraphite2.dll libsharpyuv-0.dll libgraphene-1.0-0.dll libfontconfig-1.dll libcairo-script-interpreter-2.dll libpangoft2-1.0-0.dll libpangowin32-1.0-0.dll libpixman-1-0.dll libexpat-1.dll liblzo2-2.dll libharfbuzz-subset-0.dll liborc-0.4-0.dll"
 
-for %%D in (%GTK_RUNTIME_DLLS%) do (
-    if exist "!MINGW_PATH!\%%D" (
-        copy /y "!MINGW_PATH!\%%D" build\bin\ >nul
+for %%D in (%RUNTIME_DLLS%) do (
+    if not exist "build\bin\%%D" (
+        if exist "!MINGW_PATH!\%%D" (
+            copy /y "!MINGW_PATH!\%%D" build\bin\ >nul
+        )
     )
+)
+
+:: Verify all required MSYS2 DLLs are present
+echo Verifying all required DLLs are bundled...
+set "MISSING_COUNT=0"
+for /f "tokens=1,3" %%A in ('findstr /i "%MSYS2_ENV%" build\ldd_out.txt') do (
+    set "DLL_NAME=%%A"
+    echo !DLL_NAME! | findstr /i "\.dll" >nul 2>nul
+    if !ERRORLEVEL! equ 0 (
+        if not exist "build\bin\!DLL_NAME!" (
+            echo   MISSING: !DLL_NAME!
+            set /a MISSING_COUNT+=1
+        )
+    )
+)
+if !MISSING_COUNT! gtr 0 (
+    echo ERROR: !MISSING_COUNT! required DLL^(s^) are missing from build\bin!
+    echo The installer would be broken. Aborting.
+    exit /b 1
 )
 
 echo Adding GTK/GLib compiled schemas...

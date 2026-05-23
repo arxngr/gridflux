@@ -19,8 +19,8 @@
     <Property Id="WixShellExecTarget" Value="[INSTALLDIR]gridflux-launcher.exe" />
     <CustomAction Id="LaunchApplication" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixShellExec" Impersonate="yes" />
 
-    <CustomAction Id="InstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --install-task" Execute="deferred" Impersonate="no" Return="ignore" />
-    <CustomAction Id="UninstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --uninstall-task" Execute="deferred" Impersonate="no" Return="ignore" />
+    <CustomAction Id="InstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --install-task" Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="UninstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --uninstall-task" Execute="deferred" Impersonate="no" Return="check" />
     <CustomAction Id="LaunchAfterRepair" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot;" Execute="immediate" Impersonate="yes" Return="asyncNoWait" />
 
     <InstallExecuteSequence>
@@ -35,17 +35,24 @@
       <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication" Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
     </UI>
 
-    <!-- Kill running processes before uninstall removes files -->
+    <!-- Kill running processes before install/uninstall -->
+    <!-- CloseMessage="no" because gridflux.exe runs elevated and WM_CLOSE
+         would be blocked by UIPI, causing the installer to hang forever. -->
     <util:CloseApplication Id="CloseGridFlux"
                            Target="gridflux.exe"
-                           CloseMessage="yes"
+                           CloseMessage="no"
                            RebootPrompt="no"
-                           TerminateProcess="5" />
+                           TerminateProcess="3" />
+    <util:CloseApplication Id="CloseGridFluxGui"
+                           Target="gridflux-gui.exe"
+                           CloseMessage="no"
+                           RebootPrompt="no"
+                           TerminateProcess="3" />
     <util:CloseApplication Id="CloseGridFluxLauncher"
                            Target="gridflux-launcher.exe"
-                           CloseMessage="yes"
+                           CloseMessage="no"
                            RebootPrompt="no"
-                           TerminateProcess="5" />
+                           TerminateProcess="3" />
 
     <WixVariable Id="WixUILicenseRtf" Value="LICENSE.rtf" />
     <WixVariable Id="WixUIBannerBmp" Value="icons\banner.bmp" />
