@@ -251,9 +251,17 @@ gf_wm_event (gf_wm_t *m)
         gf_ws_id_t old_ws_id = focused->workspace_id;
         focused->is_maximized = false;
 
-        gf_ws_id_t normal_ws = _find_or_create_ws (m);
+        char class_name[256];
+        gf_wm_window_class (m, focused->id, class_name, sizeof (class_name));
+        const gf_window_rule_t *rule = gf_rules_find (m->config, class_name);
 
-        _move_window_between_workspaces (m, focused, normal_ws);
+        gf_ws_id_t target_ws;
+        if (rule)
+            target_ws = rule->workspace_id;
+        else
+            target_ws = _find_or_create_ws (m);
+
+        _move_window_between_workspaces (m, focused, target_ws);
 
         // Clean up the now-empty maximized workspace
         _cleanup_empty_maximized_ws (m, old_ws_id);
