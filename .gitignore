@@ -5,6 +5,7 @@ compile_commands.json
 *.swp
 *.swo
 .vs
+vs_build
 
 # Compiled object files
 *.o

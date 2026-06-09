@@ -696,7 +696,7 @@ _commit_resize (gf_wm_t *m, gf_resize_event_t *ev)
         = ev->window
               ? (gf_window_list_find_by_window_id (windows, ev->window)->workspace_id)
               : 0;
-    if (ws_id != 0)
+    if (ws_id > 0)
     {
         gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
         if (ws)

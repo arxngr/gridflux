@@ -12,7 +12,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 void
 _print_workspace_header (gf_ws_id_t id, bool is_locked, uint32_t count,
@@ -87,11 +86,9 @@ gf_wm_debug_stats (const gf_wm_t *m)
             available = is_locked ? 0 : max_windows;
         }
 
-        // ---- Workspace header ----
         GF_LOG_INFO ("WS %d %s %s  %u/%u  free=%d", i, is_locked ? "[LOCKED]" : "",
                      has_maximized ? "[MAX]" : "", count, max_windows, available);
 
-        // ---- Windows in this workspace ----
         for (uint32_t w = 0; w < windows->count; w++)
         {
             const gf_win_info_t *win = &windows->items[w];

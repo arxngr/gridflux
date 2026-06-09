@@ -434,14 +434,15 @@ _assign_workspace_for_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *curr
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    if (current_ws && !current_ws->has_maximized_state && current_ws->available_space > 0)
-        return current_ws->id;
-
+    // Check maximized state first — maximized windows must go to maximized workspaces
     if (platform->window_is_maximized && platform->window_is_maximized (display, win->id))
     {
         win->is_maximized = true;
         return _find_or_create_maximized_ws (m);
     }
+
+    if (current_ws && !current_ws->has_maximized_state && current_ws->available_space > 0)
+        return current_ws->id;
 
     return _find_or_create_ws (m);
 }

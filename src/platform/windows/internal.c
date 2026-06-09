@@ -65,6 +65,8 @@ _is_excluded_class (const char *class_name)
             "ThumbnailDeviceHelperWnd",
             "RecordingAreaIndicatorWindow",
             "XamlExplorerHostIslandWindow_WASDK",
+            "TWizardForm",
+            "#32769"
             "XamlWindow" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
@@ -276,7 +278,9 @@ _window_excluded_border (HWND hwnd)
                                                   "ThumbnailDeviceHelperWnd",
                                                   "RecordingAreaIndicatorWindow",
                                                   "XamlExplorerHostIslandWindow_WASDK",
-                                                  "XamlWindow" };
+                                                  "XamlWindow",
+                                                  "TWizardForm",
+                                                  "#32769" };
 
         for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]);
              i++)

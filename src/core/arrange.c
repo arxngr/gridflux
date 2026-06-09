@@ -117,7 +117,7 @@ gf_wm_layout_apply (gf_wm_t *m)
     {
         gf_ws_info_t *ws = &workspaces->items[i];
 
-        if (ws->has_maximized_state)
+        if (ws->has_maximized_state || ws->is_locked)
             continue;
 
         gf_win_info_t *ws_windows = NULL;
@@ -145,6 +145,9 @@ gf_wm_layout_apply (gf_wm_t *m)
             uint32_t mon_win_count = 0;
             for (uint32_t j = 0; j < ws_window_count; j++)
             {
+                if (ws_windows[j].is_maximized && !ws->has_maximized_state)
+                    continue;
+
                 if (!ws_windows[j].is_minimized && !wm_is_excluded (m, ws_windows[j].id))
                 {
                     // If we have multi-monitor support, filter by monitor.
@@ -158,8 +161,6 @@ gf_wm_layout_apply (gf_wm_t *m)
 
             if (mon_win_count > 0)
             {
-                GF_LOG_DEBUG ("Layout applying for monitor %u with %u windows", mon->id,
-                              mon_win_count);
                 gf_rect_t *new_geometries = NULL;
                 if (gf_wm_calculate_layout (m, mon_windows, mon_win_count, mon->id,
                                             &new_geometries)
@@ -288,6 +289,8 @@ gf_wm_layout_rebalance (gf_wm_t *m)
 
     gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_win_list_t *windows = wm_windows (m);
+    gf_platform_t *platform = wm_platform (m);
+
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
 
     for (uint32_t i = 0; i < workspaces->count; i++)
@@ -343,7 +346,11 @@ gf_wm_layout_rebalance (gf_wm_t *m)
             }
 
             if (src_ws->id == dst_id)
+            {
+                gf_free (list);
                 continue;
+            }
+            
             gf_win_info_t *win = &list[0];
 
             for (uint32_t w = 0; w < windows->count; w++)
@@ -356,13 +363,53 @@ gf_wm_layout_rebalance (gf_wm_t *m)
                     GF_LOG_INFO ("Move window %p from workspace %u to workspace %u",
                                  (void *)windows->items[w].id,
                                  windows->items[w].workspace_id, dst_id);
+                    
                     windows->items[w].workspace_id = dst_id;
 
-                    workspaces->items[dst_id].window_count++;
-                    workspaces->items[dst_id].available_space--;
+                    // Locate accurate workspace index matching dst_id safely
+                    gf_ws_info_t *dst_ws = gf_workspace_list_find_by_id(workspaces, dst_id);
+                    if (dst_ws) {
+                        dst_ws->window_count++;
+                        dst_ws->available_space--;
+                    }
                     src_ws->window_count--;
                     src_ws->available_space++;
 
+                    // Mark source workspace for re-layout so remaining windows re-tile
+                    gf_window_list_mark_all_needs_update (windows, &src_ws->id);
+                    src_ws->is_custom_layout = false;
+
+                    // Mark destination workspace for re-layout
+                    gf_window_list_mark_all_needs_update (windows, &dst_id);
+                    if (dst_ws) {
+                        dst_ws->is_custom_layout = false;
+                    }
+
+                    // Allocate and populate windows tracking buffer for destination layout recalculation
+                    gf_win_info_t *mon_windows = gf_malloc (windows->count * sizeof (gf_win_info_t));
+                    if (!mon_windows)
+                        continue;
+
+                    uint32_t mon_win_count = 0;
+                    for (uint32_t k = 0; k < windows->count; k++) {
+                        if (windows->items[k].workspace_id == dst_id && !windows->items[k].is_minimized) {
+                            mon_windows[mon_win_count++] = windows->items[k];
+                        }
+                    }
+
+                    if (mon_win_count > 0) {
+                        gf_rect_t *new_geometries = NULL;
+                        if (gf_wm_calculate_layout (m, mon_windows, mon_win_count, win->monitor_id,
+                                                    &new_geometries)
+                            == GF_SUCCESS)
+                        {
+                            gf_wm_apply_layout (m, mon_windows, new_geometries, mon_win_count);
+                            if (m->config->enable_borders && platform->border_update)
+                                platform->border_update (platform, m->config);
+                            gf_free (new_geometries);
+                        }
+                    }
+                    gf_free (mon_windows);
                     break;
                 }
             }
