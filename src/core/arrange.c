@@ -350,7 +350,7 @@ gf_wm_layout_rebalance (gf_wm_t *m)
                 gf_free (list);
                 continue;
             }
-            
+
             gf_win_info_t *win = &list[0];
 
             for (uint32_t w = 0; w < windows->count; w++)
@@ -363,12 +363,14 @@ gf_wm_layout_rebalance (gf_wm_t *m)
                     GF_LOG_INFO ("Move window %p from workspace %u to workspace %u",
                                  (void *)windows->items[w].id,
                                  windows->items[w].workspace_id, dst_id);
-                    
+
                     windows->items[w].workspace_id = dst_id;
 
                     // Locate accurate workspace index matching dst_id safely
-                    gf_ws_info_t *dst_ws = gf_workspace_list_find_by_id(workspaces, dst_id);
-                    if (dst_ws) {
+                    gf_ws_info_t *dst_ws
+                        = gf_workspace_list_find_by_id (workspaces, dst_id);
+                    if (dst_ws)
+                    {
                         dst_ws->window_count++;
                         dst_ws->available_space--;
                     }
@@ -381,29 +383,37 @@ gf_wm_layout_rebalance (gf_wm_t *m)
 
                     // Mark destination workspace for re-layout
                     gf_window_list_mark_all_needs_update (windows, &dst_id);
-                    if (dst_ws) {
+                    if (dst_ws)
+                    {
                         dst_ws->is_custom_layout = false;
                     }
 
-                    // Allocate and populate windows tracking buffer for destination layout recalculation
-                    gf_win_info_t *mon_windows = gf_malloc (windows->count * sizeof (gf_win_info_t));
+                    // Allocate and populate windows tracking buffer for destination
+                    // layout recalculation
+                    gf_win_info_t *mon_windows
+                        = gf_malloc (windows->count * sizeof (gf_win_info_t));
                     if (!mon_windows)
                         continue;
 
                     uint32_t mon_win_count = 0;
-                    for (uint32_t k = 0; k < windows->count; k++) {
-                        if (windows->items[k].workspace_id == dst_id && !windows->items[k].is_minimized) {
+                    for (uint32_t k = 0; k < windows->count; k++)
+                    {
+                        if (windows->items[k].workspace_id == dst_id
+                            && !windows->items[k].is_minimized)
+                        {
                             mon_windows[mon_win_count++] = windows->items[k];
                         }
                     }
 
-                    if (mon_win_count > 0) {
+                    if (mon_win_count > 0)
+                    {
                         gf_rect_t *new_geometries = NULL;
-                        if (gf_wm_calculate_layout (m, mon_windows, mon_win_count, win->monitor_id,
-                                                    &new_geometries)
+                        if (gf_wm_calculate_layout (m, mon_windows, mon_win_count,
+                                                    win->monitor_id, &new_geometries)
                             == GF_SUCCESS)
                         {
-                            gf_wm_apply_layout (m, mon_windows, new_geometries, mon_win_count);
+                            gf_wm_apply_layout (m, mon_windows, new_geometries,
+                                                mon_win_count);
                             if (m->config->enable_borders && platform->border_update)
                                 platform->border_update (platform, m->config);
                             gf_free (new_geometries);

@@ -279,7 +279,7 @@ gf_wm_load_cfg (gf_wm_t *m)
                          old_config.max_windows_per_workspace,
                          new_config.max_windows_per_workspace);
             _rebuild_workspace_stats (m, wm_workspaces (m), wm_windows (m),
-                                     new_config.max_windows_per_workspace);
+                                      new_config.max_windows_per_workspace);
             gf_window_list_mark_all_needs_update (wm_windows (m), NULL);
 
             // Reset custom layout on all workspaces so layout engine takes over
