@@ -192,6 +192,7 @@ add_executable(gridflux-cli
     src/core/window.c
     src/core/events.c
     src/core/debug.c
+    src/core/border.c
     src/utils/list.c
     src/utils/memory.c
     src/utils/logger.c
@@ -230,6 +231,7 @@ if(GTK4_FOUND)
         src/core/window.c
         src/core/events.c
         src/core/debug.c
+        src/core/border.c
         src/utils/list.c
         src/utils/memory.c
         src/config/config.c

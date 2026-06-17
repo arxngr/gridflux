@@ -22,8 +22,6 @@ gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows, uint32_t window_coun
 
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
-
-    // Get bounds: prefer per-monitor if available, fallback to virtual screen
     gf_rect_t workspace_bounds;
 
     if (platform->screen_get_bounds_for_monitor)
@@ -31,12 +29,9 @@ gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows, uint32_t window_coun
         gf_err_t result = platform->screen_get_bounds_for_monitor (display, mon_id,
                                                                    &workspace_bounds);
         if (result != GF_SUCCESS)
-        {
-            // Fallback to virtual screen
             result = platform->screen_get_bounds (display, &workspace_bounds);
-            if (result != GF_SUCCESS)
-                return GF_ERROR_DISPLAY_CONNECTION;
-        }
+        if (result != GF_SUCCESS)
+            return GF_ERROR_DISPLAY_CONNECTION;
     }
     else
     {
@@ -56,14 +51,11 @@ gf_wm_calculate_layout (gf_wm_t *m, gf_win_info_t *windows, uint32_t window_coun
     return GF_SUCCESS;
 }
 
-// Calculate the effective max windows per workspace based on monitor resolution
 static uint32_t
-_calculate_effective_max (const gf_rect_t *bounds, const gf_config_t *config)
+calc_ws_max_wins (const gf_rect_t *bounds, const gf_config_t *config)
 {
-    uint32_t min_size = config->min_window_size;
-    if (min_size == 0)
-        min_size = GF_MIN_WINDOW_SIZE;
-
+    uint32_t min_size
+        = config->min_window_size ? config->min_window_size : GF_MIN_WINDOW_SIZE;
     uint32_t cols = bounds->width / min_size;
     uint32_t rows = bounds->height / min_size;
     uint32_t auto_max = cols * rows;
@@ -72,178 +64,6 @@ _calculate_effective_max (const gf_rect_t *bounds, const gf_config_t *config)
 
     uint32_t config_max = config->max_windows_per_workspace;
     return (config_max < auto_max) ? config_max : auto_max;
-}
-
-gf_err_t
-gf_wm_layout_apply (gf_wm_t *m)
-{
-    if (!m)
-        return GF_ERROR_INVALID_PARAMETER;
-
-    // Suppress layout while user is actively resizing
-    if (m->state.resize_active)
-        return GF_SUCCESS;
-
-    gf_ws_list_t *workspaces = wm_workspaces (m);
-    gf_win_list_t *windows = wm_windows (m);
-    gf_platform_t *platform = wm_platform (m);
-    gf_display_t display = *wm_display (m);
-
-    if (windows->count == 0 || !windows->items)
-        return GF_SUCCESS;
-
-    _build_workspace_candidate (m);
-
-    // Enumerate monitors (or use single virtual screen as fallback)
-    gf_monitor_t monitors[GF_MAX_MONITORS];
-    uint32_t monitor_count = 0;
-
-    if (platform->monitor_enumerate)
-    {
-        monitor_count = GF_MAX_MONITORS;
-        platform->monitor_enumerate (platform, monitors, &monitor_count);
-    }
-
-    // Fallback: treat the whole screen as one monitor
-    if (monitor_count == 0)
-    {
-        monitor_count = 1;
-        monitors[0].id = 0;
-        monitors[0].is_primary = true;
-        platform->screen_get_bounds (display, &monitors[0].bounds);
-    }
-
-    for (uint32_t i = 0; i < workspaces->count; i++)
-    {
-        gf_ws_info_t *ws = &workspaces->items[i];
-
-        if (ws->has_maximized_state || ws->is_locked)
-            continue;
-
-        gf_win_info_t *ws_windows = NULL;
-        uint32_t ws_window_count = 0;
-
-        if (gf_window_list_get_by_workspace (windows, ws->id, &ws_windows,
-                                             &ws_window_count)
-                != GF_SUCCESS
-            || ws_window_count == 0)
-        {
-            continue;
-        }
-
-        // For each monitor, layout the windows that belong to it
-        for (uint32_t mon_idx = 0; mon_idx < monitor_count; mon_idx++)
-        {
-            gf_monitor_t *mon = &monitors[mon_idx];
-
-            // Filter: collect non-minimized windows on this monitor
-            gf_win_info_t *mon_windows
-                = gf_malloc (ws_window_count * sizeof (gf_win_info_t));
-            if (!mon_windows)
-                continue;
-
-            uint32_t mon_win_count = 0;
-            for (uint32_t j = 0; j < ws_window_count; j++)
-            {
-                if (ws_windows[j].is_maximized && !ws->has_maximized_state)
-                    continue;
-
-                if (!ws_windows[j].is_minimized && !wm_is_excluded (m, ws_windows[j].id))
-                {
-                    // If we have multi-monitor support, filter by monitor.
-                    // If only 1 monitor, include all windows.
-                    if (monitor_count <= 1 || ws_windows[j].monitor_id == mon->id)
-                    {
-                        mon_windows[mon_win_count++] = ws_windows[j];
-                    }
-                }
-            }
-
-            if (mon_win_count > 0)
-            {
-                gf_rect_t *new_geometries = NULL;
-                if (gf_wm_calculate_layout (m, mon_windows, mon_win_count, mon->id,
-                                            &new_geometries)
-                    == GF_SUCCESS)
-                {
-                    gf_wm_apply_layout (m, mon_windows, new_geometries, mon_win_count);
-                    if (m->config->enable_borders && platform->border_update)
-                        platform->border_update (platform, m->config);
-                    gf_free (new_geometries);
-                }
-            }
-
-            gf_free (mon_windows);
-        }
-
-        gf_free (ws_windows);
-    }
-
-    return GF_SUCCESS;
-}
-
-uint32_t
-_get_maximized_windows (gf_wm_t *m, gf_win_info_t **out_windows)
-{
-    gf_win_list_t *windows = wm_windows (m);
-    gf_ws_list_t *workspaces = wm_workspaces (m);
-    uint32_t total = 0;
-
-    for (uint32_t i = 0; i < workspaces->count; i++)
-    {
-        if (!workspaces->items[i].has_maximized_state)
-            continue;
-
-        total += gf_window_list_count_by_workspace (windows, workspaces->items[i].id);
-    }
-
-    if (total == 0 || !out_windows)
-    {
-        if (out_windows)
-            *out_windows = NULL;
-        return 0;
-    }
-
-    gf_win_info_t *result = gf_malloc (total * sizeof (gf_win_info_t));
-    if (!result)
-    {
-        *out_windows = NULL;
-        return 0;
-    }
-
-    uint32_t idx = 0;
-    for (uint32_t i = 0; i < workspaces->count && idx < total; i++)
-    {
-        if (!workspaces->items[i].has_maximized_state)
-            continue;
-
-        gf_win_info_t *ws_wins = NULL;
-        uint32_t ws_count = 0;
-        if (gf_window_list_get_by_workspace (windows, workspaces->items[i].id, &ws_wins,
-                                             &ws_count)
-            == GF_SUCCESS)
-        {
-            for (uint32_t j = 0; j < ws_count && idx < total; j++)
-            {
-                result[idx++] = ws_wins[j];
-            }
-            gf_free (ws_wins);
-        }
-    }
-
-    *out_windows = result;
-    return idx;
-}
-
-int
-_find_maximized_index (gf_win_info_t *windows, uint32_t count, gf_handle_t handle)
-{
-    for (uint32_t i = 0; i < count; i++)
-    {
-        if (windows[i].id == handle)
-            return (int)i;
-    }
-    return -1;
 }
 
 void
@@ -261,10 +81,8 @@ gf_wm_apply_layout (gf_wm_t *m, gf_win_info_t *windows, gf_rect_t *geometry,
     {
         if (wm_is_excluded (m, windows[i].id))
             continue;
-
         if (!windows[i].needs_update)
             continue;
-
         if (windows[i].is_minimized || !windows[i].is_valid)
             continue;
 
@@ -272,13 +90,258 @@ gf_wm_apply_layout (gf_wm_t *m, gf_win_info_t *windows, gf_rect_t *geometry,
             display, windows[i].id, &geometry[i], GF_GEOMETRY_CHANGE_ALL, m->config);
 
         if (result != GF_SUCCESS)
-        {
             GF_LOG_WARN ("Failed to set geometry for window %p", (void *)windows[i].id);
-        }
 
         gf_wm_window_sync (m, windows[i].id, windows[i].workspace_id);
         gf_window_list_clear_update_flags (window_list, windows[i].workspace_id);
     }
+}
+
+static uint32_t
+enumerate_monitors (gf_platform_t *platform, gf_display_t display, gf_monitor_t *monitors)
+{
+    uint32_t count = 0;
+    if (platform->monitor_enumerate)
+    {
+        count = GF_MAX_MONITORS;
+        platform->monitor_enumerate (platform, monitors, &count);
+    }
+
+    if (count == 0)
+    {
+        count = 1;
+        monitors[0].id = 0;
+        monitors[0].is_primary = true;
+        platform->screen_get_bounds (display, &monitors[0].bounds);
+    }
+
+    return count;
+}
+
+static void
+filter_monitor_windows (gf_win_info_t *ws_wins, uint32_t ws_count, gf_monitor_t *mon,
+                        uint32_t monitor_count, gf_win_info_t *out, uint32_t *out_count,
+                        gf_wm_t *m, gf_ws_info_t *ws)
+{
+    *out_count = 0;
+    for (uint32_t j = 0; j < ws_count; j++)
+    {
+        if (ws_wins[j].is_maximized && !ws->has_maximized_state)
+            continue;
+        if (ws_wins[j].is_minimized || wm_is_excluded (m, ws_wins[j].id))
+            continue;
+        if (monitor_count > 1 && ws_wins[j].monitor_id != mon->id)
+            continue;
+        out[(*out_count)++] = ws_wins[j];
+    }
+}
+
+static void
+apply_layout_to_monitor (gf_wm_t *m, gf_ws_info_t *ws, gf_monitor_t *mon,
+                         gf_win_info_t *ws_wins, uint32_t ws_count,
+                         uint32_t monitor_count)
+{
+    gf_platform_t *platform = wm_platform (m);
+
+    gf_win_info_t *mon_wins = gf_malloc (ws_count * sizeof (gf_win_info_t));
+    if (!mon_wins)
+        return;
+
+    uint32_t mon_count = 0;
+    filter_monitor_windows (ws_wins, ws_count, mon, monitor_count, mon_wins, &mon_count,
+                            m, ws);
+
+    if (mon_count > 0)
+    {
+        gf_rect_t *new_geoms = NULL;
+        if (gf_wm_calculate_layout (m, mon_wins, mon_count, mon->id, &new_geoms)
+            == GF_SUCCESS)
+        {
+            gf_wm_apply_layout (m, mon_wins, new_geoms, mon_count);
+            if (m->config->enable_borders && platform->border_update)
+                platform->border_update (platform, m->config);
+            gf_free (new_geoms);
+        }
+    }
+
+    gf_free (mon_wins);
+}
+
+static void
+apply_layout_to_workspace (gf_wm_t *m, gf_ws_info_t *ws, gf_monitor_t *monitors,
+                           uint32_t monitor_count)
+{
+    gf_win_list_t *windows = wm_windows (m);
+    gf_win_info_t *ws_wins = NULL;
+    uint32_t ws_count = 0;
+
+    if (gf_window_list_get_by_workspace (windows, ws->id, &ws_wins, &ws_count)
+            != GF_SUCCESS
+        || ws_count == 0)
+    {
+        gf_free (ws_wins);
+        return;
+    }
+
+    for (uint32_t mon_idx = 0; mon_idx < monitor_count; mon_idx++)
+        apply_layout_to_monitor (m, ws, &monitors[mon_idx], ws_wins, ws_count,
+                                 monitor_count);
+
+    gf_free (ws_wins);
+}
+
+gf_err_t
+gf_wm_layout_apply (gf_wm_t *m)
+{
+    if (!m)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    if (m->state.resize_active)
+        return GF_SUCCESS;
+
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+    gf_win_list_t *windows = wm_windows (m);
+    gf_platform_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+
+    if (windows->count == 0 || !windows->items)
+        return GF_SUCCESS;
+
+    assign_windows_to_workspaces (m);
+
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    uint32_t monitor_count = enumerate_monitors (platform, display, monitors);
+
+    for (uint32_t i = 0; i < workspaces->count; i++)
+    {
+        gf_ws_info_t *ws = &workspaces->items[i];
+        if (!ws->has_maximized_state)
+            apply_layout_to_workspace (m, ws, monitors, monitor_count);
+    }
+
+    return GF_SUCCESS;
+}
+
+static gf_ws_id_t
+find_overflow_target (gf_wm_t *m, gf_ws_info_t *src_ws)
+{
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+    uint32_t max_per_ws = m->config->max_windows_per_workspace;
+    gf_monitor_id_t active_monitor = find_active_monitor (m);
+    gf_ws_info_t *active_ws = gf_workspace_list_find_by_id (
+        workspaces, workspaces->active_workspace[active_monitor]);
+
+    if (active_ws && active_ws->available_space < 1)
+    {
+        gf_ws_id_t free_ws = gf_workspace_list_find_free (workspaces);
+        if (free_ws == -1)
+            return gf_workspace_create (workspaces, max_per_ws, false, false);
+        return free_ws;
+    }
+
+    return active_ws ? active_ws->id : -1;
+}
+
+static void
+relocate_overflow_window (gf_wm_t *m, gf_ws_info_t *src_ws, gf_ws_id_t dst_id,
+                          gf_win_info_t *win)
+{
+    gf_win_list_t *windows = wm_windows (m);
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+    gf_platform_t *platform = wm_platform (m);
+    uint32_t max_per_ws = m->config->max_windows_per_workspace;
+
+    for (uint32_t w = 0; w < windows->count; w++)
+    {
+        if (windows->items[w].id != win->id || wm_is_excluded (m, win->id))
+            continue;
+
+        GF_LOG_INFO ("Move window %p from workspace %u to workspace %u",
+                     (void *)windows->items[w].id, windows->items[w].workspace_id,
+                     dst_id);
+
+        windows->items[w].workspace_id = dst_id;
+
+        gf_ws_info_t *dst_ws = gf_workspace_list_find_by_id (workspaces, dst_id);
+        if (dst_ws)
+        {
+            dst_ws->window_count++;
+            dst_ws->available_space--;
+        }
+        src_ws->window_count--;
+        src_ws->available_space++;
+
+        gf_window_list_mark_all_needs_update (windows, &src_ws->id);
+        src_ws->is_custom_layout = false;
+        gf_window_list_mark_all_needs_update (windows, &dst_id);
+        if (dst_ws)
+            dst_ws->is_custom_layout = false;
+
+        /* Re-layout destination */
+        gf_win_info_t *mon_wins = gf_malloc (windows->count * sizeof (gf_win_info_t));
+        if (!mon_wins)
+            break;
+
+        uint32_t mon_count = 0;
+        for (uint32_t k = 0; k < windows->count; k++)
+        {
+            if (windows->items[k].workspace_id == dst_id
+                && !windows->items[k].is_minimized)
+                mon_wins[mon_count++] = windows->items[k];
+        }
+
+        if (mon_count > 0)
+        {
+            gf_rect_t *new_geoms = NULL;
+            if (gf_wm_calculate_layout (m, mon_wins, mon_count, win->monitor_id,
+                                        &new_geoms)
+                == GF_SUCCESS)
+            {
+                gf_wm_apply_layout (m, mon_wins, new_geoms, mon_count);
+                if (m->config->enable_borders && platform->border_update)
+                    platform->border_update (platform, m->config);
+                gf_free (new_geoms);
+            }
+        }
+        gf_free (mon_wins);
+        break;
+    }
+}
+
+static gf_err_t
+rebalance_workspace (gf_wm_t *m, gf_ws_info_t *src_ws)
+{
+    gf_win_list_t *windows = wm_windows (m);
+    uint32_t max_per_ws = m->config->max_windows_per_workspace;
+    uint32_t overflow = src_ws->window_count - max_per_ws;
+
+    for (uint32_t j = 0; j < overflow; j++)
+    {
+        gf_ws_id_t dst_id = find_overflow_target (m, src_ws);
+        if (dst_id < 0)
+        {
+            GF_LOG_ERROR ("Failed to find free workspace for overflow");
+            return GF_ERROR_INVALID_PARAMETER;
+        }
+
+        gf_win_info_t *list = NULL;
+        uint32_t count = 0;
+
+        if (gf_window_list_get_by_workspace (windows, src_ws->id, &list, &count)
+                != GF_SUCCESS
+            || count == 0)
+        {
+            gf_free (list);
+            break;
+        }
+
+        if (src_ws->id != dst_id)
+            relocate_overflow_window (m, src_ws, dst_id, &list[0]);
+
+        gf_free (list);
+    }
+
+    return GF_SUCCESS;
 }
 
 gf_err_t
@@ -288,174 +351,40 @@ gf_wm_layout_rebalance (gf_wm_t *m)
         return GF_ERROR_INVALID_PARAMETER;
 
     gf_ws_list_t *workspaces = wm_workspaces (m);
-    gf_win_list_t *windows = wm_windows (m);
-    gf_platform_t *platform = wm_platform (m);
-
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
 
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_ws_info_t *src_ws = &workspaces->items[i];
-        if (src_ws->has_maximized_state)
+        if (src_ws->has_maximized_state || src_ws->window_count <= max_per_ws)
             continue;
-
-        if (src_ws->window_count <= max_per_ws)
-            continue;
-
-        uint32_t overflow = src_ws->window_count - max_per_ws;
-
-        for (uint32_t j = 0; j < overflow; j++)
-        {
-            gf_ws_id_t dst_id = -1;
-            gf_monitor_id_t active_monitor = _get_active_monitor (m);
-            gf_ws_info_t *active_ws_info = gf_workspace_list_find_by_id (
-                workspaces, workspaces->active_workspace[active_monitor]);
-
-            if (active_ws_info->available_space < 1)
-            {
-                gf_ws_id_t free_ws = gf_workspace_list_find_free (workspaces);
-
-                if (free_ws == -1)
-                {
-                    dst_id = gf_workspace_create (workspaces, max_per_ws, false, false);
-                }
-                else
-                {
-                    dst_id = free_ws;
-                }
-                if (dst_id < 0)
-                {
-                    GF_LOG_ERROR ("Failed to find free workspace for overflow");
-                    break;
-                }
-            }
-            else
-            {
-                dst_id = active_ws_info->id;
-            }
-
-            gf_win_info_t *list = NULL;
-            uint32_t count = 0;
-
-            if (gf_window_list_get_by_workspace (windows, src_ws->id, &list, &count)
-                    != GF_SUCCESS
-                || count == 0)
-            {
-                gf_free (list);
-                break;
-            }
-
-            if (src_ws->id == dst_id)
-            {
-                gf_free (list);
-                continue;
-            }
-
-            gf_win_info_t *win = &list[0];
-
-            for (uint32_t w = 0; w < windows->count; w++)
-            {
-                if (wm_is_excluded (m, win->id))
-                    continue;
-
-                if (windows->items[w].id == win->id)
-                {
-                    GF_LOG_INFO ("Move window %p from workspace %u to workspace %u",
-                                 (void *)windows->items[w].id,
-                                 windows->items[w].workspace_id, dst_id);
-
-                    windows->items[w].workspace_id = dst_id;
-
-                    // Locate accurate workspace index matching dst_id safely
-                    gf_ws_info_t *dst_ws
-                        = gf_workspace_list_find_by_id (workspaces, dst_id);
-                    if (dst_ws)
-                    {
-                        dst_ws->window_count++;
-                        dst_ws->available_space--;
-                    }
-                    src_ws->window_count--;
-                    src_ws->available_space++;
-
-                    // Mark source workspace for re-layout so remaining windows re-tile
-                    gf_window_list_mark_all_needs_update (windows, &src_ws->id);
-                    src_ws->is_custom_layout = false;
-
-                    // Mark destination workspace for re-layout
-                    gf_window_list_mark_all_needs_update (windows, &dst_id);
-                    if (dst_ws)
-                    {
-                        dst_ws->is_custom_layout = false;
-                    }
-
-                    // Allocate and populate windows tracking buffer for destination
-                    // layout recalculation
-                    gf_win_info_t *mon_windows
-                        = gf_malloc (windows->count * sizeof (gf_win_info_t));
-                    if (!mon_windows)
-                        continue;
-
-                    uint32_t mon_win_count = 0;
-                    for (uint32_t k = 0; k < windows->count; k++)
-                    {
-                        if (windows->items[k].workspace_id == dst_id
-                            && !windows->items[k].is_minimized)
-                        {
-                            mon_windows[mon_win_count++] = windows->items[k];
-                        }
-                    }
-
-                    if (mon_win_count > 0)
-                    {
-                        gf_rect_t *new_geometries = NULL;
-                        if (gf_wm_calculate_layout (m, mon_windows, mon_win_count,
-                                                    win->monitor_id, &new_geometries)
-                            == GF_SUCCESS)
-                        {
-                            gf_wm_apply_layout (m, mon_windows, new_geometries,
-                                                mon_win_count);
-                            if (m->config->enable_borders && platform->border_update)
-                                platform->border_update (platform, m->config);
-                            gf_free (new_geometries);
-                        }
-                    }
-                    gf_free (mon_windows);
-                    break;
-                }
-            }
-
-            gf_free (list);
-        }
+        rebalance_workspace (m, src_ws);
     }
 
     return GF_SUCCESS;
 }
 
 void
-_handle_fullscreen_windows (gf_wm_t *m)
+enforce_fullscreen (gf_wm_t *m)
 {
-    gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_win_list_t *windows = wm_windows (m);
-    gf_platform_t *platform = wm_platform (m);
-    gf_display_t display = *wm_display (m);
-    gf_handle_t active_win_id = m->platform->window_get_focused (m->display);
+    gf_handle_t active = m->platform->window_get_focused (m->display);
 
-    if (active_win_id != 0
-        && m->platform->window_is_fullscreen (m->display, (gf_handle_t)active_win_id))
+    if (active == 0
+        || !m->platform->window_is_fullscreen (m->display, (gf_handle_t)active))
+        return;
+
+    gf_monitor_id_t active_monitor = find_active_monitor (m);
+
+    for (uint32_t i = 0; i < windows->count; i++)
     {
-        gf_monitor_id_t active_monitor = _get_active_monitor (m);
+        if (windows->items[i].id == active)
+            continue;
+        if (active_monitor != (gf_monitor_id_t)-1
+            && windows->items[i].monitor_id != active_monitor)
+            continue;
 
-        for (uint32_t i = 0; i < windows->count; i++)
-        {
-            if (windows->items[i].id == active_win_id)
-                continue;
-
-            if (active_monitor != (gf_monitor_id_t)-1
-                && windows->items[i].monitor_id != active_monitor)
-                continue;
-
-            m->platform->window_minimize (m->display, windows->items[i].id);
-            windows->items[i].is_minimized = true;
-        }
+        m->platform->window_minimize (m->display, windows->items[i].id);
+        windows->items[i].is_minimized = true;
     }
 }

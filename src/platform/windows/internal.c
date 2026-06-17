@@ -234,7 +234,7 @@ _get_taskbar_dimensions (int *left, int *right, int *top, int *bottom)
 }
 
 bool
-_window_it_self (gf_display_t display, gf_handle_t window)
+window_is_self (gf_display_t display, gf_handle_t window)
 {
     (void)display;
     if (!_validate_window (window))
@@ -261,12 +261,12 @@ _window_it_self (gf_display_t display, gf_handle_t window)
 }
 
 BOOL
-_window_excluded_border (HWND hwnd)
+window_is_border_excluded (HWND hwnd)
 {
     if (!_validate_window (hwnd))
         return true;
 
-    if (_window_it_self (NULL, hwnd))
+    if (window_is_self (NULL, hwnd))
         return true;
 
     char class_name[MAX_CLASS_NAME_LENGTH];

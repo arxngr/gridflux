@@ -44,7 +44,7 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
     for (unsigned long i = 0; i < nitems; i++)
     {
         gf_win_info_t info;
-        if (_process_window_for_list (display, window_list[i], atoms, workspace_id,
+        if (query_window_info (display, window_list[i], atoms, workspace_id,
                                       &info))
         {
             filtered_windows[filtered_count++] = info;
@@ -104,24 +104,24 @@ gf_window_is_valid (gf_display_t display, gf_handle_t window)
 }
 
 bool
-_window_excluded_border (gf_display_t display, gf_handle_t window)
+window_is_border_excluded (gf_display_t display, gf_handle_t window)
 {
-    if (_window_it_self (display, window))
+    if (window_is_self (display, window))
         return true;
 
-    if (_window_app_exception (display, window))
+    if (window_is_app_exception (display, window))
         return true;
 
-    if (_window_has_excluded_state (display, window))
+    if (window_has_excluded_state (display, window))
         return true;
-    if (_window_has_excluded_type (display, window))
+    if (window_has_excluded_type (display, window))
         return true;
 
     return false;
 }
 
 bool
-_window_it_self (gf_display_t display, gf_handle_t window)
+window_is_self (gf_display_t display, gf_handle_t window)
 {
     if (!display || window == None)
         return false;
@@ -144,10 +144,10 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (!display || window == None)
         return true;
 
-    if (_window_it_self (display, window))
+    if (window_is_self (display, window))
         return true;
 
-    if (_window_app_exception (display, window))
+    if (window_is_app_exception (display, window))
         return true;
 
     // Exclude fullscreen OR maximized NORMAL windows
@@ -155,16 +155,16 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     bool is_fullscreen
         = gf_platform_window_has_state (display, window, atoms->net_wm_state_fullscreen);
 
-    if (_window_has_type (display, window, atoms->net_wm_window_type_normal)
+    if (window_has_type (display, window, atoms->net_wm_window_type_normal)
         && (is_fullscreen))
     {
         return true;
     }
 
-    if (_window_has_excluded_state (display, window))
+    if (window_has_excluded_state (display, window))
         return true;
 
-    if (_window_has_excluded_type (display, window))
+    if (window_has_excluded_type (display, window))
         return true;
 
     return false;
@@ -187,7 +187,7 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
     if (!dpy || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (_remove_size_constraints (dpy, win) != GF_SUCCESS)
+    if (remove_size_constraints (dpy, win) != GF_SUCCESS)
     {
         GF_LOG_WARN ("Failed to remove size constraints, continuing anyway");
     }

@@ -72,7 +72,7 @@ gf_wm_debug_stats (const gf_wm_t *m)
         bool is_locked = gf_config_workspace_is_locked (m->config, i);
         bool has_maximized = false;
 
-        gf_ws_info_t *ws = _get_workspace ((gf_ws_list_t *)workspaces, i);
+        gf_ws_info_t *ws = find_workspace ((gf_ws_list_t *)workspaces, i);
         if (ws)
         {
             max_windows = ws->max_windows;

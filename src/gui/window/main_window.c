@@ -24,6 +24,45 @@
 #define GF_ICON_THEME_PATH GF_ICONDIR
 #endif
 
+/* Application CSS — kept at file scope to avoid embedding literals in logic. */
+static const char k_app_css[] =
+    /* Table styles */
+    ".table-cell { border: 1px solid rgba(255,255,255,0.1); padding: 4px; "
+    "background-color: transparent; color: #f0f9ff; }"
+    ".table-header { border: 1px solid rgba(255,255,255,0.1); padding: 4px; "
+    "background-color: rgba(255,255,255,0.05); color: #f0f9ff; font-weight: bold; }"
+    /* Gradient background */
+    "window.background { background: linear-gradient(180deg, #032045, #020912); }"
+    /* Transparent containers */
+    "scrolledwindow { background: transparent; }"
+    "viewport { background: transparent; }"
+    "grid { background: transparent; }"
+    /* Statusbar */
+    ".statusbar { padding: 4px 8px; border-top: 1px solid rgba(255,255,255,0.15); }"
+    ".status-indicator { font-size: 8px; }"
+    ".status-ready { color: #22c55e; }"
+    ".status-not-ready { color: #ef4444; }"
+    ".status-text-ready { color: #bbf7d0; font-weight: bold; }"
+    ".status-text-not-ready { color: #fca5a5; font-weight: bold; }"
+    /* Text */
+    "label { color: #f0f9ff; }"
+    /* Dropdown */
+    "dropdown > button { background-color: rgba(255,255,255,0.05); border: 1px "
+    "solid rgba(255,255,255,0.2); color: #f0f9ff; border-radius: 4px; }"
+    "dropdown > button:hover { background-color: rgba(255,255,255,0.15); }"
+    /* Dropdown popover */
+    "popover.background { background-color: #032045; }"
+    "popover.background contents { background-color: #02152fff; border: 1px solid "
+    "rgba(255,255,255,0.2); color: #f0f9ff; }"
+    "popover listview { background: #032045; color: #f0f9ff; }"
+    "popover listview row { background: #032045; color: #f0f9ff; }"
+    "popover listview row:hover { background: rgba(255,255,255,0.1); }"
+    "popover listview row:selected { background: rgba(42,157,244,0.3); }"
+    "popover list { background: #032045; color: #f0f9ff; }"
+    "popover list row { background: #032045; color: #f0f9ff; }"
+    "popover list row:hover { background: rgba(255,255,255,0.1); }"
+    "popover list row:selected { background: rgba(42,157,244,0.3); }";
+
 static void
 on_window_realize (GtkWidget *widget, gpointer user_data)
 {
@@ -63,78 +102,29 @@ on_close_request_hide (GtkWindow *window, gpointer user_data)
 }
 #endif
 
-void
-gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
+static void
+apply_window_css (void)
 {
-    // CSS Provider
     GtkCssProvider *provider = gtk_css_provider_new ();
-    gtk_css_provider_load_from_string (
-        provider,
-        // Table styles - hardcoded to match gradient
-        ".table-cell { border: 1px solid rgba(255,255,255,0.1); padding: 4px; "
-        "background-color: transparent; color: #f0f9ff; }"
-        ".table-header { border: 1px solid rgba(255,255,255,0.1); padding: 4px; "
-        "background-color: rgba(255,255,255,0.05); color: #f0f9ff; font-weight: bold; }"
-
-        // Gradient background (cyan to blue)
-        "window.background { background: linear-gradient(180deg, #032045, #020912); }"
-
-        // Scrolled window / list backgrounds to match gradient
-        "scrolledwindow { background: transparent; }"
-        "viewport { background: transparent; }"
-        "grid { background: transparent; }"
-
-        // Statusbar styles
-        ".statusbar { padding: 4px 8px; border-top: 1px solid rgba(255,255,255,0.15); }"
-        ".status-indicator { font-size: 8px; }"
-        ".status-ready { color: #22c55e; }"
-        ".status-not-ready { color: #ef4444; }"
-        ".status-text-ready { color: #bbf7d0; font-weight: bold; }"
-        ".status-text-not-ready { color: #fca5a5; font-weight: bold; }"
-
-        // Make text visible on gradient
-        "label { color: #f0f9ff; }"
-
-        // Dropdown button styling
-        "dropdown > button { background-color: rgba(255, 255, 255, 0.05); border: 1px "
-        "solid rgba(255, 255, 255, 0.2); color: #f0f9ff; border-radius: 4px; }"
-        "dropdown > button:hover { background-color: rgba(255, 255, 255, 0.15); }"
-
-        // Dropdown popover and its internal list - override white OS default
-        "popover.background { background-color: #032045; }"
-        "popover.background contents { background-color: #02152fff; border: 1px solid "
-        "rgba(255, 255, 255, 0.2); color: #f0f9ff; }"
-        "popover listview { background: #032045; color: #f0f9ff; }"
-        "popover listview row { background: #032045; color: #f0f9ff; }"
-        "popover listview row:hover { background: rgba(255,255,255,0.1); }"
-        "popover listview row:selected { background: rgba(42,157,244,0.3); }"
-        "popover list { background: #032045; color: #f0f9ff; }"
-        "popover list row { background: #032045; color: #f0f9ff; }"
-        "popover list row:hover { background: rgba(255,255,255,0.1); }"
-        "popover list row:selected { background: rgba(42,157,244,0.3); }");
+    gtk_css_provider_load_from_string (provider, k_app_css);
     gtk_style_context_add_provider_for_display (gdk_display_get_default (),
                                                 GTK_STYLE_PROVIDER (provider),
                                                 GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref (provider);
+}
 
-    // Request dark window decorations (dark title bar on Windows)
-    g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", TRUE,
-                  NULL);
-
+static void
+setup_main_window (gf_app_state_t *widgets, GtkApplication *app)
+{
     widgets->window = gtk_application_window_new (app);
     gtk_window_set_title (GTK_WINDOW (widgets->window), "GridFlux");
     gtk_window_set_default_size (GTK_WINDOW (widgets->window), 900, 600);
     gtk_window_set_icon_name (GTK_WINDOW (widgets->window), "gridflux");
 
-    // Add icon theme search path so gtk_window_set_icon_name("gridflux")
-    // resolves to our icons for alt+tab, taskbar, etc.
-    // Dev mode:  uses local "icons/" directory (hicolor structure)
-    // Production: uses system icon dir (e.g. /usr/local/share/icons)
     GtkIconTheme *icon_theme
         = gtk_icon_theme_get_for_display (gdk_display_get_default ());
     gtk_icon_theme_add_search_path (icon_theme, GF_ICON_THEME_PATH);
 
-    // Try loading logo, with fallback for builds running from build/ dir
     GError *error = NULL;
     GdkPixbuf *icon
         = gdk_pixbuf_new_from_file_at_scale (GF_LOGO_PATH, 256, 256, FALSE, &error);
@@ -142,7 +132,6 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
     {
         g_error_free (error);
         error = NULL;
-        // Fallback: try parent directory (exe in build/, icons in project root)
         icon = gdk_pixbuf_new_from_file_at_scale ("../" GF_LOGO_PATH, 256, 256, FALSE,
                                                   &error);
     }
@@ -156,13 +145,15 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
     }
 
     g_signal_connect (widgets->window, "realize", G_CALLBACK (on_window_realize), NULL);
-
 #ifdef _WIN32
-    // hide to tray instead of quitting when the user clicks X
     g_signal_connect (widgets->window, "close-request",
                       G_CALLBACK (on_close_request_hide), NULL);
 #endif
+}
 
+static void
+assemble_window_widgets (gf_app_state_t *widgets)
+{
     GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
     gtk_window_set_child (GTK_WINDOW (widgets->window), main_box);
 
@@ -174,7 +165,16 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
     g_object_set_data (G_OBJECT (widgets->window), "statusbar", sb);
     gtk_box_append (GTK_BOX (main_box), sb);
     gf_gui_statusbar_start_healthcheck (sb);
+}
 
+void
+gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
+{
+    g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme",
+                  TRUE, NULL);
+    apply_window_css ();
+    setup_main_window (widgets, app);
+    assemble_window_widgets (widgets);
     gtk_widget_grab_focus (widgets->ws_dropdown);
     gtk_window_present (GTK_WINDOW (widgets->window));
 }

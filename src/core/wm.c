@@ -4,6 +4,7 @@
 #include "../utils/list.h"
 #include "../utils/logger.h"
 #include "../utils/memory.h"
+#include "border.h"
 #include "internal.h"
 #include "layout.h"
 #include "types.h"
@@ -13,6 +14,60 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+static void
+handle_max_windows_change (gf_wm_t *m, const gf_config_t *old, const gf_config_t *new)
+{
+    if (old->max_windows_per_workspace == new->max_windows_per_workspace)
+        return;
+
+    GF_LOG_INFO ("max_windows_per_workspace changed from %u to %u",
+                 old->max_windows_per_workspace, new->max_windows_per_workspace);
+
+    recount_workspace_windows (m, wm_workspaces (m), wm_windows (m),
+                               new->max_windows_per_workspace);
+    gf_window_list_mark_all_needs_update (wm_windows (m), NULL);
+
+    gf_ws_list_t *ws_list = wm_workspaces (m);
+    for (uint32_t i = 0; i < ws_list->count; i++)
+        ws_list->items[i].is_custom_layout = false;
+}
+
+static void
+wm_reset_monitor_state (gf_wm_t *m)
+{
+    for (int i = 0; i < GF_MAX_MONITORS; i++)
+    {
+        m->state.last_active_window[i] = 0;
+        m->state.last_active_workspace[i] = 0;
+        wm_workspaces (m)->active_workspace[i] = 0;
+    }
+}
+
+static void
+wm_tick (gf_wm_t *m)
+{
+    gf_wm_load_cfg (m);
+    gf_wm_watch (m);
+
+    gf_wm_resize_event (m);
+    gf_wm_layout_rebalance (m);
+    gf_wm_layout_apply (m);
+    gf_wm_event (m);
+
+    /*
+     * Keymap must run AFTER gf_wm_event so that a workspace switch is not
+     * immediately undone by gf_wm_event reading the old focused window and
+     * switching back.
+     */
+    gf_wm_keymap_event (m);
+
+    if (m->config->enable_borders && m->platform->border_update)
+        m->platform->border_update (m->platform, m->config);
+
+    if (m->ipc_handle >= 0)
+        gf_ipc_server_process (m->ipc_handle, m);
+}
 
 gf_err_t
 gf_wm_create (gf_wm_t **manager, gf_platform_t *platform, gf_layout_engine_t *layout)
@@ -62,9 +117,9 @@ gf_wm_init (gf_wm_t *m)
 
     gf_platform_t *platform = wm_platform (m);
 
-    gf_err_t result = platform->init (platform, wm_display (m));
-    if (result != GF_SUCCESS)
-        return result;
+    gf_err_t err = platform->init (platform, wm_display (m));
+    if (err != GF_SUCCESS)
+        return err;
 
     m->state.last_scan_time = time (NULL);
     m->state.last_cleanup_time = time (NULL);
@@ -85,9 +140,7 @@ gf_wm_init (gf_wm_t *m)
 
     m->ipc_handle = gf_ipc_server_create ();
     if (m->ipc_handle < 0)
-    {
         GF_LOG_WARN ("Failed to create IPC server - client commands will not work");
-    }
 
     if (platform->dock_restore)
         platform->dock_restore (platform);
@@ -104,33 +157,23 @@ gf_wm_cleanup (gf_wm_t *m)
         return;
 
     gf_platform_t *platform = wm_platform (m);
-
-    // Clear all windows and workspaces from memory
     gf_win_list_t *windows = wm_windows (m);
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
     GF_LOG_INFO ("Clearing %u windows and %u workspaces from memory", windows->count,
                  workspaces->count);
 
-    // Reset lists (items still allocated, will be freed in destroy)
     windows->count = 0;
     workspaces->count = 0;
-    // Reset state
-    for (int i = 0; i < GF_MAX_MONITORS; i++)
-    {
-        m->state.last_active_window[i] = 0;
-        m->state.last_active_workspace[i] = 0;
-        workspaces->active_workspace[i] = 0;
-    }
 
-    // Cleanup keymap
+    wm_reset_monitor_state (m);
+
     if (m->state.keymap_initialized && platform->keymap_cleanup)
     {
         platform->keymap_cleanup (platform);
         m->state.keymap_initialized = false;
     }
 
-    // Restore dock if it was hidden (critical for program termination)
     if (m->state.dock_hidden && platform->dock_restore)
     {
         platform->dock_restore (platform);
@@ -141,7 +184,6 @@ gf_wm_cleanup (gf_wm_t *m)
     platform->cleanup (*wm_display (m), platform);
     m->state.initialized = false;
 
-    // Cleanup IPC server
     if (m->ipc_handle >= 0)
     {
         gf_ipc_server_destroy (m->ipc_handle);
@@ -160,140 +202,40 @@ gf_wm_load_cfg (gf_wm_t *m)
         return;
     }
 
-    const char *config_file = gf_config_get_path ();
-    if (!config_file)
+    const char *path = gf_config_get_path ();
+    if (!path)
     {
         GF_LOG_ERROR ("Failed to determine config file path");
         return;
     }
 
     struct stat st;
-    if (stat (config_file, &st) != 0)
+    if (stat (path, &st) != 0)
     {
-        GF_LOG_ERROR ("Failed to read stat config file: %s", config_file);
+        GF_LOG_ERROR ("Failed to stat config file: %s", path);
         return;
     }
 
     if (st.st_mtime <= m->config->last_modified)
         return;
 
-    gf_config_t old_config = *m->config;
-    gf_config_t new_config = load_or_create_config (config_file);
+    gf_config_t old_cfg = *m->config;
+    gf_config_t new_cfg = load_or_create_config (path);
 
-    if (gf_config_changed (&old_config, &new_config))
-    {
-        GF_LOG_INFO ("Configuration changed! Reloading from: %s", config_file);
-
-        *m->config = new_config;
-        m->config->last_modified = st.st_mtime;
-
-        if (old_config.enable_borders != new_config.enable_borders)
-        {
-            if (!new_config.enable_borders)
-            {
-                GF_LOG_INFO ("Borders disabled, cleaning up...");
-                if (m->platform->border_cleanup)
-                    m->platform->border_cleanup (m->platform);
-            }
-            else
-            {
-                GF_LOG_INFO ("Borders enabled, adding to all valid windows...");
-                if (m->platform->border_cleanup)
-                    m->platform->border_cleanup (m->platform);
-                // Get all windows from all workspaces to ensure we don't miss any
-                for (gf_ws_id_t workspace = 0; workspace < GF_MAX_WORKSPACES; workspace++)
-                {
-                    gf_win_info_t *workspace_windows = NULL;
-                    uint32_t count = 0;
-
-                    if (m->platform->window_enumerate (m->display, &workspace,
-                                                       &workspace_windows, &count)
-                        != GF_SUCCESS)
-                    {
-                        GF_LOG_DEBUG ("Failed to get windows for workspace %d",
-                                      workspace);
-                        continue;
-                    }
-
-                    GF_LOG_DEBUG ("Processing workspace %d with %d windows", workspace,
-                                  count);
-
-                    for (uint32_t i = 0; i < count; i++)
-                    {
-                        gf_win_info_t *win = &workspace_windows[i];
-
-                        // Check if window is valid and not excluded
-                        if (win->is_valid && !win->is_minimized
-                            && !wm_is_excluded (m, win->id))
-                        {
-                            GF_LOG_DEBUG ("Adding border to window %lu in workspace %d",
-                                          (void *)win->id, workspace);
-
-                            if (m->platform->border_add)
-                                m->platform->border_add (m->platform, win->id,
-                                                         m->config->border_color,
-                                                         GF_BORDER_WIDTH);
-                        }
-                        else
-                        {
-                            GF_LOG_DEBUG ("Skipping window %lu (valid=%d, minimized=%d, "
-                                          "excluded=%d)",
-                                          (void *)win->id, win->is_valid,
-                                          win->is_minimized, wm_is_excluded (m, win->id));
-                        }
-                    }
-
-                    // Free the window list for this workspace
-                    if (workspace_windows)
-                        gf_free (workspace_windows);
-                }
-
-                // Also check the current workspace windows list as a fallback
-                gf_win_list_t *current_windows = wm_windows (m);
-                GF_LOG_DEBUG ("Current workspace has %d additional windows",
-                              current_windows->count);
-                for (uint32_t i = 0; i < current_windows->count; i++)
-                {
-                    gf_win_info_t *win = &current_windows->items[i];
-
-                    if (win->is_valid && !win->is_minimized
-                        && !wm_is_excluded (m, win->id))
-                    {
-
-                        if (m->platform->border_add)
-                            m->platform->border_add (m->platform, win->id,
-                                                     m->config->border_color,
-                                                     GF_BORDER_WIDTH);
-                    }
-                }
-            }
-        }
-
-        _sync_workspaces (m);
-
-        // When max_windows_per_workspace changes, trigger a full re-layout
-        // so overflow windows move and remaining windows re-tile immediately.
-        if (old_config.max_windows_per_workspace != new_config.max_windows_per_workspace)
-        {
-            GF_LOG_INFO ("max_windows_per_workspace changed from %u to %u",
-                         old_config.max_windows_per_workspace,
-                         new_config.max_windows_per_workspace);
-            _rebuild_workspace_stats (m, wm_workspaces (m), wm_windows (m),
-                                      new_config.max_windows_per_workspace);
-            gf_window_list_mark_all_needs_update (wm_windows (m), NULL);
-
-            // Reset custom layout on all workspaces so layout engine takes over
-            gf_ws_list_t *ws_list = wm_workspaces (m);
-            for (uint32_t i = 0; i < ws_list->count; i++)
-                ws_list->items[i].is_custom_layout = false;
-        }
-
-        gf_wm_debug_stats (m);
-    }
-    else
+    if (!gf_config_changed (&old_cfg, &new_cfg))
     {
         m->config->last_modified = st.st_mtime;
+        return;
     }
+
+    GF_LOG_INFO ("Configuration changed, reloading from: %s", path);
+    *m->config = new_cfg;
+    m->config->last_modified = st.st_mtime;
+
+    gf_border_handle_toggle (m, &old_cfg, &new_cfg);
+    sync_workspaces (m);
+    handle_max_windows_change (m, &old_cfg, &new_cfg);
+    gf_wm_debug_stats (m);
 }
 
 gf_err_t
@@ -302,38 +244,16 @@ gf_wm_run (gf_wm_t *m)
     if (!m || !m->state.initialized)
         return GF_ERROR_INVALID_PARAMETER;
 
-    time_t last_stats_time = time (NULL);
-
     while (true)
     {
         m->state.loop_counter++;
-        time_t current_time = time (NULL);
 
-        gf_wm_load_cfg (m);
-        gf_wm_watch (m);
+        wm_tick (m);
 
-        gf_wm_resize_event (m);
-        gf_wm_layout_rebalance (m);
-        gf_wm_layout_apply (m);
-        gf_wm_event (m);
-
-        // Keymap must run AFTER gf_wm_event so that our workspace switch
-        // is not immediately undone by gf_wm_event reading the old focused
-        // window and switching back.
-        gf_wm_keymap_event (m);
-
-        if (m->config->enable_borders && m->platform->border_update)
-            m->platform->border_update (m->platform, m->config);
-
-        if (m->ipc_handle >= 0)
-        {
-            gf_ipc_server_process (m->ipc_handle, m);
-        }
-
-        if (current_time - m->state.last_cleanup_time >= 1)
+        if (time (NULL) - m->state.last_cleanup_time >= 1)
         {
             gf_wm_prune (m);
-            m->state.last_cleanup_time = current_time;
+            m->state.last_cleanup_time = time (NULL);
         }
 
         gf_usleep (33000);

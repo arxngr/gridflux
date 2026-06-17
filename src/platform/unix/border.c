@@ -20,7 +20,7 @@ static volatile time_t g_notification_expire_time = 0;
 static bool g_notification_threads_started = false;
 
 static void *
-_dbus_monitor_thread (void *arg)
+dbus_monitor_thread (void *arg)
 {
     FILE *fp = popen (
         "dbus-monitor "
@@ -60,7 +60,7 @@ _dbus_monitor_thread (void *arg)
 }
 
 static void *
-_gsettings_monitor_thread (void *arg)
+gsettings_monitor_thread (void *arg)
 {
     FILE *fp = popen ("gsettings monitor org.gnome.shell favorite-apps 2>/dev/null", "r");
     if (!fp)
@@ -79,7 +79,7 @@ _gsettings_monitor_thread (void *arg)
 }
 
 static void
-_get_pictures_dir (char *dest, size_t max_len)
+get_pictures_dir (char *dest, size_t max_len)
 {
     FILE *fp = popen ("xdg-user-dir PICTURES 2>/dev/null", "r");
     if (fp && fgets (dest, max_len, fp))
@@ -97,7 +97,7 @@ _get_pictures_dir (char *dest, size_t max_len)
 }
 
 static void *
-_inotify_monitor_thread (void *arg)
+inotify_monitor_thread (void *arg)
 {
     int fd = inotify_init1 (IN_CLOEXEC | IN_NONBLOCK);
     if (fd < 0)
@@ -107,7 +107,7 @@ _inotify_monitor_thread (void *arg)
 
     char xdg_pics[512];
     char xdg_screenshots[1024];
-    _get_pictures_dir (xdg_pics, sizeof (xdg_pics));
+    get_pictures_dir (xdg_pics, sizeof (xdg_pics));
     snprintf (xdg_screenshots, sizeof (xdg_screenshots), "%s/Screenshots", xdg_pics);
 
     int wd1 = inotify_add_watch (fd, xdg_pics, IN_CREATE | IN_MOVED_TO);
@@ -145,7 +145,7 @@ _inotify_monitor_thread (void *arg)
 }
 
 static void
-_ensure_notification_threads_started (void)
+start_notification_threads (void)
 {
     if (g_notification_threads_started)
         return;
@@ -153,15 +153,15 @@ _ensure_notification_threads_started (void)
     g_notification_threads_started = true;
 
     pthread_t tid1, tid2, tid3;
-    if (pthread_create (&tid1, NULL, _dbus_monitor_thread, NULL) == 0)
+    if (pthread_create (&tid1, NULL, dbus_monitor_thread, NULL) == 0)
     {
         pthread_detach (tid1);
     }
-    if (pthread_create (&tid2, NULL, _gsettings_monitor_thread, NULL) == 0)
+    if (pthread_create (&tid2, NULL, gsettings_monitor_thread, NULL) == 0)
     {
         pthread_detach (tid2);
     }
-    if (pthread_create (&tid3, NULL, _inotify_monitor_thread, NULL) == 0)
+    if (pthread_create (&tid3, NULL, inotify_monitor_thread, NULL) == 0)
     {
         pthread_detach (tid3);
     }
@@ -171,7 +171,7 @@ _ensure_notification_threads_started (void)
 }
 
 static bool
-_rect_intersect (const gf_rect_t *a, const gf_rect_t *b, XRectangle *res)
+rect_intersect (const gf_rect_t *a, const gf_rect_t *b, XRectangle *res)
 {
     int x1 = (a->x > b->x) ? a->x : b->x;
     int y1 = (a->y > b->y) ? a->y : b->y;
@@ -190,7 +190,7 @@ _rect_intersect (const gf_rect_t *a, const gf_rect_t *b, XRectangle *res)
 }
 
 static Window
-_get_toplevel_parent (Display *dpy, Window w)
+get_toplevel_parent (Display *dpy, Window w)
 {
     Window root, parent, *children = NULL;
     unsigned int nchildren = 0;
@@ -216,8 +216,8 @@ _get_toplevel_parent (Display *dpy, Window w)
 }
 
 void
-_apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, int frame_w,
-                   int frame_h, const XRectangle *sub_rects, int sub_count)
+apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, int frame_w,
+                  int frame_h, const XRectangle *sub_rects, int sub_count)
 {
     int shape_event_base, shape_error_base;
     if (!XShapeQueryExtension (dpy, &shape_event_base, &shape_error_base))
@@ -229,8 +229,8 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
     if (w <= 2 * thickness || h <= 2 * thickness)
     {
         GF_LOG_WARN (
-            "_apply_shape_mask: window too small, skipping (w=%d h=%d thickness=%d)", w,
-            h, thickness);
+            "apply_shape_mask: window too small, skipping (w=%d h=%d thickness=%d)", w, h,
+            thickness);
         return;
     }
 
@@ -297,7 +297,7 @@ _apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, in
 }
 
 void
-_resize_border_overlay (Display *dpy, gf_border_t *b, const gf_rect_t *frame)
+resize_border_overlay (Display *dpy, gf_border_t *b, const gf_rect_t *frame)
 {
     int thickness = b->thickness;
     int x = frame->x - thickness;
@@ -315,10 +315,10 @@ _resize_border_overlay (Display *dpy, gf_border_t *b, const gf_rect_t *frame)
 }
 
 Window
-_create_border_overlay (Display *dpy, Window target, gf_color_t color, int thickness)
+create_border_overlay (Display *dpy, Window target, gf_color_t color, int thickness)
 {
     gf_rect_t frame;
-    if (!_get_frame_geometry (dpy, target, &frame))
+    if (!get_frame_geometry (dpy, target, &frame))
     {
         GF_LOG_ERROR ("Failed to get frame geometry for target %lu",
                       (unsigned long)target);
@@ -362,9 +362,71 @@ _create_border_overlay (Display *dpy, Window target, gf_color_t color, int thick
         return None;
     }
 
-    _apply_shape_mask (dpy, overlay, w, h, thickness, frame.width, frame.height, NULL, 0);
+    apply_shape_mask (dpy, overlay, w, h, thickness, frame.width, frame.height, NULL, 0);
     XMapWindow (dpy, overlay);
     return overlay;
+}
+
+static gf_border_t *
+find_border_by_window (gf_linux_platform_data_t *data, Window window)
+{
+    for (int i = 0; i < data->border_count; i++)
+        if (data->borders[i] && data->borders[i]->target == window)
+            return data->borders[i];
+    return NULL;
+}
+
+static void
+update_border_color (Display *dpy, gf_border_t *border, gf_color_t color)
+{
+    border->color = color;
+    if (!border->overlay)
+        return;
+    XSetWindowAttributes swa;
+    swa.background_pixel = color & 0x00FFFFFF;
+    XChangeWindowAttributes (dpy, border->overlay, CWBackPixel, &swa);
+    XClearWindow (dpy, border->overlay);
+}
+
+static void
+fetch_border_rect (Display *dpy, Window window, gf_border_t *border)
+{
+    XWindowAttributes attrs;
+    if (!XGetWindowAttributes (dpy, window, &attrs))
+        return;
+
+    Window root = DefaultRootWindow (dpy), child;
+    int abs_x, abs_y;
+    XTranslateCoordinates (dpy, window, root, 0, 0, &abs_x, &abs_y, &child);
+
+    int le = 0, re = 0, te = 0, be = 0;
+    bool is_csd = false;
+    gf_platform_get_frame_extents (dpy, window, &le, &re, &te, &be, &is_csd);
+
+    if (is_csd)
+    {
+        border->last_rect = (gf_rect_t){ abs_x + le, abs_y + te, attrs.width - le - re,
+                                         attrs.height - te - be };
+    }
+    else
+    {
+        border->last_rect = (gf_rect_t){ abs_x - le, abs_y - te, attrs.width + le + re,
+                                         attrs.height + te + be };
+    }
+}
+
+static gf_border_t *
+alloc_border (Window window, Window overlay, gf_color_t color, int thickness)
+{
+    gf_border_t *border = gf_malloc (sizeof (gf_border_t));
+    if (!border)
+        return NULL;
+    border->target = window;
+    border->overlay = overlay;
+    border->color = color;
+    border->thickness = thickness;
+    border->last_intersect_count = 0;
+    return border;
 }
 
 void
@@ -380,38 +442,23 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
 
     if (data->border_count >= GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES)
     {
-        GF_LOG_WARN ("Border limit reached, cannot add more borders");
+        GF_LOG_WARN ("Border limit reached");
         return;
     }
 
     if (gf_window_is_excluded (data->display, (Window)window))
+        return;
+
+    gf_border_t *existing = find_border_by_window (data, (Window)window);
+    if (existing)
     {
+        GF_LOG_INFO ("Border already exists for window %lu, updating color",
+                     (unsigned long)window);
+        update_border_color (data->display, existing, color);
         return;
     }
 
-    // Check if border already exists for this window
-    for (int i = 0; i < data->border_count; i++)
-    {
-        if (data->borders[i] && data->borders[i]->target == (Window)window)
-        {
-            GF_LOG_INFO ("Border already exists for window %lu, updating color",
-                         (unsigned long)window);
-            // Update existing border color
-            gf_border_t *border = data->borders[i];
-            border->color = color;
-            if (border->overlay)
-            {
-                XSetWindowAttributes swa;
-                swa.background_pixel = color & 0x00FFFFFF;
-                XChangeWindowAttributes (data->display, border->overlay, CWBackPixel,
-                                         &swa);
-                XClearWindow (data->display, border->overlay);
-            }
-            return;
-        }
-    }
-
-    Window overlay = _create_border_overlay (data->display, window, color, thickness);
+    Window overlay = create_border_overlay (data->display, window, color, thickness);
     if (!overlay)
     {
         GF_LOG_WARN ("Failed to create border overlay for window %lu",
@@ -419,57 +466,22 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
         return;
     }
 
-    gf_border_t *border = gf_malloc (sizeof (gf_border_t));
+    gf_border_t *border = alloc_border ((Window)window, overlay, color, thickness);
     if (!border)
     {
         XDestroyWindow (data->display, overlay);
         return;
     }
 
-    border->target = (Window)window;
-    border->overlay = overlay;
-    border->color = color;
-    border->thickness = thickness;
-    border->last_intersect_count = 0;
-
-    // Init last_rect
-    XWindowAttributes attrs;
-    if (XGetWindowAttributes (data->display, (Window)window, &attrs))
-    {
-        Window root = DefaultRootWindow (data->display);
-        int abs_x, abs_y;
-        Window child;
-        XTranslateCoordinates (data->display, (Window)window, root, 0, 0, &abs_x, &abs_y,
-                               &child);
-
-        // Store Frame Geometry as last_rect
-        int left_ext = 0, right_ext = 0, top_ext = 0, bottom_ext = 0;
-        bool is_csd = false;
-        gf_platform_get_frame_extents (data->display, (Window)window, &left_ext,
-                                       &right_ext, &top_ext, &bottom_ext, &is_csd);
-
-        if (is_csd)
-        {
-            border->last_rect.x = abs_x + left_ext;
-            border->last_rect.y = abs_y + top_ext;
-            border->last_rect.width = attrs.width - left_ext - right_ext;
-            border->last_rect.height = attrs.height - top_ext - bottom_ext;
-        }
-        else
-        {
-            border->last_rect.x = abs_x - left_ext;
-            border->last_rect.y = abs_y - top_ext;
-            border->last_rect.width = attrs.width + left_ext + right_ext;
-            border->last_rect.height = attrs.height + top_ext + bottom_ext;
-        }
-    }
-
+    fetch_border_rect (data->display, (Window)window, border);
     data->borders[data->border_count++] = border;
 
     XFlush (data->display);
     GF_LOG_INFO ("Border added for window %lu (overlay %lu)", (unsigned long)window,
                  (unsigned long)overlay);
 }
+
+
 
 void
 gf_border_cleanup (gf_platform_t *platform)
@@ -523,55 +535,193 @@ gf_border_remove (gf_platform_t *platform, gf_handle_t window)
     }
 }
 
+/* --- gf_border_update helpers --- */
+
+static void
+border_stack_above_target (Display *dpy, gf_border_t *b)
+{
+    Window toplevel = get_toplevel_parent (dpy, b->target);
+    if (toplevel == None)
+        return;
+    XWindowChanges changes;
+    changes.sibling    = toplevel;
+    changes.stack_mode = Above;
+    XConfigureWindow (dpy, b->overlay, CWSibling | CWStackMode, &changes);
+}
+
+static int
+collect_border_intersections (gf_border_t *b, gf_rect_t *gui_geoms, int gui_count,
+                               const gf_rect_t *border_rect, XRectangle *out, int max)
+{
+    int count = 0;
+    for (int g = 0; g < gui_count && count < max; g++)
+        if (rect_intersect (border_rect, &gui_geoms[g], &out[count]))
+            count++;
+    return count;
+}
+
+static int
+inject_notification_zone (gf_platform_t *platform, gf_border_t *b,
+                           const gf_rect_t *border_rect, XRectangle *intersections,
+                           int count, int max)
+{
+    if (count >= max)
+        return count;
+
+    gf_monitor_id_t mon = gf_monitor_from_window (platform, (gf_handle_t)b->target);
+    gf_rect_t mb;
+    if (gf_screen_get_bounds_for_monitor (*(Display **)platform->platform_data, mon, &mb)
+        != GF_SUCCESS)
+    {
+        mb.x = 0; mb.y = 0;
+        mb.width  = DisplayWidth (*(Display **)platform->platform_data,
+                                  DefaultScreen (*(Display **)platform->platform_data));
+        mb.height = DisplayHeight (*(Display **)platform->platform_data,
+                                   DefaultScreen (*(Display **)platform->platform_data));
+    }
+
+    int nw = (mb.width > 1920) ? 1400 : 900;
+    int nx = mb.x + (mb.width - nw) / 2;
+    gf_rect_t nz = { nx, mb.y, nw, 250 };
+
+    if (rect_intersect (border_rect, &nz, &intersections[count]))
+        count++;
+    return count;
+}
+
+static bool
+border_needs_reshape (gf_border_t *b, const gf_rect_t *frame,
+                       const XRectangle *ints, int count)
+{
+    bool geom_changed = (frame->x != b->last_rect.x || frame->y != b->last_rect.y
+                         || frame->width != b->last_rect.width
+                         || frame->height != b->last_rect.height);
+    if (geom_changed || count != b->last_intersect_count)
+        return true;
+    for (int k = 0; k < count; k++)
+    {
+        if (ints[k].x != b->last_intersections[k].x
+            || ints[k].y != b->last_intersections[k].y
+            || ints[k].width != b->last_intersections[k].width
+            || ints[k].height != b->last_intersections[k].height)
+            return true;
+    }
+    return false;
+}
+
+static void
+reapply_border_shape (Display *dpy, gf_border_t *b, const gf_rect_t *frame,
+                       int win_x, int win_y, int win_w, int win_h,
+                       bool geom_changed, const XRectangle *ints, int count)
+{
+    if (geom_changed)
+        XMoveResizeWindow (dpy, b->overlay, win_x, win_y, win_w, win_h);
+
+    apply_shape_mask (dpy, b->overlay, win_w, win_h, b->thickness,
+                      frame->width, frame->height, ints, count);
+
+    b->last_rect = *frame;
+    b->last_intersect_count = count;
+    if (count > 0)
+        memcpy (b->last_intersections, ints, count * sizeof (XRectangle));
+}
+
+static void
+update_single_border (Display *dpy, gf_linux_platform_data_t *data,
+                       gf_platform_t *platform, const gf_config_t *config,
+                       gf_rect_t *gui_geoms, int gui_count, int i,
+                       bool notification_active)
+{
+    gf_border_t *b = data->borders[i];
+    if (!b || window_is_border_excluded (dpy, b->target))
+        return;
+
+    XWindowAttributes attrs;
+    if (!XGetWindowAttributes (dpy, b->target, &attrs))
+    {
+        XDestroyWindow (dpy, b->overlay);
+        gf_free (b);
+        for (int j = i; j < data->border_count - 1; j++)
+            data->borders[j] = data->borders[j + 1];
+        data->border_count--;
+        return;
+    }
+
+    if (attrs.map_state == IsUnmapped || gf_window_is_minimized (dpy, b->target)
+        || gf_window_is_maximized (dpy, b->target))
+    {
+        XUnmapWindow (dpy, b->overlay);
+        return;
+    }
+
+    XMapWindow (dpy, b->overlay);
+    border_stack_above_target (dpy, b);
+
+    if (b->color != config->border_color)
+        update_border_color (dpy, b, config->border_color);
+
+    gf_rect_t frame;
+    if (!get_frame_geometry (dpy, b->target, &frame))
+        return;
+
+    int thick = b->thickness;
+    int win_x = frame.x - thick, win_y = frame.y - thick;
+    int win_w = frame.width + 2 * thick, win_h = frame.height + 2 * thick;
+
+    XRectangle ints[32];
+    gf_rect_t border_rect = { win_x, win_y, win_w, win_h };
+    int count = collect_border_intersections (b, gui_geoms, gui_count, &border_rect,
+                                              ints, 32);
+    if (notification_active)
+        count = inject_notification_zone (platform, b, &border_rect, ints, count, 32);
+
+    bool geom_changed = (frame.x != b->last_rect.x || frame.y != b->last_rect.y
+                         || frame.width != b->last_rect.width
+                         || frame.height != b->last_rect.height);
+
+    if (border_needs_reshape (b, &frame, ints, count))
+        reapply_border_shape (dpy, b, &frame, win_x, win_y, win_w, win_h,
+                               geom_changed, ints, count);
+}
+
 void
 gf_border_update (gf_platform_t *platform, const gf_config_t *config)
 {
     if (!platform || !platform->platform_data || !config)
         return;
 
-    _ensure_notification_threads_started ();
-
-    time_t now = time (NULL);
-    bool notification_active = false;
-    pthread_mutex_lock (&g_notification_mutex);
-    if (now < g_notification_expire_time)
-    {
-        notification_active = true;
-    }
-    pthread_mutex_unlock (&g_notification_mutex);
-
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
     Display *dpy = data->display;
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
 
-    // Find all GUI windows geometries
+    start_notification_threads ();
+
+    pthread_mutex_lock (&g_notification_mutex);
+    bool notification_active = (g_notification_expire_time > 0
+                                  && time (NULL) < g_notification_expire_time);
+    pthread_mutex_unlock (&g_notification_mutex);
+
     gf_rect_t gui_geoms[32];
     int gui_count = 0;
 
-    // Load static exclude zones from config
-    for (uint32_t i = 0; i < config->exclude_zones_count && gui_count < 32; i++)
-    {
+    for (int i = 0; i < config->exclude_zones_count && gui_count < 32; i++)
         gui_geoms[gui_count++] = config->exclude_zones[i];
-    }
 
     Window root = DefaultRootWindow (dpy);
     unsigned char *prop_data = NULL;
     unsigned long nitems = 0;
     if (gf_platform_get_window_property (dpy, root, atoms->net_client_list, XA_WINDOW,
-                                         &prop_data, &nitems)
-        == GF_SUCCESS)
+                                         &prop_data, &nitems) == GF_SUCCESS)
     {
         Window *clients = (Window *)prop_data;
         for (unsigned long i = 0; i < nitems && gui_count < 32; i++)
         {
-            if (_window_excluded_border (dpy, clients[i])
-                && !_window_has_type (dpy, clients[i], atoms->net_wm_window_type_desktop)
-                && !_window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
+            if (window_is_border_excluded (dpy, clients[i])
+                && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_desktop)
+                && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
             {
-                if (_get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
-                {
+                if (get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
                     gui_count++;
-                }
             }
         }
         XFree (prop_data);
@@ -579,165 +729,15 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
 
     for (int i = 0; i < data->border_count;)
     {
-        gf_border_t *b = data->borders[i];
-        if (!b || _window_excluded_border (dpy, b->target))
-        {
-            i++;
+        int old_count = data->border_count;
+        update_single_border (dpy, data, platform, config, gui_geoms, gui_count, i,
+                               notification_active);
+        /* update_single_border may have removed a border (dead window) */
+        if (data->border_count < old_count)
             continue;
-        }
-
-        XWindowAttributes attrs;
-        if (!XGetWindowAttributes (dpy, b->target, &attrs))
-        {
-            // Window is definitely gone - removing
-            XDestroyWindow (dpy, b->overlay);
-            gf_free (b);
-            // Shift array
-            for (int j = i; j < data->border_count - 1; j++)
-                data->borders[j] = data->borders[j + 1];
-            data->border_count--;
-            continue;
-        }
-
-        if (attrs.map_state == IsUnmapped || gf_window_is_minimized (dpy, b->target)
-            || gf_window_is_maximized (dpy, b->target))
-        {
-            XUnmapWindow (dpy, b->overlay);
-            i++;
-            continue;
-        }
-
-        XMapWindow (dpy, b->overlay);
-
-        // Keep the overlay stacked directly above its target's top-level parent window.
-        // This ensures the border overlay is stacked above the target window, but safely
-        // BELOW any other top-level active windows or GNOME Shell's UI elements (like
-        // panels, popups, or notifications).
-        Window toplevel = _get_toplevel_parent (dpy, b->target);
-        if (toplevel != None)
-        {
-            XWindowChanges changes;
-            changes.sibling = toplevel;
-            changes.stack_mode = Above;
-            XConfigureWindow (dpy, b->overlay, CWSibling | CWStackMode, &changes);
-        }
-
-        // Update Color dynamically
-        if (b->color != config->border_color)
-        {
-            b->color = config->border_color;
-            XSetWindowAttributes swa;
-            swa.background_pixel = b->color & 0x00FFFFFF;
-            XChangeWindowAttributes (dpy, b->overlay, CWBackPixel, &swa);
-            XClearWindow (dpy, b->overlay);
-        }
-
-        gf_rect_t frame;
-        if (!_get_frame_geometry (dpy, b->target, &frame))
-        {
-            i++;
-            continue;
-        }
-
-        int thickness = b->thickness;
-        int win_x = frame.x - thickness;
-        int win_y = frame.y - thickness;
-        int win_w = frame.width + 2 * thickness;
-        int win_h = frame.height + 2 * thickness;
-
-        // Find intersections with GUI windows to subtract from shape
-        XRectangle intersections[32];
-        int intersect_count = 0;
-        gf_rect_t border_rect = { win_x, win_y, win_w, win_h };
-
-        for (int g = 0; g < gui_count && intersect_count < 32; g++)
-        {
-            if (_rect_intersect (&border_rect, &gui_geoms[g],
-                                 &intersections[intersect_count]))
-            {
-                intersect_count++;
-            }
-        }
-
-        // Native notification/favorites sync exclusion box injection
-        if (notification_active && intersect_count < 32)
-        {
-            gf_monitor_id_t monitor_id
-                = gf_monitor_from_window (platform, (gf_handle_t)b->target);
-            gf_rect_t monitor_bounds;
-            gf_err_t err
-                = gf_screen_get_bounds_for_monitor (dpy, monitor_id, &monitor_bounds);
-            if (err != GF_SUCCESS)
-            {
-                // Fallback to primary screen dimensions
-                monitor_bounds.x = 0;
-                monitor_bounds.y = 0;
-                monitor_bounds.width = DisplayWidth (dpy, DefaultScreen (dpy));
-                monitor_bounds.height = DisplayHeight (dpy, DefaultScreen (dpy));
-            }
-
-            int notify_w = (monitor_bounds.width > 1920) ? 1400 : 900;
-            int notify_x = monitor_bounds.x + (monitor_bounds.width - notify_w) / 2;
-            gf_rect_t notify_geom = { notify_x, monitor_bounds.y, notify_w, 250 };
-
-            if (_rect_intersect (&border_rect, &notify_geom,
-                                 &intersections[intersect_count]))
-            {
-                intersect_count++;
-            }
-        }
-
-        bool geom_changed = (frame.x != b->last_rect.x || frame.y != b->last_rect.y
-                             || frame.width != b->last_rect.width
-                             || frame.height != b->last_rect.height);
-
-        bool shape_changed = geom_changed || (intersect_count != b->last_intersect_count);
-
-        if (!shape_changed && intersect_count > 0)
-        {
-            for (int k = 0; k < intersect_count; k++)
-            {
-                if (intersections[k].x != b->last_intersections[k].x
-                    || intersections[k].y != b->last_intersections[k].y
-                    || intersections[k].width != b->last_intersections[k].width
-                    || intersections[k].height != b->last_intersections[k].height)
-                {
-                    shape_changed = true;
-                    break;
-                }
-            }
-        }
-
-        if (shape_changed)
-        {
-            if (geom_changed)
-                XMoveResizeWindow (dpy, b->overlay, win_x, win_y, win_w, win_h);
-
-            if (intersect_count > 0)
-            {
-                for (int k = 0; k < intersect_count; k++)
-                {
-                    GF_LOG_INFO ("Applying border shape mask for overlay %lu, exclusion "
-                                 "%d: local_x=%d, local_y=%d, w=%d, h=%d",
-                                 (unsigned long)b->overlay, k, intersections[k].x,
-                                 intersections[k].y, intersections[k].width,
-                                 intersections[k].height);
-                }
-            }
-
-            _apply_shape_mask (dpy, b->overlay, win_w, win_h, thickness, frame.width,
-                               frame.height, intersections, intersect_count);
-
-            b->last_rect = frame;
-            b->last_intersect_count = intersect_count;
-            if (intersect_count > 0)
-            {
-                memcpy (b->last_intersections, intersections,
-                        intersect_count * sizeof (XRectangle));
-            }
-        }
-
         i++;
     }
+
     XFlush (dpy);
 }
+
