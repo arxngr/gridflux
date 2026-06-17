@@ -137,8 +137,8 @@ ws_has_capacity (gf_ws_info_t *ws, uint32_t max_per_ws)
 }
 
 void
-recount_workspace_windows (gf_wm_t *m, gf_ws_list_t *workspaces,
-                            gf_win_list_t *windows, uint32_t max_per_ws)
+recount_workspace_windows (gf_wm_t *m, gf_ws_list_t *workspaces, gf_win_list_t *windows,
+                           uint32_t max_per_ws)
 {
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
@@ -174,8 +174,8 @@ switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace)
     gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_monitor_id_t active_monitor = find_active_monitor (m);
 
-    GF_LOG_DEBUG ("Workspace changed from %d to %d",
-                  m->state.last_active_workspace, current_workspace);
+    GF_LOG_DEBUG ("Workspace changed from %d to %d", m->state.last_active_workspace,
+                  current_workspace);
 
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
@@ -203,8 +203,7 @@ switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace)
             m->state.dock_hidden = true;
 
             if (!target_ws->is_custom_layout)
-                gf_window_list_mark_all_needs_update (wm_windows (m),
-                                                      &current_workspace);
+                gf_window_list_mark_all_needs_update (wm_windows (m), &current_workspace);
         }
     }
     else
@@ -215,8 +214,7 @@ switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace)
             m->state.dock_hidden = false;
 
             if (target_ws && !target_ws->is_custom_layout)
-                gf_window_list_mark_all_needs_update (wm_windows (m),
-                                                      &current_workspace);
+                gf_window_list_mark_all_needs_update (wm_windows (m), &current_workspace);
         }
     }
 }
@@ -242,8 +240,8 @@ sync_workspaces (gf_wm_t *m)
         if (!ws)
             continue;
 
-        ws->is_locked = ws->has_rule ? true
-                                     : gf_config_workspace_is_locked (m->config, i);
+        ws->is_locked
+            = ws->has_rule ? true : gf_config_workspace_is_locked (m->config, i);
         ws->max_windows = max_per_ws;
         ws->available_space = ws->is_locked ? 0 : (max_per_ws - ws->window_count);
     }
@@ -368,8 +366,8 @@ lookup_or_create_maximized_ws (gf_wm_t *m)
             return workspaces->items[i].id;
     }
 
-    return gf_workspace_create (workspaces, m->config->max_windows_per_workspace,
-                                true, true);
+    return gf_workspace_create (workspaces, m->config->max_windows_per_workspace, true,
+                                true);
 }
 
 void
@@ -386,8 +384,7 @@ cleanup_empty_maximized_ws (gf_wm_t *m, gf_ws_id_t ws_id)
 
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
-        if (workspaces->items[i].id == ws_id
-            && workspaces->items[i].has_maximized_state)
+        if (workspaces->items[i].id == ws_id && workspaces->items[i].has_maximized_state)
         {
             cleanup_unused_workspace (m, workspaces, i);
             GF_LOG_INFO ("Cleaned up empty maximized workspace %d", ws_id);
@@ -404,13 +401,12 @@ lookup_or_create_ws (gf_wm_t *m)
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         if (!workspaces->items[i].has_maximized_state
-            && workspaces->items[i].available_space > 0
-            && !workspaces->items[i].has_rule)
+            && workspaces->items[i].available_space > 0 && !workspaces->items[i].has_rule)
             return workspaces->items[i].id;
     }
 
-    return gf_workspace_create (workspaces, m->config->max_windows_per_workspace,
-                                false, false);
+    return gf_workspace_create (workspaces, m->config->max_windows_per_workspace, false,
+                                false);
 }
 
 gf_ws_id_t
@@ -530,8 +526,8 @@ register_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
     if (current_ws)
         current_ws->is_custom_layout = false;
 
-    GF_LOG_INFO ("New window %p → workspace %u (%s)", (void *)win->id,
-                 win->workspace_id, class_name);
+    GF_LOG_INFO ("New window %p → workspace %u (%s)", (void *)win->id, win->workspace_id,
+                 class_name);
 
     finalize_window_registration (m, win);
 }

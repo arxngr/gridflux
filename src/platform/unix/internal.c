@@ -38,12 +38,12 @@ window_is_app_exception (gf_display_t display, gf_handle_t window)
     {
         bool match = (hint.res_class
                       && window_name_matches (hint.res_class, screenshot_classes,
-                                               sizeof (screenshot_classes)
-                                                   / sizeof (screenshot_classes[0])))
+                                              sizeof (screenshot_classes)
+                                                  / sizeof (screenshot_classes[0])))
                      || (hint.res_name
                          && window_name_matches (hint.res_name, screenshot_classes,
-                                                  sizeof (screenshot_classes)
-                                                      / sizeof (screenshot_classes[0])));
+                                                 sizeof (screenshot_classes)
+                                                     / sizeof (screenshot_classes[0])));
 
         if (hint.res_name)
             XFree (hint.res_name);
@@ -188,7 +188,7 @@ get_frame_geometry (Display *dpy, Window target, gf_rect_t *frame_rect)
 
 bool
 query_window_info (Display *display, Window window, gf_platform_atoms_t *atoms,
-                          gf_ws_id_t *workspace_id, gf_win_info_t *info)
+                   gf_ws_id_t *workspace_id, gf_win_info_t *info)
 {
     if (!gf_window_is_valid (display, window))
         return false;

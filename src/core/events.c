@@ -136,8 +136,7 @@ gf_wm_watch (gf_wm_t *m)
             if (platform->monitor_from_window)
                 win->monitor_id = platform->monitor_from_window (platform, win->id);
 
-            gf_win_info_t *existing
-                = gf_window_list_find_by_window_id (windows, win->id);
+            gf_win_info_t *existing = gf_window_list_find_by_window_id (windows, win->id);
 
             if (!existing)
             {

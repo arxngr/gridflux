@@ -44,8 +44,7 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
     for (unsigned long i = 0; i < nitems; i++)
     {
         gf_win_info_t info;
-        if (query_window_info (display, window_list[i], atoms, workspace_id,
-                                      &info))
+        if (query_window_info (display, window_list[i], atoms, workspace_id, &info))
         {
             filtered_windows[filtered_count++] = info;
         }

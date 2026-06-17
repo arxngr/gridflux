@@ -90,7 +90,7 @@ find_active_monitor (gf_wm_t *m)
 
 void
 minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id,
-                             gf_monitor_id_t active_monitor)
+                            gf_monitor_id_t active_monitor)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -116,7 +116,7 @@ minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id
 
 static void
 restore_non_active_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
-                             gf_monitor_id_t active_monitor, bool is_maximized_ws)
+                            gf_monitor_id_t active_monitor, bool is_maximized_ws)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -149,7 +149,7 @@ restore_non_active_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_win
 
 static void
 restore_active_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
-                        gf_monitor_id_t active_monitor)
+                       gf_monitor_id_t active_monitor)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -198,13 +198,12 @@ restore_fallback_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_monitor_id_t active_mo
 
 void
 restore_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
-                            gf_monitor_id_t active_monitor)
+                           gf_monitor_id_t active_monitor)
 {
     gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
     bool is_maximized_ws = (ws && ws->has_maximized_state);
 
-    restore_non_active_windows (m, ws_id, active_window, active_monitor,
-                                is_maximized_ws);
+    restore_non_active_windows (m, ws_id, active_window, active_monitor, is_maximized_ws);
 
     if (active_window != 0)
         restore_active_window (m, ws_id, active_window, active_monitor);
@@ -267,11 +266,10 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
 
     gf_win_info_t *existing = gf_window_list_find_by_window_id (windows, window);
 
-    bool is_min_state = existing
-                            ? existing->is_minimized
-                            : (platform->window_is_minimized
-                                   ? platform->window_is_minimized (display, window)
-                                   : false);
+    bool is_min_state = existing ? existing->is_minimized
+                                 : (platform->window_is_minimized
+                                        ? platform->window_is_minimized (display, window)
+                                        : false);
     bool is_max_state = existing ? existing->is_maximized : false;
 
     gf_monitor_id_t mon_id = 0;
@@ -400,8 +398,9 @@ find_maximized_windows (gf_wm_t *m, gf_win_info_t **out_windows)
 
         gf_win_info_t *ws_wins = NULL;
         uint32_t ws_count = 0;
-        if (gf_window_list_get_by_workspace (windows, workspaces->items[i].id,
-                                             &ws_wins, &ws_count) == GF_SUCCESS)
+        if (gf_window_list_get_by_workspace (windows, workspaces->items[i].id, &ws_wins,
+                                             &ws_count)
+            == GF_SUCCESS)
         {
             for (uint32_t j = 0; j < ws_count && idx < total; j++)
                 result[idx++] = ws_wins[j];

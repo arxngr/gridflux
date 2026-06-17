@@ -170,8 +170,8 @@ assemble_window_widgets (gf_app_state_t *widgets)
 void
 gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
 {
-    g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme",
-                  TRUE, NULL);
+    g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", TRUE,
+                  NULL);
     apply_window_css ();
     setup_main_window (widgets, app);
     assemble_window_widgets (widgets);
