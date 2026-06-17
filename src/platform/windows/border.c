@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 HWND
-_create_border_overlay (HWND target)
+create_border_overlay (HWND target)
 {
     HINSTANCE hInst = GetModuleHandle (NULL);
 
@@ -257,7 +257,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
         return;
     }
 
-    HWND overlay = _create_border_overlay (window);
+    HWND overlay = create_border_overlay (window);
     if (!overlay)
     {
         GF_LOG_WARN ("Failed to create border overlay");
@@ -309,7 +309,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     {
         if (IsWindowVisible (hwnd))
         {
-            if (_window_excluded_border (hwnd))
+            if (window_is_border_excluded (hwnd))
             {
                 if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
                                                       &gui_rects[gui_count],

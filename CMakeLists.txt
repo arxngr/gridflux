@@ -195,6 +195,7 @@ add_executable(gridflux-cli
     src/core/window.c
     src/core/events.c
     src/core/debug.c
+    src/core/border.c
     src/utils/list.c
     src/utils/memory.c
     src/utils/logger.c
@@ -233,6 +234,7 @@ if(GTK4_FOUND)
         src/core/window.c
         src/core/events.c
         src/core/debug.c
+        src/core/border.c
         src/utils/list.c
         src/utils/memory.c
         src/config/config.c
@@ -270,6 +272,9 @@ if(GTK4_FOUND)
     # Embed icon resource on Windows (taskbar, alt-tab, explorer)
     if(WIN32)
         target_sources(gridflux-gui PRIVATE ${CMAKE_SOURCE_DIR}/gridflux-gui.rc)
+        if(MSVC)
+            target_link_options(gridflux-gui PRIVATE "/ENTRY:mainCRTStartup")
+        endif()
     endif()
 endif()
 
@@ -288,6 +293,14 @@ if(JSONC_LIBRARY_DIRS)
     endif()
 endif()
 
+if(MSVC)
+    # Prevent duplicate manifest resource errors on MSVC since they are already embedded via RC files
+    set_target_properties(gridflux PROPERTIES LINK_FLAGS "/MANIFEST:NO")
+    set_target_properties(gridflux-launcher PROPERTIES LINK_FLAGS "/MANIFEST:NO")
+    if(TARGET gridflux-gui)
+        set_target_properties(gridflux-gui PROPERTIES LINK_FLAGS "/MANIFEST:NO")
+    endif()
+endif()
 
 if(GF_DEV_MODE)
     target_compile_definitions(gridflux PRIVATE GF_DEV_MODE)

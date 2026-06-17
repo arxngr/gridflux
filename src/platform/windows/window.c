@@ -252,7 +252,7 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (_is_notification_center (window))
         return true;
 
-    if (_window_it_self (display, window))
+    if (window_is_self (display, window))
         return true;
 
     if (_is_installer_window ((HWND)window))

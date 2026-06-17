@@ -20,6 +20,14 @@ typedef __int64 ssize_t;
 typedef long ssize_t;
 #endif
 
+#ifdef _MSC_VER
+#include <io.h>
+#define open _open
+#define read _read
+#define write _write
+#define close _close
+#endif
+
 #else
 #include <sys/stat.h>
 #include <sys/types.h>

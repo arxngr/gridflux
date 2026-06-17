@@ -24,23 +24,23 @@ gf_dock_hide (gf_platform_t *platform)
         char *args_ubuntu[]
             = { "gsettings",  "set",   "org.gnome.shell.extensions.ubuntu-dock",
                 "dock-fixed", "false", NULL };
-        _run_cmd_sync ("gsettings", args_ubuntu);
+        run_cmd_sync ("gsettings", args_ubuntu);
 
         char *args_ubuntu_ih[]
             = { "gsettings",   "set",  "org.gnome.shell.extensions.ubuntu-dock",
                 "intellihide", "true", NULL };
-        _run_cmd_sync ("gsettings", args_ubuntu_ih);
+        run_cmd_sync ("gsettings", args_ubuntu_ih);
 
         // Also try standard Dash to Dock (fire both, one will fail silently)
         char *args_dash[]
             = { "gsettings",  "set",   "org.gnome.shell.extensions.dash-to-dock",
                 "dock-fixed", "false", NULL };
-        _run_cmd_sync ("gsettings", args_dash);
+        run_cmd_sync ("gsettings", args_dash);
 
         char *args_dash_ih[]
             = { "gsettings",   "set",  "org.gnome.shell.extensions.dash-to-dock",
                 "intellihide", "true", NULL };
-        _run_cmd_sync ("gsettings", args_dash_ih);
+        run_cmd_sync ("gsettings", args_dash_ih);
 
         GF_LOG_INFO ("Tried auto-hiding GNOME docks");
         // Fall through to catch any X11 docks
@@ -74,7 +74,7 @@ gf_dock_hide (gf_platform_t *platform)
     for (unsigned long i = 0;
          i < clients_count && data->saved_dock_count < GF_MAX_DOCK_WINDOWS; i++)
     {
-        if (_window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
+        if (window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
         {
             data->saved_dock_windows[data->saved_dock_count++] = clients[i];
             XUnmapWindow (dpy, clients[i]);
@@ -107,7 +107,7 @@ gf_dock_hide (gf_platform_t *platform)
             if (already_saved)
                 continue;
 
-            if (_window_has_type (dpy, children[i], atoms->net_wm_window_type_dock))
+            if (window_has_type (dpy, children[i], atoms->net_wm_window_type_dock))
             {
                 data->saved_dock_windows[data->saved_dock_count++] = children[i];
                 XUnmapWindow (dpy, children[i]);
@@ -141,13 +141,13 @@ gf_dock_restore (gf_platform_t *platform)
         char *args_ubuntu[]
             = { "gsettings",  "set",  "org.gnome.shell.extensions.ubuntu-dock",
                 "dock-fixed", "true", NULL };
-        _run_cmd_sync ("gsettings", args_ubuntu);
+        run_cmd_sync ("gsettings", args_ubuntu);
 
         // Try standard Dash to Dock
         char *args_dash[]
             = { "gsettings",  "set",  "org.gnome.shell.extensions.dash-to-dock",
                 "dock-fixed", "true", NULL };
-        _run_cmd_sync ("gsettings", args_dash);
+        run_cmd_sync ("gsettings", args_dash);
 
         GF_LOG_INFO ("Tried restoring GNOME docks");
         // Fall through to restore any X11 docks

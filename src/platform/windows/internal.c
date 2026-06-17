@@ -65,6 +65,8 @@ _is_excluded_class (const char *class_name)
             "ThumbnailDeviceHelperWnd",
             "RecordingAreaIndicatorWindow",
             "XamlExplorerHostIslandWindow_WASDK",
+            "TWizardForm",
+            "#32769"
             "XamlWindow" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)
@@ -232,7 +234,7 @@ _get_taskbar_dimensions (int *left, int *right, int *top, int *bottom)
 }
 
 bool
-_window_it_self (gf_display_t display, gf_handle_t window)
+window_is_self (gf_display_t display, gf_handle_t window)
 {
     (void)display;
     if (!_validate_window (window))
@@ -259,12 +261,12 @@ _window_it_self (gf_display_t display, gf_handle_t window)
 }
 
 BOOL
-_window_excluded_border (HWND hwnd)
+window_is_border_excluded (HWND hwnd)
 {
     if (!_validate_window (hwnd))
         return true;
 
-    if (_window_it_self (NULL, hwnd))
+    if (window_is_self (NULL, hwnd))
         return true;
 
     char class_name[MAX_CLASS_NAME_LENGTH];
@@ -276,7 +278,9 @@ _window_excluded_border (HWND hwnd)
                                                   "ThumbnailDeviceHelperWnd",
                                                   "RecordingAreaIndicatorWindow",
                                                   "XamlExplorerHostIslandWindow_WASDK",
-                                                  "XamlWindow" };
+                                                  "XamlWindow",
+                                                  "TWizardForm",
+                                                  "#32769" };
 
         for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]);
              i++)
