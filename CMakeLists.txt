@@ -40,6 +40,9 @@ if(WIN32)
         _CRT_NONSTDC_NO_DEPRECATE
     )
 
+    # Statically link GCC runtime to avoid missing DLL errors on user machines
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc")
+
     find_package(PkgConfig REQUIRED)
 
     pkg_check_modules(JSONC REQUIRED json-c)
