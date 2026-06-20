@@ -112,8 +112,6 @@ minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id
     }
 }
 
-/* --- restore_workspace_windows helpers --- */
-
 static void
 restore_non_active_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
                             gf_monitor_id_t active_monitor, bool is_maximized_ws)
@@ -294,6 +292,10 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
     {
         strncpy (info.name, existing->name, sizeof (info.name) - 1);
         info.name[sizeof (info.name) - 1] = '\0';
+    }
+    else
+    {
+        gf_wm_window_class (m, window, info.name, sizeof (info.name));
     }
 
     return existing ? gf_window_list_update (windows, &info)

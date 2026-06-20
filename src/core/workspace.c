@@ -47,10 +47,7 @@ evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id)
         if (win->workspace_id != ws_id || !win->is_valid)
             continue;
 
-        char name[256];
-        gf_wm_window_class (m, win->id, name, sizeof (name));
-
-        if (window_has_rule (m->config, name))
+        if (window_has_rule (m->config, win->name))
             continue;
 
         gf_ws_id_t dst_id = -1;
@@ -72,7 +69,7 @@ evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id)
         if (dst_id >= 0)
         {
             GF_LOG_INFO ("Evicting window %p (%s) from workspace %d to %d for rule",
-                         (void *)win->id, name, ws_id, dst_id);
+                         (void *)win->id, win->name, ws_id, dst_id);
             win->workspace_id = dst_id;
             recount_workspace_windows (m, workspaces, windows, max_per_ws);
         }
@@ -127,7 +124,6 @@ move_window_to_workspace (gf_wm_t *m, gf_win_info_t *win, gf_ws_id_t new_ws_id)
     gf_workspace_list_add_window (new, windows, win->id);
 
     win->workspace_id = new_ws_id;
-    m->platform->window_minimize (m->display, win->id);
 }
 
 bool
@@ -247,8 +243,6 @@ sync_workspaces (gf_wm_t *m)
     }
 }
 
-/* --- assign_windows_to_workspaces helpers --- */
-
 static void
 create_rule_workspaces (gf_wm_t *m)
 {
@@ -302,9 +296,7 @@ assign_unassigned_windows (gf_wm_t *m, uint32_t max_per_ws)
         if (!win->is_valid || win_has_assigned_workspace (win, workspaces))
             continue;
 
-        char class_name[256];
-        gf_wm_window_class (m, win->id, class_name, sizeof (class_name));
-        const gf_window_rule_t *rule = gf_rules_find (m->config, class_name);
+        const gf_window_rule_t *rule = gf_rules_find (m->config, win->name);
         if (rule)
         {
             win->workspace_id = rule->workspace_id;
@@ -427,8 +419,6 @@ assign_window_workspace (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_w
     return lookup_or_create_ws (m);
 }
 
-/* --- register_new_window helpers --- */
-
 static void
 assign_maximized_window (gf_wm_t *m, gf_win_info_t *win)
 {
@@ -509,6 +499,8 @@ register_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
 
     char class_name[256];
     gf_wm_window_class (m, win->id, class_name, sizeof (class_name));
+    strncpy (win->name, class_name, sizeof (win->name) - 1);
+    win->name[sizeof (win->name) - 1] = '\0';
 
     if (platform->window_is_maximized && platform->window_is_maximized (display, win->id))
     {
@@ -516,7 +508,7 @@ register_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
     }
     else
     {
-        const gf_window_rule_t *rule = gf_rules_find (m->config, class_name);
+        const gf_window_rule_t *rule = gf_rules_find (m->config, win->name);
         if (rule)
             apply_rule_to_window (m, win, rule);
         else

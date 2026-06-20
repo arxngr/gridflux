@@ -1,4 +1,5 @@
 #include "../config/config.h"
+#include "../config/rules.h"
 #include "../utils/list.h"
 #include "../utils/logger.h"
 #include "../utils/memory.h"
@@ -145,10 +146,10 @@ gf_wm_watch (gf_wm_t *m)
             else
             {
                 win->workspace_id = existing->workspace_id;
+                strncpy (win->name, existing->name, sizeof (win->name) - 1);
+                win->name[sizeof (win->name) - 1] = '\0';
 
-                char class_name[256];
-                gf_wm_window_class (m, win->id, class_name, sizeof (class_name));
-                const gf_window_rule_t *rule = gf_rules_find (m->config, class_name);
+                const gf_window_rule_t *rule = gf_rules_find (m->config, win->name);
 
                 gf_ws_info_t *current_ws
                     = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
@@ -173,8 +174,6 @@ gf_wm_watch (gf_wm_t *m)
         gf_free (ws_wins);
     }
 }
-
-/* --- gf_wm_event helpers --- */
 
 static void
 enter_maximized_mode (gf_wm_t *m, gf_win_info_t *focused, gf_handle_t curr_win_id)
@@ -202,20 +201,33 @@ exit_maximized_mode (gf_wm_t *m, gf_win_info_t *focused)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_win_list_t *windows = wm_windows (m);
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+    gf_display_t display = *wm_display (m);
 
     gf_ws_id_t old_ws_id = focused->workspace_id;
     focused->is_maximized = false;
 
-    gf_ws_id_t normal_ws = lookup_or_create_ws (m);
-    move_window_to_workspace (m, focused, normal_ws);
+    const gf_window_rule_t *rule = gf_rules_find (m->config, focused->name);
+    gf_ws_id_t target_ws = rule ? rule->workspace_id : lookup_or_create_ws (m);
+    move_window_to_workspace (m, focused, target_ws);
     cleanup_empty_maximized_ws (m, old_ws_id);
 
     if (m->state.dock_hidden && platform->dock_restore)
     {
         platform->dock_restore (platform);
         m->state.dock_hidden = false;
-        gf_window_list_mark_all_needs_update (windows, &focused->workspace_id);
     }
+
+    /* Mark the target workspace dirty and clear custom layout flag so the
+     * next tick's gf_wm_layout_apply re-tiles everything correctly.
+     * Calling gf_wm_layout_apply here directly would race with gf_wm_watch
+     * re-syncing geometry from the platform in the same tick. */
+    gf_ws_info_t *target_ws_info
+        = gf_workspace_list_find_by_id (workspaces, focused->workspace_id);
+    if (target_ws_info)
+        target_ws_info->is_custom_layout = false;
+
+    gf_window_list_mark_all_needs_update (windows, &focused->workspace_id);
 }
 
 void
