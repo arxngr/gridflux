@@ -15,6 +15,7 @@ bool window_is_self (gf_display_t display, gf_handle_t window);
 BOOL window_is_excluded_class (const char *class_name);
 BOOL window_is_border_excluded (HWND hwnd);
 BOOL window_is_excluded_style (HWND hwnd);
+bool window_is_installer (HWND hwnd);
 BOOL window_is_fullscreen (HWND hwnd);
 BOOL window_is_cloaked (HWND hwnd);
 BOOL window_is_notification_center (HWND hwnd);

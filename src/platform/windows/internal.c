@@ -230,6 +230,11 @@ window_is_border_excluded (HWND hwnd)
     if (window_is_self (NULL, hwnd))
         return true;
 
+    // Treat installers like the GridFlux GUI: clip managed windows' borders
+    // around them instead of drawing over them.
+    if (window_is_installer (hwnd))
+        return true;
+
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (hwnd, class_name, sizeof (class_name)))
     {

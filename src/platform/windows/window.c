@@ -67,14 +67,59 @@ _str_contains_any (const char *haystack, const char *const *needles, int count)
     return false;
 }
 
+// Case-insensitive check that `s` ends with `suffix`.
 static bool
-_window_is_installer (HWND window)
+_str_ends_with_ci (const char *s, const char *suffix)
+{
+    size_t ls = strlen (s), lf = strlen (suffix);
+    if (lf > ls)
+        return false;
+
+    const char *tail = s + (ls - lf);
+    for (size_t i = 0; i < lf; i++)
+        if (tolower ((unsigned char)tail[i]) != tolower ((unsigned char)suffix[i]))
+            return false;
+    return true;
+}
+
+static bool
+_window_class_is_installer (const char *class_name)
+{
+    static const char *const exact[] = {
+        "MsiDialogCloseClass", // Windows Installer / MSI / WiX 
+        "TWizardForm",         // Inno Setup wizard
+        "TSetupLdrWindow",     // Inno Setup loader
+    };
+    for (int i = 0; i < 3; i++)
+        if (strcmp (class_name, exact[i]) == 0)
+            return true;
+
+    return _strcasestr (class_name, "InstallShield") != NULL // InstallShield
+           || _strcasestr (class_name, "Nullsoft") != NULL;  // NSIS
+}
+
+static bool
+_window_title_is_installer (const char *title)
+{
+    if (_str_ends_with_ci (title, " setup") || _str_ends_with_ci (title, " installer"))
+        return true;
+
+    static const char *const phrases[] = { "setup wizard", "install wizard",
+                                           "installshield", "uninstall" };
+    return _str_contains_any (title, phrases, 4);
+}
+
+bool
+window_is_installer (HWND window)
 {
     char class_name[256] = { 0 };
     GetClassNameA (window, class_name, sizeof (class_name));
 
     char title[256] = { 0 };
     GetWindowTextA (window, title, sizeof (title) - 1);
+
+    if (_window_class_is_installer (class_name))
+        return true;
 
     DWORD pid = 0;
     GetWindowThreadProcessId (window, &pid);
@@ -85,21 +130,9 @@ _window_is_installer (HWND window)
     if (exe_name[0] != '\0' && _str_contains_any (exe_name, exe_kw, 4))
         return true;
 
-    bool class_like_installer
-        = strcmp (class_name, "#32770") == 0 || strncmp (class_name, "TSetup", 6) == 0
-          || _strcasestr (class_name, "Setup") != NULL
-          || _strcasestr (class_name, "Install") != NULL;
-
-    static const char *const title_kw[] = { "setup", "install", "wizard",
-                                            "uninstaller" };
-    if (class_like_installer && title[0] != '\0'
-        && _str_contains_any (title, title_kw, 4))
-        return true;
-
-    return false;
+    return _window_title_is_installer (title);
 }
 
-// Populate a window info entry. Returns false (skip) if geometry is unavailable.
 static bool
 _window_fill_info (HWND hwnd, gf_win_info_t *info)
 {
@@ -282,16 +315,22 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (window_is_self (display, window))
         return true;
 
-    if (_window_is_installer ((HWND)window))
+    if (window_is_installer ((HWND)window))
         return true;
 
     if (_window_title_excluded ((HWND)window))
         return true;
 
     char class_name[MAX_CLASS_NAME_LENGTH];
-    if (GetClassNameA (window, class_name, sizeof (class_name))
-        && window_is_excluded_class (class_name))
-        return true;
+    if (GetClassNameA (window, class_name, sizeof (class_name)))
+    {
+        if (window_is_excluded_class (class_name))
+            return true;
+
+        char dbg_title[128] = { 0 };
+        GetWindowTextA ((HWND)window, dbg_title, sizeof (dbg_title) - 1);
+        GF_LOG_DEBUG ("Managing window: class='%s' title='%s'", class_name, dbg_title);
+    }
 
     return false;
 }
