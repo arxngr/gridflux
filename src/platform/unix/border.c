@@ -215,6 +215,43 @@ get_toplevel_parent (Display *dpy, Window w)
     return w;
 }
 
+// Build the hollow border region: full window, minus the interior hollow, minus
+// the exclusion rects. Caller owns the returned Region (XDestroyRegion it).
+static Region
+_build_border_region (int w, int h, int thickness, int frame_w, int frame_h,
+                      const XRectangle *sub_rects, int sub_count)
+{
+    // Create the full window region
+    Region full_reg = XCreateRegion ();
+    XRectangle full_rect = { 0, 0, (unsigned short)w, (unsigned short)h };
+    XUnionRectWithRegion (&full_rect, full_reg, full_reg);
+
+    // Create the interior hollow region
+    Region hollow_reg = XCreateRegion ();
+    XRectangle hollow_rect = { (short)thickness, (short)thickness,
+                               (unsigned short)frame_w, (unsigned short)frame_h };
+    XUnionRectWithRegion (&hollow_rect, hollow_reg, hollow_reg);
+
+    // Create the exclusion region
+    Region sub_reg = XCreateRegion ();
+    if (sub_count > 0 && sub_rects)
+        for (int i = 0; i < sub_count; i++)
+            XUnionRectWithRegion ((XRectangle *)&sub_rects[i], sub_reg, sub_reg);
+
+    // Subtract the hollow interior, then the exclusion region, from the full region
+    Region border_reg = XCreateRegion ();
+    XSubtractRegion (full_reg, hollow_reg, border_reg);
+
+    Region final_reg = XCreateRegion ();
+    XSubtractRegion (border_reg, sub_reg, final_reg);
+
+    XDestroyRegion (full_reg);
+    XDestroyRegion (hollow_reg);
+    XDestroyRegion (sub_reg);
+    XDestroyRegion (border_reg);
+    return final_reg;
+}
+
 void
 apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, int frame_w,
                   int frame_h, const XRectangle *sub_rects, int sub_count)
@@ -234,41 +271,13 @@ apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, int
         return;
     }
 
-    // Create the full window region
-    Region full_reg = XCreateRegion ();
-    XRectangle full_rect = { 0, 0, (unsigned short)w, (unsigned short)h };
-    XUnionRectWithRegion (&full_rect, full_reg, full_reg);
-
-    // Create the interior hollow region
-    Region hollow_reg = XCreateRegion ();
-    XRectangle hollow_rect = { (short)thickness, (short)thickness,
-                               (unsigned short)frame_w, (unsigned short)frame_h };
-    XUnionRectWithRegion (&hollow_rect, hollow_reg, hollow_reg);
-
-    // Create the exclusion region
-    Region sub_reg = XCreateRegion ();
-    if (sub_count > 0 && sub_rects)
-    {
-        for (int i = 0; i < sub_count; i++)
-        {
-            XUnionRectWithRegion ((XRectangle *)&sub_rects[i], sub_reg, sub_reg);
-        }
-    }
-
-    // Subtract the hollow interior from the full region
-    Region border_reg = XCreateRegion ();
-    XSubtractRegion (full_reg, hollow_reg, border_reg);
-
-    // Subtract the exclusion region from the border region
-    Region final_reg = XCreateRegion ();
-    XSubtractRegion (border_reg, sub_reg, final_reg);
+    Region final_reg
+        = _build_border_region (w, h, thickness, frame_w, frame_h, sub_rects, sub_count);
 
     XWindowAttributes attrs;
     bool is_viewable = false;
     if (XGetWindowAttributes (dpy, overlay, &attrs))
-    {
         is_viewable = (attrs.map_state == IsViewable);
-    }
 
     // Apply the final bounding shape mask
     XShapeCombineRegion (dpy, overlay, ShapeBounding, 0, 0, final_reg, ShapeSet);
@@ -283,16 +292,11 @@ apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, int
     }
 
     // Make the entire overlay click-through (empty input region).
+    XRectangle full_rect = { 0, 0, (unsigned short)w, (unsigned short)h };
     XShapeCombineRectangles (dpy, overlay, ShapeInput, 0, 0, &full_rect, 0, ShapeSet,
                              Unsorted);
 
-    // Cleanup regions
-    XDestroyRegion (full_reg);
-    XDestroyRegion (hollow_reg);
-    XDestroyRegion (sub_reg);
-    XDestroyRegion (border_reg);
     XDestroyRegion (final_reg);
-
     XSync (dpy, False);
 }
 
@@ -625,6 +629,18 @@ reapply_border_shape (Display *dpy, gf_border_t *b, const gf_rect_t *frame, int 
         memcpy (b->last_intersections, ints, count * sizeof (XRectangle));
 }
 
+// Destroy the border at index i (its target window is gone) and compact the array.
+static void
+_border_remove_dead (Display *dpy, gf_linux_platform_data_t *data, int i)
+{
+    gf_border_t *b = data->borders[i];
+    XDestroyWindow (dpy, b->overlay);
+    gf_free (b);
+    for (int j = i; j < data->border_count - 1; j++)
+        data->borders[j] = data->borders[j + 1];
+    data->border_count--;
+}
+
 static void
 update_single_border (Display *dpy, gf_linux_platform_data_t *data,
                       gf_platform_t *platform, const gf_config_t *config,
@@ -638,11 +654,7 @@ update_single_border (Display *dpy, gf_linux_platform_data_t *data,
     XWindowAttributes attrs;
     if (!XGetWindowAttributes (dpy, b->target, &attrs))
     {
-        XDestroyWindow (dpy, b->overlay);
-        gf_free (b);
-        for (int j = i; j < data->border_count - 1; j++)
-            data->borders[j] = data->borders[j + 1];
-        data->border_count--;
+        _border_remove_dead (dpy, data, i);
         return;
     }
 
@@ -683,6 +695,41 @@ update_single_border (Display *dpy, gf_linux_platform_data_t *data,
                               ints, count);
 }
 
+// Gather geometries to clip borders against: configured exclude zones plus the
+// frames of border-excluded (GUI) client windows. Returns the count (up to max).
+static int
+_collect_gui_geoms (Display *dpy, gf_platform_atoms_t *atoms, const gf_config_t *config,
+                    gf_rect_t *gui_geoms, int max)
+{
+    int gui_count = 0;
+
+    for (int i = 0; i < config->exclude_zones_count && gui_count < max; i++)
+        gui_geoms[gui_count++] = config->exclude_zones[i];
+
+    Window root = DefaultRootWindow (dpy);
+    unsigned char *prop_data = NULL;
+    unsigned long nitems = 0;
+    if (gf_platform_get_window_property (dpy, root, atoms->net_client_list, XA_WINDOW,
+                                         &prop_data, &nitems)
+        == GF_SUCCESS)
+    {
+        Window *clients = (Window *)prop_data;
+        for (unsigned long i = 0; i < nitems && gui_count < max; i++)
+        {
+            if (window_is_border_excluded (dpy, clients[i])
+                && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_desktop)
+                && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
+            {
+                if (get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
+                    gui_count++;
+            }
+        }
+        XFree (prop_data);
+    }
+
+    return gui_count;
+}
+
 void
 gf_border_update (gf_platform_t *platform, const gf_config_t *config)
 {
@@ -701,31 +748,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     pthread_mutex_unlock (&g_notification_mutex);
 
     gf_rect_t gui_geoms[32];
-    int gui_count = 0;
-
-    for (int i = 0; i < config->exclude_zones_count && gui_count < 32; i++)
-        gui_geoms[gui_count++] = config->exclude_zones[i];
-
-    Window root = DefaultRootWindow (dpy);
-    unsigned char *prop_data = NULL;
-    unsigned long nitems = 0;
-    if (gf_platform_get_window_property (dpy, root, atoms->net_client_list, XA_WINDOW,
-                                         &prop_data, &nitems)
-        == GF_SUCCESS)
-    {
-        Window *clients = (Window *)prop_data;
-        for (unsigned long i = 0; i < nitems && gui_count < 32; i++)
-        {
-            if (window_is_border_excluded (dpy, clients[i])
-                && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_desktop)
-                && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
-            {
-                if (get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
-                    gui_count++;
-            }
-        }
-        XFree (prop_data);
-    }
+    int gui_count = _collect_gui_geoms (dpy, atoms, config, gui_geoms, 32);
 
     for (int i = 0; i < data->border_count;)
     {

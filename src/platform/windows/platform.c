@@ -10,6 +10,67 @@ extern gf_err_t gf_resize_hook_install (gf_platform_t *platform);
 extern void gf_resize_hook_uninstall (gf_platform_t *platform);
 extern bool gf_resize_poll (gf_platform_t *platform, gf_resize_event_t *event);
 
+// Bind the window enumeration, info, geometry and state operations.
+static void
+_platform_bind_window_ops (gf_platform_t *p)
+{
+    // --- Window Enumeration & Info ---
+    p->window_enumerate = gf_platform_get_windows;
+    p->window_get_focused = gf_window_get_focused;
+    p->window_get_class = gf_window_get_class;
+
+    // --- Window Geometry & State ---
+    p->window_get_geometry = gf_window_get_geometry;
+    p->window_is_excluded = gf_window_is_excluded;
+    p->window_is_fullscreen = gf_window_is_fullscreen;
+    p->window_is_hidden = gf_platform_window_hidden;
+    p->window_is_maximized = gf_window_is_maximized;
+    p->window_is_minimized = gf_platform_window_minimized;
+    p->window_is_valid = gf_window_is_valid;
+    p->window_minimize = gf_window_minimize;
+    p->window_set_geometry = gf_window_set_geometry;
+    p->window_unminimize = gf_window_unminimize;
+}
+
+// Bind lifecycle, screen, border, dock, monitor, keymap and resize operations.
+static void
+_platform_bind_system_ops (gf_platform_t *p)
+{
+    // --- Lifecycle & Core ---
+    p->init = gf_platform_init;
+    p->cleanup = gf_platform_cleanup;
+
+    // --- Workspace & Screen ---
+    p->screen_get_bounds = gf_screen_get_bounds;
+    p->workspace_get_count = gf_workspace_get_count;
+
+    // --- Border Management ---
+    p->border_add = gf_border_add;
+    p->border_cleanup = gf_border_cleanup;
+    p->border_remove = gf_border_remove;
+    p->border_update = gf_border_update;
+
+    // --- Dock Management ---
+    p->dock_hide = gf_dock_hide;
+    p->dock_restore = gf_dock_restore;
+
+    // --- Monitor Management ---
+    p->monitor_get_count = gf_monitor_get_count;
+    p->monitor_enumerate = gf_monitor_enumerate;
+    p->monitor_from_window = gf_monitor_from_window;
+    p->screen_get_bounds_for_monitor = gf_screen_get_bounds_for_monitor;
+
+    // --- Keymap Support ---
+    p->keymap_init = gf_keymap_init;
+    p->keymap_cleanup = gf_keymap_cleanup;
+    p->keymap_poll = gf_keymap_poll;
+
+    // --- Resize Interaction ---
+    p->resize_hook_install = gf_resize_hook_install;
+    p->resize_hook_uninstall = gf_resize_hook_uninstall;
+    p->resize_poll = gf_resize_poll;
+}
+
 gf_platform_t *
 gf_platform_create (void)
 {
@@ -27,56 +88,8 @@ gf_platform_create (void)
     memset (platform, 0, sizeof (gf_platform_t));
     memset (data, 0, sizeof (gf_windows_platform_data_t));
 
-    // --- Lifecycle & Core ---
-    platform->init = gf_platform_init;
-    platform->cleanup = gf_platform_cleanup;
-
-    // --- Window Enumeration & Info ---
-    platform->window_enumerate = gf_platform_get_windows;
-    platform->window_get_focused = gf_window_get_focused;
-    platform->window_get_class = gf_window_get_class;
-
-    // --- Window Geometry & State ---
-    platform->window_get_geometry = gf_window_get_geometry;
-    platform->window_is_excluded = gf_window_is_excluded;
-    platform->window_is_fullscreen = gf_window_is_fullscreen;
-    platform->window_is_hidden = gf_platform_window_hidden;
-    platform->window_is_maximized = gf_window_is_maximized;
-    platform->window_is_minimized = gf_platform_window_minimized;
-    platform->window_is_valid = gf_window_is_valid;
-    platform->window_minimize = gf_window_minimize;
-    platform->window_set_geometry = gf_window_set_geometry;
-    platform->window_unminimize = gf_window_unminimize;
-
-    // --- Workspace & Screen ---
-    platform->screen_get_bounds = gf_screen_get_bounds;
-    platform->workspace_get_count = gf_workspace_get_count;
-
-    // --- Border Management ---
-    platform->border_add = gf_border_add;
-    platform->border_cleanup = gf_border_cleanup;
-    platform->border_remove = gf_border_remove;
-    platform->border_update = gf_border_update;
-
-    // --- Dock Management ---
-    platform->dock_hide = gf_dock_hide;
-    platform->dock_restore = gf_dock_restore;
-
-    // --- Monitor Management ---
-    platform->monitor_get_count = gf_monitor_get_count;
-    platform->monitor_enumerate = gf_monitor_enumerate;
-    platform->monitor_from_window = gf_monitor_from_window;
-    platform->screen_get_bounds_for_monitor = gf_screen_get_bounds_for_monitor;
-
-    // --- Keymap Support ---
-    platform->keymap_init = gf_keymap_init;
-    platform->keymap_cleanup = gf_keymap_cleanup;
-    platform->keymap_poll = gf_keymap_poll;
-
-    // --- Resize Interaction ---
-    platform->resize_hook_install = gf_resize_hook_install;
-    platform->resize_hook_uninstall = gf_resize_hook_uninstall;
-    platform->resize_poll = gf_resize_poll;
+    _platform_bind_window_ops (platform);
+    _platform_bind_system_ops (platform);
 
     platform->platform_data = data;
 

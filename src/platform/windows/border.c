@@ -4,6 +4,11 @@
 #include "platform/windows/internal.h"
 #include <stdlib.h>
 
+static LRESULT CALLBACK _border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam,
+                                          LPARAM lparam);
+static void _border_update_overlay (gf_border_t *b, const RECT *gui_rects,
+                                    int gui_count);
+
 HWND
 create_border_overlay (HWND target)
 {
@@ -31,27 +36,120 @@ create_border_overlay (HWND target)
     return overlay;
 }
 
-void
-_update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
+// Overlay geometry in Win32 coordinates (the space SetWindowPos operates in).
+typedef struct
 {
-    if (!b || !b->target || !b->overlay)
-        return;
+    int x, y, w, h; // overlay position and size, expanded by border thickness
+    RECT rect;      // same bounds as a RECT, for intersection tests
+    RECT visible;   // DWM extended frame bounds, used as the change-detect key
+} border_layout_t;
 
+// True if the target should currently show a border (visible, not cloaked,
+// minimized, or maximized).
+static bool
+_border_target_visible (gf_border_t *b)
+{
     if (!IsWindow (b->target) || !IsWindow (b->overlay))
-    {
-        if (b->overlay && IsWindow (b->overlay))
-            ShowWindow (b->overlay, SW_HIDE);
-        return;
-    }
+        return false;
 
     int cloaked = 0;
     DwmGetWindowAttribute (b->target, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
 
-    // Hide border if target is not visible, cloaked, minimized, or maximized
-    if (!IsWindowVisible (b->target) || cloaked || IsIconic (b->target)
-        || IsZoomed (b->target))
+    return IsWindowVisible (b->target) && !cloaked && !IsIconic (b->target)
+           && !IsZoomed (b->target);
+}
+
+// Compute the overlay rect from the target's DWM and Win32 bounds. The shadow
+// inset converts DWM coords (visible frame) into Win32 coords (incl. shadow).
+static bool
+_border_compute_layout (gf_border_t *b, border_layout_t *out)
+{
+    RECT d_rect, w_rect;
+    if (!SUCCEEDED (DwmGetWindowAttribute (b->target, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                           &d_rect, sizeof (d_rect))))
+        return false;
+    if (!GetWindowRect (b->target, &w_rect))
+        return false;
+
+    int t = b->thickness;
+    out->x = d_rect.left - t;
+    out->y = d_rect.top - t;
+    out->w = (d_rect.right - d_rect.left) + 2 * t;
+    out->h = (d_rect.bottom - d_rect.top) + 2 * t;
+    out->rect = (RECT){ out->x, out->y, out->x + out->w, out->y + out->h };
+    out->visible = d_rect;
+    return true;
+}
+
+// Collect intersections of the border rect with the GUI windows, capped at max.
+static int
+_border_find_intersections (const RECT *border_rect, const RECT *gui_rects,
+                            int gui_count, RECT *out, int max)
+{
+    int n = 0;
+    for (int i = 0; i < gui_count && n < max; i++)
     {
-        ShowWindow (b->overlay, SW_HIDE);
+        RECT intersect;
+        if (IntersectRect (&intersect, border_rect, &gui_rects[i]))
+            out[n++] = intersect;
+    }
+    return n;
+}
+
+// True if the border geometry or its GUI intersections differ from the cache.
+static bool
+_border_shape_changed (gf_border_t *b, const RECT *visible,
+                       const RECT *intersections, int count)
+{
+    if (memcmp (visible, &b->last_rect, sizeof (RECT)) != 0)
+        return true;
+    if (count != b->last_intersect_count)
+        return true;
+    for (int k = 0; k < count; k++)
+        if (memcmp (&intersections[k], &b->last_intersections[k], sizeof (RECT)) != 0)
+            return true;
+    return false;
+}
+
+// Build the hollow ring region (minus GUI intersections) and cache the layout.
+static void
+_border_apply_region (gf_border_t *b, const border_layout_t *lay,
+                      const RECT *intersections, int count)
+{
+    int t = b->thickness;
+    HRGN full_rgn = CreateRectRgn (0, 0, lay->w, lay->h);
+    HRGN hollow_rgn = CreateRectRgn (t, t, lay->w - t, lay->h - t);
+    CombineRgn (full_rgn, full_rgn, hollow_rgn, RGN_DIFF);
+    DeleteObject (hollow_rgn);
+
+    // Subtract GUI intersections (converted to overlay-local coords)
+    for (int i = 0; i < count; i++)
+    {
+        HRGN ir = CreateRectRgn (
+            intersections[i].left - lay->x, intersections[i].top - lay->y,
+            intersections[i].right - lay->x, intersections[i].bottom - lay->y);
+        CombineRgn (full_rgn, full_rgn, ir, RGN_DIFF);
+        DeleteObject (ir);
+    }
+
+    SetWindowRgn (b->overlay, full_rgn, TRUE);
+
+    b->last_rect = lay->visible;
+    b->last_intersect_count = count;
+    if (count > 0)
+        memcpy (b->last_intersections, intersections, count * sizeof (RECT));
+}
+
+static void
+_border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
+{
+    if (!b || !b->target || !b->overlay)
+        return;
+
+    if (!_border_target_visible (b))
+    {
+        if (IsWindow (b->overlay))
+            ShowWindow (b->overlay, SW_HIDE);
         return;
     }
 
@@ -59,62 +157,15 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
     // full reposition including Z-order when transitioning back to visible.
     bool was_hidden = !IsWindowVisible (b->overlay);
 
-    RECT d_rect;
-    if (!SUCCEEDED (DwmGetWindowAttribute (b->target, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                           &d_rect, sizeof (d_rect))))
+    border_layout_t lay;
+    if (!_border_compute_layout (b, &lay))
         return;
 
-    // Get the full Win32 rect (includes invisible DWM shadow) — this is the
-    // coordinate space that SetWindowPos operates in
-    RECT w_rect;
-    if (!GetWindowRect (b->target, &w_rect))
-        return;
-
-    // Compute the shadow insets so we can convert DWM coords → Win32 coords
-    int shadow_left = d_rect.left - w_rect.left;
-    int shadow_top = d_rect.top - w_rect.top;
-    int shadow_right = w_rect.right - d_rect.right;
-    int shadow_bottom = w_rect.bottom - d_rect.bottom;
-
-    int t = b->thickness;
-
-    // Overlay position in Win32 coords: expand by thickness around the visible edge
-    int win_x = w_rect.left + shadow_left - t;
-    int win_y = w_rect.top + shadow_top - t;
-    int vis_w = d_rect.right - d_rect.left;
-    int vis_h = d_rect.bottom - d_rect.top;
-    int win_w = vis_w + 2 * t;
-    int win_h = vis_h + 2 * t;
-
-    RECT border_rect = { win_x, win_y, win_x + win_w, win_y + win_h };
-
-    // Find intersections with GUI windows
     RECT intersections[16];
-    int intersect_count = 0;
+    int count = _border_find_intersections (&lay.rect, gui_rects, gui_count,
+                                            intersections, 16);
 
-    for (int i = 0; i < gui_count && intersect_count < 16; i++)
-    {
-        RECT intersect;
-        if (IntersectRect (&intersect, &border_rect, &gui_rects[i]))
-        {
-            intersections[intersect_count++] = intersect;
-        }
-    }
-
-    bool geom_changed = memcmp (&d_rect, &b->last_rect, sizeof (RECT)) != 0;
-    bool shape_changed = geom_changed || (intersect_count != b->last_intersect_count);
-
-    if (!shape_changed && intersect_count > 0)
-    {
-        for (int k = 0; k < intersect_count; k++)
-        {
-            if (memcmp (&intersections[k], &b->last_intersections[k], sizeof (RECT)) != 0)
-            {
-                shape_changed = true;
-                break;
-            }
-        }
-    }
+    bool shape_changed = _border_shape_changed (b, &lay.visible, intersections, count);
 
     // Always re-assert HWND_TOPMOST to fix async Z-order inconsistency.
     // When a window is re-tiled (e.g. after another app closes), or gains focus,
@@ -123,110 +174,95 @@ _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count)
     UINT swp_flags = SWP_NOACTIVATE | SWP_NOREDRAW;
     if (!shape_changed && !was_hidden)
         swp_flags |= SWP_NOMOVE | SWP_NOSIZE;
-    SetWindowPos (b->overlay, HWND_TOPMOST, win_x, win_y, win_w, win_h, swp_flags);
+    SetWindowPos (b->overlay, HWND_TOPMOST, lay.x, lay.y, lay.w, lay.h, swp_flags);
 
     if (shape_changed || was_hidden)
-    {
-        // Hollow ring region: full rect minus the inner window area
-        HRGN full_rgn = CreateRectRgn (0, 0, win_w, win_h);
-        HRGN hollow_rgn = CreateRectRgn (t, t, win_w - t, win_h - t);
-        CombineRgn (full_rgn, full_rgn, hollow_rgn, RGN_DIFF);
-        DeleteObject (hollow_rgn);
+        _border_apply_region (b, &lay, intersections, count);
 
-        // Subtract GUI intersections (converted to overlay-local coords)
-        for (int i = 0; i < intersect_count; i++)
-        {
-            HRGN ir = CreateRectRgn (
-                intersections[i].left - win_x, intersections[i].top - win_y,
-                intersections[i].right - win_x, intersections[i].bottom - win_y);
-            CombineRgn (full_rgn, full_rgn, ir, RGN_DIFF);
-            DeleteObject (ir);
-        }
-
-        SetWindowRgn (b->overlay, full_rgn, TRUE);
-
-        b->last_rect = d_rect;
-        b->last_intersect_count = intersect_count;
-        if (intersect_count > 0)
-            memcpy (b->last_intersections, intersections,
-                    intersect_count * sizeof (RECT));
-    }
-
+    // Force a full repaint after re-showing to ensure the border color is drawn —
+    // the cached DC content may be stale after being hidden.
     if (was_hidden)
-    {
         ShowWindow (b->overlay, SW_SHOWNOACTIVATE);
-        // Force a full repaint after re-showing to ensure the border color
-        // is drawn — the cached DC content may be stale after being hidden.
-        InvalidateRect (b->overlay, NULL, TRUE);
+    InvalidateRect (b->overlay, NULL, TRUE);
+    if (was_hidden)
         UpdateWindow (b->overlay);
-    }
-    else
-    {
-        InvalidateRect (b->overlay, NULL, TRUE);
-    }
-
-    (void)shadow_right;
-    (void)shadow_bottom;
 }
 
-LRESULT CALLBACK
+// Paint the four border edges of the overlay using its cached props.
+static void
+_border_paint (HWND hwnd)
+{
+    PAINTSTRUCT ps;
+    HDC hdc = BeginPaint (hwnd, &ps);
+
+    HWND target = (HWND)GetPropA (hwnd, "TargetWindow");
+    if (target)
+    {
+        RECT rect;
+        GetClientRect (hwnd, &rect);
+
+        int t = (int)(INT_PTR)GetPropA (hwnd, "BorderThickness");
+        if (t <= 0)
+            t = 3;
+
+        UINT32 color = (UINT32)(INT_PTR)GetPropA (hwnd, "BorderColor");
+        COLORREF c = RGB ((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
+        HBRUSH brush = CreateSolidBrush (c);
+
+        RECT edges[4] = {
+            { 0, 0, t, rect.bottom },                       // left
+            { rect.right - t, 0, rect.right, rect.bottom }, // right
+            { t, 0, rect.right - t, t },                    // top
+            { t, rect.bottom - t, rect.right - t, rect.bottom }, // bottom
+        };
+        for (int i = 0; i < 4; i++)
+            FillRect (hdc, &edges[i], brush);
+
+        DeleteObject (brush);
+    }
+
+    EndPaint (hwnd, &ps);
+}
+
+static LRESULT CALLBACK
 _border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
-    switch (msg)
+    if (msg == WM_PAINT)
     {
-    case WM_PAINT:
-    {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint (hwnd, &ps);
-
-        HWND target = (HWND)GetPropA (hwnd, "TargetWindow");
-        if (target)
-        {
-            RECT rect;
-            GetClientRect (hwnd, &rect);
-
-            int t = (int)(INT_PTR)GetPropA (hwnd, "BorderThickness");
-            if (t <= 0)
-                t = 3;
-
-            UINT32 color = (UINT32)(INT_PTR)GetPropA (hwnd, "BorderColor");
-            COLORREF c = RGB ((color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF);
-            HBRUSH brush = CreateSolidBrush (c);
-
-            RECT r;
-            // Left
-            r.left = 0;
-            r.top = 0;
-            r.right = t;
-            r.bottom = rect.bottom;
-            FillRect (hdc, &r, brush);
-            // Right
-            r.left = rect.right - t;
-            r.top = 0;
-            r.right = rect.right;
-            r.bottom = rect.bottom;
-            FillRect (hdc, &r, brush);
-            // Top
-            r.left = t;
-            r.top = 0;
-            r.right = rect.right - t;
-            r.bottom = t;
-            FillRect (hdc, &r, brush);
-            // Bottom
-            r.left = t;
-            r.top = rect.bottom - t;
-            r.right = rect.right - t;
-            r.bottom = rect.bottom;
-            FillRect (hdc, &r, brush);
-
-            DeleteObject (brush);
-        }
-
-        EndPaint (hwnd, &ps);
+        _border_paint (hwnd);
         return 0;
     }
-    }
     return DefWindowProc (hwnd, msg, wparam, lparam);
+}
+
+// True if a border is already tracked for this target window.
+static bool
+_border_exists (gf_windows_platform_data_t *data, gf_handle_t window)
+{
+    for (int i = 0; i < data->border_count; i++)
+        if (data->borders[i] && data->borders[i]->target == window)
+            return true;
+    return false;
+}
+
+// Allocate and initialise a border, stashing its props on the overlay window.
+static gf_border_t *
+_border_alloc (HWND overlay, gf_handle_t window, gf_color_t color, int thickness,
+               RECT rect)
+{
+    gf_border_t *b = malloc (sizeof (gf_border_t));
+    if (!b)
+        return NULL;
+
+    b->target = window;
+    b->overlay = overlay;
+    b->color = color;
+    b->thickness = thickness;
+    b->last_rect = rect;
+
+    SetPropA (overlay, "BorderThickness", (HANDLE)(INT_PTR)thickness);
+    SetPropA (overlay, "BorderColor", (HANDLE)(INT_PTR)color);
+    return b;
 }
 
 void
@@ -239,14 +275,10 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    // Check if already exists
-    for (int i = 0; i < data->border_count; i++)
+    if (_border_exists (data, window))
     {
-        if (data->borders[i] && data->borders[i]->target == window)
-        {
-            GF_LOG_DEBUG ("Border already exists for window %p", window);
-            return;
-        }
+        GF_LOG_DEBUG ("Border already exists for window %p", window);
+        return;
     }
 
     RECT rect;
@@ -264,22 +296,13 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
         return;
     }
 
-    gf_border_t *b = malloc (sizeof (gf_border_t));
+    gf_border_t *b = _border_alloc (overlay, window, color, thickness, rect);
     if (!b)
     {
         DestroyWindow (overlay);
         GF_LOG_ERROR ("Failed to allocate border structure");
         return;
     }
-
-    b->target = window;
-    b->overlay = overlay;
-    b->color = color;
-    b->thickness = thickness;
-    b->last_rect = rect;
-
-    SetPropA (overlay, "BorderThickness", (HANDLE)(INT_PTR)thickness);
-    SetPropA (overlay, "BorderColor", (HANDLE)(INT_PTR)color);
 
     data->borders[data->border_count++] = b;
 
@@ -291,7 +314,28 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     GF_LOG_INFO ("Added border for window %p (color=0x%08X, thickness=%d, count=%d)",
                  window, color, thickness, data->border_count);
 
-    _update_border (b, NULL, 0);
+    _border_update_overlay (b, NULL, 0);
+}
+
+// Collect the frame rects of all visible, border-excluded (GUI) windows so the
+// overlay can be clipped around them. Returns the number gathered (up to max).
+static int
+_border_collect_gui_rects (RECT *out, int max)
+{
+    int count = 0;
+    HWND hwnd = GetTopWindow (NULL);
+    while (hwnd && count < max)
+    {
+        if (IsWindowVisible (hwnd) && window_is_border_excluded (hwnd)
+            && (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                                  &out[count], sizeof (RECT)))
+                || GetWindowRect (hwnd, &out[count])))
+        {
+            count++;
+        }
+        hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);
+    }
+    return count;
 }
 
 void
@@ -300,34 +344,13 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     if (!platform || !platform->platform_data || !config)
         return;
 
-    // Find all GUI windows geometries
     RECT gui_rects[16];
-    int gui_count = 0;
-
-    HWND hwnd = GetTopWindow (NULL);
-    while (hwnd && gui_count < 16)
-    {
-        if (IsWindowVisible (hwnd))
-        {
-            if (window_is_border_excluded (hwnd))
-            {
-                if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                                      &gui_rects[gui_count],
-                                                      sizeof (RECT)))
-                    || GetWindowRect (hwnd, &gui_rects[gui_count]))
-                {
-                    gui_count++;
-                }
-            }
-        }
-        hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);
-    }
+    int gui_count = _border_collect_gui_rects (gui_rects, 16);
 
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    // Update all borders and prune dead ones
-    for (int i = 0; i < data->border_count;)
+    for (int i = 0; i < data->border_count; i++)
     {
         gf_border_t *b = data->borders[i];
 
@@ -340,8 +363,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
                 InvalidateRect (b->overlay, NULL, TRUE);
             }
         }
-        _update_border (b, gui_rects, gui_count);
-        i++;
+        _border_update_overlay (b, gui_rects, gui_count);
     }
 
     // Process messages for border windows (they are created on this thread)

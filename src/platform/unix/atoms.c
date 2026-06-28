@@ -6,12 +6,10 @@
 
 static gf_platform_atoms_t g_atoms = { 0 };
 
-gf_err_t
-gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
+// Intern WM/EWMH state and desktop/client-list atoms.
+static void
+_atoms_init_state (Display *display, gf_platform_atoms_t *atoms)
 {
-    if (!display || !atoms)
-        return GF_ERROR_INVALID_PARAMETER;
-
     atoms->net_active_window = XInternAtom (display, "_NET_ACTIVE_WINDOW", False);
     atoms->wm_state = XInternAtom (display, "WM_STATE", False);
     atoms->wm_class = XInternAtom (display, "WM_CLASS", False);
@@ -37,7 +35,12 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
     atoms->net_client_list = XInternAtom (display, "_NET_CLIENT_LIST", False);
     atoms->net_client_list_stacking
         = XInternAtom (display, "_NET_CLIENT_LIST_STACKING", False);
+}
 
+// Intern the _NET_WM_WINDOW_TYPE_* atoms.
+static void
+_atoms_init_window_type (Display *display, gf_platform_atoms_t *atoms)
+{
     atoms->net_wm_window_type = XInternAtom (display, "_NET_WM_WINDOW_TYPE", False);
     atoms->net_wm_window_type_normal
         = XInternAtom (display, "_NET_WM_WINDOW_TYPE_NORMAL", False);
@@ -65,7 +68,12 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
         = XInternAtom (display, "_NET_WM_WINDOW_TYPE_COMBO", False);
     atoms->net_wm_window_type_desktop
         = XInternAtom (display, "_NET_WM_WINDOW_TYPE_DESKTOP", False);
+}
 
+// Intern frame-extent, strut, naming and miscellaneous atoms.
+static void
+_atoms_init_misc (Display *display, gf_platform_atoms_t *atoms)
+{
     atoms->net_frame_extents = XInternAtom (display, "_NET_FRAME_EXTENTS", False);
     atoms->gtk_frame_extents = XInternAtom (display, "_GTK_FRAME_EXTENTS", False);
     atoms->qt_frame_extents = XInternAtom (display, "_QT_FRAME_EXTENTS", False);
@@ -80,6 +88,17 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
     atoms->utf8_string = XInternAtom (display, "UTF8_STRING", False);
     atoms->net_workarea = XInternAtom (display, "_NET_WORKAREA", False);
     atoms->net_wm_window_opacity = XInternAtom (display, "_NET_WM_WINDOW_OPACITY", False);
+}
+
+gf_err_t
+gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
+{
+    if (!display || !atoms)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    _atoms_init_state (display, atoms);
+    _atoms_init_window_type (display, atoms);
+    _atoms_init_misc (display, atoms);
 
     g_atoms = *atoms;
     GF_LOG_DEBUG ("Platform atoms initialized successfully");

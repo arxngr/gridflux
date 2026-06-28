@@ -9,6 +9,26 @@
 #include <string.h>
 #include <time.h>
 
+// Shrink the over-allocated window list to its final size, or free it if empty.
+static gf_err_t
+_finalize_window_list (gf_win_info_t *list, uint32_t count, gf_win_info_t **out)
+{
+    if (count == 0)
+    {
+        gf_free (list);
+        *out = NULL;
+        return GF_SUCCESS;
+    }
+
+    *out = gf_realloc (list, count * sizeof (gf_win_info_t));
+    if (!*out)
+    {
+        gf_free (list);
+        return GF_ERROR_MEMORY_ALLOCATION;
+    }
+    return GF_SUCCESS;
+}
+
 gf_err_t
 gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
                          gf_win_info_t **windows, uint32_t *count)
@@ -52,21 +72,9 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
 
     XFree (data);
 
-    if (filtered_count == 0)
-    {
-        gf_free (filtered_windows);
-        *windows = NULL;
-    }
-    else
-    {
-        // Resize to actual count
-        *windows = gf_realloc (filtered_windows, filtered_count * sizeof (gf_win_info_t));
-        if (!*windows)
-        {
-            gf_free (filtered_windows);
-            return GF_ERROR_MEMORY_ALLOCATION;
-        }
-    }
+    gf_err_t fin = _finalize_window_list (filtered_windows, filtered_count, windows);
+    if (fin != GF_SUCCESS)
+        return fin;
 
     *count = filtered_count;
     return GF_SUCCESS;
@@ -177,6 +185,35 @@ gf_window_is_fullscreen (gf_display_t display, gf_handle_t window)
                                          atoms->net_wm_state_fullscreen);
 }
 
+// Adjust the target rect for window frame extents so the visible content lands on
+// the grid cell: CSD windows expand (shadows hang outside), SSD windows shrink
+// (client fits inside the WM frame).
+static void
+_adjust_rect_for_frame (gf_display_t dpy, gf_handle_t win, gf_rect_t *rect)
+{
+    int left = 0, right = 0, top = 0, bottom = 0;
+    bool is_csd = false;
+
+    if (gf_platform_get_frame_extents (dpy, win, &left, &right, &top, &bottom, &is_csd)
+        != GF_SUCCESS)
+        return;
+
+    if (is_csd)
+    {
+        rect->x -= left;
+        rect->y -= top;
+        rect->width += (left + right);
+        rect->height += (top + bottom);
+    }
+    else
+    {
+        rect->x += left;
+        rect->y += top;
+        rect->width -= (left + right);
+        rect->height -= (top + bottom);
+    }
+}
+
 gf_err_t
 gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geometry,
                         gf_geom_flags_t flags, gf_config_t *cfg)
@@ -196,37 +233,7 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
     if (flags & GF_GEOMETRY_APPLY_PADDING)
         gf_rect_apply_padding (&rect, GF_DEFAULT_PADDING);
 
-    // Calculate Frame Extents to correctly position the Client window
-    int left = 0, right = 0, top = 0, bottom = 0;
-    bool is_csd = false;
-
-    // We try to get frame extents. If we have them, we must adjust our target position.
-    if (gf_platform_get_frame_extents (dpy, win, &left, &right, &top, &bottom, &is_csd)
-        == GF_SUCCESS)
-    {
-        if (is_csd)
-        {
-            // Client Side Decorations (GTK, etc.)
-            // The X Window includes the shadows/borders defined by extents.
-            // To make the VISUAL content match the grid 'rect', we must EXPAND the X
-            // Window. so that the shadows hang 'outside' the grid cell.
-            rect.x -= left;
-            rect.y -= top;
-            rect.width += (left + right);
-            rect.height += (top + bottom);
-        }
-        else
-        {
-            // Server Side Decorations (Standard X11)
-            // The X Window is just the content. The WM adds the frame.
-            // The grid 'rect' includes the frame.
-            // So we must SHRINK the Client X Window so it fits inside the frame.
-            rect.x += left;
-            rect.y += top;
-            rect.width -= (left + right);
-            rect.height -= (top + bottom);
-        }
-    }
+    _adjust_rect_for_frame (dpy, win, &rect);
 
     // Use StaticGravity (10) to force the WM to place the client at exactly x, y
     // This removes ambiguity about how NorthWestGravity is interpreted relative to
