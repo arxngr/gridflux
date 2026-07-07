@@ -96,10 +96,10 @@ gf_gui_toolbar_new (gf_app_state_t *app)
     update_server_button (app);
     g_timeout_add (GF_SERVER_POLL_MS, poll_server_status, app);
 
-    GtkWidget *settings = build_action_button ("emblem-system-symbolic", NULL,
-                                               G_CALLBACK (on_config_button_clicked), app);
-    GtkWidget *rules = build_action_button (NULL, "Rules",
-                                            G_CALLBACK (on_rules_button_clicked), app);
+    GtkWidget *settings = build_action_button (
+        "emblem-system-symbolic", NULL, G_CALLBACK (on_config_button_clicked), app);
+    GtkWidget *rules
+        = build_action_button (NULL, "Rules", G_CALLBACK (on_rules_button_clicked), app);
     GtkWidget *refresh = build_action_button ("view-refresh-symbolic", NULL,
                                               G_CALLBACK (on_refresh_clicked), app);
 

@@ -60,8 +60,8 @@ icon_from_theme (const char *name)
     {
         if (!gtk_icon_theme_has_icon (theme, tries[t]))
             continue;
-        GtkIconPaintable *icon = gtk_icon_theme_lookup_icon (
-            theme, tries[t], NULL, 16, 1, GTK_TEXT_DIR_NONE, 0);
+        GtkIconPaintable *icon = gtk_icon_theme_lookup_icon (theme, tries[t], NULL, 16, 1,
+                                                             GTK_TEXT_DIR_NONE, 0);
         if (icon)
             return GDK_PAINTABLE (icon);
     }
@@ -179,7 +179,8 @@ build_chip (gf_app_state_t *app, const gf_win_info_t *win, bool draggable)
     }
 
     char scratch[128];
-    GtkWidget *label = gtk_label_new (chip_label_text (app, win, scratch, sizeof (scratch)));
+    GtkWidget *label
+        = gtk_label_new (chip_label_text (app, win, scratch, sizeof (scratch)));
     gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
     gtk_label_set_max_width_chars (GTK_LABEL (label), 24);
     gtk_box_append (GTK_BOX (chip), label);
@@ -310,8 +311,8 @@ build_minimap (uint32_t count, uint32_t cap, bool maximized)
         cols++;
 
     for (uint32_t i = 0; i < show; i++)
-        gtk_grid_attach (GTK_GRID (grid), build_tile (i < count, false),
-                         (int)(i % cols), (int)(i / cols), 1, 1);
+        gtk_grid_attach (GTK_GRID (grid), build_tile (i < count, false), (int)(i % cols),
+                         (int)(i / cols), 1, 1);
     return grid;
 }
 

@@ -14,8 +14,8 @@ build_card_list (gf_ws_list_t *workspaces, const gf_win_list_t *windows,
     gtk_widget_set_margin_bottom (list, 12);
 
     for (uint32_t i = 0; i < workspaces->count; i++)
-        gtk_box_append (GTK_BOX (list), gf_gui_workspace_card_new (&workspaces->items[i],
-                                                                   windows, app));
+        gtk_box_append (GTK_BOX (list),
+                        gf_gui_workspace_card_new (&workspaces->items[i], windows, app));
     return list;
 }
 

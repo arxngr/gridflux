@@ -145,8 +145,8 @@ build_rule_row (rules_ctx_t *ctx, const gf_window_rule_t *rule)
 
     const char *friendly = NULL;
     if (ctx->app->platform && ctx->app->platform->get_friendly_name)
-        friendly = ctx->app->platform->get_friendly_name (ctx->app->platform,
-                                                           rule->wm_class);
+        friendly
+            = ctx->app->platform->get_friendly_name (ctx->app->platform, rule->wm_class);
     GtkWidget *label = gtk_label_new (friendly ? friendly : rule->wm_class);
     gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
     gtk_widget_set_halign (label, GTK_ALIGN_START);
@@ -155,8 +155,8 @@ build_rule_row (rules_ctx_t *ctx, const gf_window_rule_t *rule)
 
     GtkWidget *remove = gtk_button_new_with_label ("✕");
     gtk_widget_add_css_class (remove, "gf-rule-remove");
-    g_object_set_data_full (G_OBJECT (remove), "wm_class",
-                            g_strdup (rule->wm_class), g_free);
+    g_object_set_data_full (G_OBJECT (remove), "wm_class", g_strdup (rule->wm_class),
+                            g_free);
     g_signal_connect (remove, "clicked", G_CALLBACK (on_remove_rule), ctx);
     gtk_box_append (GTK_BOX (row), remove);
     return row;
