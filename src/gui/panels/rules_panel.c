@@ -1,44 +1,25 @@
 #include "rules_panel.h"
 #include "../../config/rules.h"
 #include "../bridge/ipc_client.h"
-#include "../bridge/refresh.h"
-#include "../platform/async.h"
 #include "../platform/gui_platform.h"
-#include "settings_panel.h"
 #include <gtk/gtk.h>
 #include <stdio.h>
 #include <string.h>
 
 typedef struct
 {
-    GtkWidget *rules_window;
-    GtkWidget *rules_grid;
+    gf_app_state_t *app;
+    GtkWidget *window;
     GtkWidget *app_dropdown;
     GtkStringList *app_model;
     GtkWidget *ws_spin;
-    gf_app_state_t *app;
-} rules_panel_data_t;
+    GtkWidget *list_box; // vertical box holding the grouped rules
+} rules_ctx_t;
 
-// Forward declarations
-static void refresh_rules_list (rules_panel_data_t *data);
-
-static void
-on_remove_rule_clicked (GtkButton *btn, gpointer user_data)
-{
-    (void)user_data;
-    const char *wm_class = g_object_get_data (G_OBJECT (btn), "wm_class");
-    rules_panel_data_t *pd = g_object_get_data (G_OBJECT (btn), "panel_data");
-
-    char command[256];
-    snprintf (command, sizeof (command), "rule remove %s", wm_class);
-    gf_ipc_response_t resp = gf_run_client_command (command);
-    (void)resp;
-
-    refresh_rules_list (pd);
-}
+static void refresh_rules_list (rules_ctx_t *ctx);
 
 static GdkPaintable *
-get_app_icon (gf_app_state_t *app, const char *wm_class)
+rule_app_icon (gf_app_state_t *app, const char *wm_class)
 {
     if (!app || !app->platform || !app->platform->get_app_icon)
         return NULL;
@@ -46,214 +27,250 @@ get_app_icon (gf_app_state_t *app, const char *wm_class)
 }
 
 static void
-refresh_rules_list (rules_panel_data_t *data)
+clear_box (GtkWidget *box)
 {
-    GtkWidget *grid = data->rules_grid;
-
-    // Clear existing children
-    GtkWidget *child = gtk_widget_get_first_child (grid);
-    while (child != NULL)
+    GtkWidget *child = gtk_widget_get_first_child (box);
+    while (child)
     {
         GtkWidget *next = gtk_widget_get_next_sibling (child);
-        gtk_grid_remove (GTK_GRID (grid), child);
+        gtk_box_remove (GTK_BOX (box), child);
         child = next;
     }
-
-    // Headers: Icon | Application | Workspace | Action
-    const char *headers[] = { "Application", "Workspace", "Action" };
-    for (int i = 0; i < 3; i++)
-    {
-        GtkWidget *h = gtk_label_new (headers[i]);
-        gtk_widget_add_css_class (h, "table-header");
-        gtk_widget_set_halign (h, GTK_ALIGN_START);
-        gtk_grid_attach (GTK_GRID (grid), h, i, 0, 1, 1);
-    }
-
-    // Load rules from config
-    const char *config_path = gf_config_get_path ();
-    if (!config_path)
-        return;
-
-    gf_config_t config = load_or_create_config (config_path);
-
-    for (uint32_t i = 0; i < config.window_rules_count; i++)
-    {
-        int row = (int)i + 1;
-
-        // Application column (Icon + Name)
-        GtkWidget *app_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-        gtk_widget_set_halign (app_box, GTK_ALIGN_START);
-
-        GdkPaintable *icon = get_app_icon (data->app, config.window_rules[i].wm_class);
-        if (icon)
-        {
-            GtkWidget *img = gtk_image_new_from_paintable (icon);
-            gtk_widget_set_size_request (img, 24, 24);
-            gtk_box_append (GTK_BOX (app_box), img);
-        }
-        else
-        {
-            gtk_box_append (GTK_BOX (app_box), gtk_label_new ("📦"));
-        }
-
-        const char *friendly = NULL;
-        if (data->app->platform->get_friendly_name)
-        {
-            friendly = data->app->platform->get_friendly_name (
-                data->app->platform, config.window_rules[i].wm_class);
-        }
-
-        char display_name[256];
-        if (friendly)
-        {
-            snprintf (display_name, sizeof (display_name), "%s (%s)", friendly,
-                      config.window_rules[i].wm_class);
-        }
-        else
-        {
-            strncpy (display_name, config.window_rules[i].wm_class,
-                     sizeof (display_name) - 1);
-            display_name[sizeof (display_name) - 1] = '\0';
-        }
-
-        GtkWidget *class_label = gtk_label_new (display_name);
-        gtk_widget_add_css_class (class_label, "table-cell");
-        gtk_box_append (GTK_BOX (app_box), class_label);
-
-        gtk_grid_attach (GTK_GRID (grid), app_box, 0, row, 1, 1);
-
-        // Workspace ID
-        char ws_str[16];
-        snprintf (ws_str, sizeof (ws_str), "%d", config.window_rules[i].workspace_id);
-        GtkWidget *ws_label = gtk_label_new (ws_str);
-        gtk_widget_add_css_class (ws_label, "table-cell");
-        gtk_widget_set_halign (ws_label, GTK_ALIGN_START);
-        gtk_grid_attach (GTK_GRID (grid), ws_label, 1, row, 1, 1);
-
-        // Remove button
-        GtkWidget *remove_btn = gtk_button_new_with_label ("✕ Remove");
-        char *class_copy = g_strdup (config.window_rules[i].wm_class);
-        g_object_set_data_full (G_OBJECT (remove_btn), "wm_class", class_copy, g_free);
-        g_object_set_data (G_OBJECT (remove_btn), "panel_data", data);
-        g_signal_connect (remove_btn, "clicked", G_CALLBACK (on_remove_rule_clicked),
-                          NULL);
-        gtk_grid_attach (GTK_GRID (grid), remove_btn, 2, row, 1, 1);
-    }
-
-    if (config.window_rules_count == 0)
-    {
-        GtkWidget *empty = gtk_label_new ("No rules configured yet.");
-        gtk_widget_set_halign (empty, GTK_ALIGN_CENTER);
-        gtk_widget_set_margin_top (empty, 20);
-        gtk_grid_attach (GTK_GRID (grid), empty, 0, 1, 3, 1);
-    }
 }
 
+// Strip an "app-id [wm_class]" dropdown entry down to just the wm_class.
 static void
-populate_app_dropdown (gf_app_state_t *app, GtkStringList *model)
+extract_wm_class (char *buf)
 {
-    if (app && app->platform && app->platform->populate_app_dropdown)
-    {
-        app->platform->populate_app_dropdown (app->platform, model);
-    }
-}
-
-static void
-setup_app_list_item (GtkSignalListItemFactory *factory, GtkListItem *list_item,
-                     gpointer data)
-{
-    (void)factory;
-    (void)data;
-    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-    GtkWidget *icon = gtk_image_new ();
-    GtkWidget *label = gtk_label_new ("");
-    gtk_widget_set_size_request (icon, 20, 20);
-    gtk_box_append (GTK_BOX (box), icon);
-    gtk_box_append (GTK_BOX (box), label);
-    gtk_list_item_set_child (list_item, box);
-}
-
-static void
-bind_app_list_item (GtkSignalListItemFactory *factory, GtkListItem *list_item,
-                    gpointer data)
-{
-    (void)factory;
-    (void)data;
-    GtkWidget *box = gtk_list_item_get_child (list_item);
-    if (!box)
-        return;
-
-    GtkWidget *icon = gtk_widget_get_first_child (box);
-    GtkWidget *label = gtk_widget_get_next_sibling (icon);
-
-    gf_app_state_t *app = (gf_app_state_t *)data;
-
-    gpointer item = gtk_list_item_get_item (list_item);
-    if (!item || !GTK_IS_STRING_OBJECT (item))
-        return;
-
-    const char *str = gtk_string_object_get_string (GTK_STRING_OBJECT (item));
-    gtk_label_set_text (GTK_LABEL (label), str);
-
-    GdkPaintable *paintable = get_app_icon (app, str);
-    if (paintable)
-    {
-        gtk_image_set_from_paintable (GTK_IMAGE (icon), paintable);
-    }
-    else
-    {
-        gtk_image_clear (GTK_IMAGE (icon));
-    }
-}
-
-static void
-on_add_rule_clicked (GtkButton *btn, gpointer user_data)
-{
-    (void)btn;
-    rules_panel_data_t *data = (rules_panel_data_t *)user_data;
-
-    GtkStringObject *item = GTK_STRING_OBJECT (
-        gtk_drop_down_get_selected_item (GTK_DROP_DOWN (data->app_dropdown)));
-    if (!item)
-        return;
-
-    const char *full_str = gtk_string_object_get_string (item);
-    char wm_class[256];
-    strncpy (wm_class, full_str, sizeof (wm_class) - 1);
-    wm_class[sizeof (wm_class) - 1] = '\0';
-
-    char *open = strchr (wm_class, '[');
-    char *close = strchr (wm_class, ']');
+    char *open = strchr (buf, '[');
+    char *close = strchr (buf, ']');
     if (open && close && close > open)
     {
         *close = '\0';
-        memmove (wm_class, open + 1, strlen (open + 1) + 1);
+        memmove (buf, open + 1, strlen (open + 1) + 1);
     }
+}
 
-    int workspace_id = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (data->ws_spin));
+static void
+on_remove_rule (GtkButton *btn, gpointer user_data)
+{
+    rules_ctx_t *ctx = user_data;
+    const char *wm_class = g_object_get_data (G_OBJECT (btn), "wm_class");
+    char command[256];
+    snprintf (command, sizeof (command), "rule remove %s", wm_class);
+    gf_run_client_command (command);
+    refresh_rules_list (ctx);
+}
+
+static void
+on_add_rule (GtkButton *btn, gpointer user_data)
+{
+    (void)btn;
+    rules_ctx_t *ctx = user_data;
+    GtkStringObject *item = GTK_STRING_OBJECT (
+        gtk_drop_down_get_selected_item (GTK_DROP_DOWN (ctx->app_dropdown)));
+    if (!item)
+        return;
+
+    char wm_class[256];
+    g_strlcpy (wm_class, gtk_string_object_get_string (item), sizeof (wm_class));
+    extract_wm_class (wm_class);
+    int ws = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (ctx->ws_spin));
 
     char command[256];
-    snprintf (command, sizeof (command), "rule add %s %d", wm_class, workspace_id);
+    snprintf (command, sizeof (command), "rule add %s %d", wm_class, ws);
     gf_ipc_response_t resp = gf_run_client_command (command);
     gf_command_response_t *cmd_resp = (gf_command_response_t *)resp.message;
 
     if (resp.status == GF_IPC_SUCCESS && cmd_resp->type == 0)
-    {
-        refresh_rules_list (data);
-    }
+        refresh_rules_list (ctx);
     else
     {
         GtkAlertDialog *dialog = gtk_alert_dialog_new ("%s", cmd_resp->message);
-        gtk_alert_dialog_show (dialog, GTK_WINDOW (data->rules_window));
+        gtk_alert_dialog_show (dialog, GTK_WINDOW (ctx->window));
+    }
+}
+
+static bool
+rule_less (const gf_config_t *cfg, int a, int b)
+{
+    const gf_window_rule_t *ra = &cfg->window_rules[a];
+    const gf_window_rule_t *rb = &cfg->window_rules[b];
+    if (ra->workspace_id != rb->workspace_id)
+        return ra->workspace_id < rb->workspace_id;
+    return strcmp (ra->wm_class, rb->wm_class) < 0;
+}
+
+// Insertion sort of rule indices by (workspace, class) — n <= GF_MAX_RULES.
+static void
+sort_rule_order (const gf_config_t *cfg, int *order, uint32_t n)
+{
+    for (uint32_t i = 1; i < n; i++)
+    {
+        int key = order[i];
+        uint32_t j = i;
+        while (j > 0 && rule_less (cfg, key, order[j - 1]))
+        {
+            order[j] = order[j - 1];
+            j--;
+        }
+        order[j] = key;
+    }
+}
+
+static GtkWidget *
+build_group_header (gf_ws_id_t ws)
+{
+    char buf[32];
+    snprintf (buf, sizeof (buf), "Workspace %d", ws);
+    GtkWidget *label = gtk_label_new (buf);
+    gtk_widget_add_css_class (label, "gf-rule-group");
+    gtk_widget_set_halign (label, GTK_ALIGN_START);
+    return label;
+}
+
+static GtkWidget *
+build_rule_row (rules_ctx_t *ctx, const gf_window_rule_t *rule)
+{
+    GtkWidget *row = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_add_css_class (row, "gf-rule-row");
+
+    GdkPaintable *icon = rule_app_icon (ctx->app, rule->wm_class);
+    if (icon)
+    {
+        GtkWidget *img = gtk_image_new_from_paintable (icon);
+        gtk_box_append (GTK_BOX (row), img);
+        g_object_unref (icon);
+    }
+
+    const char *friendly = NULL;
+    if (ctx->app->platform && ctx->app->platform->get_friendly_name)
+        friendly = ctx->app->platform->get_friendly_name (ctx->app->platform,
+                                                           rule->wm_class);
+    GtkWidget *label = gtk_label_new (friendly ? friendly : rule->wm_class);
+    gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_halign (label, GTK_ALIGN_START);
+    gtk_widget_set_hexpand (label, TRUE);
+    gtk_box_append (GTK_BOX (row), label);
+
+    GtkWidget *remove = gtk_button_new_with_label ("✕");
+    gtk_widget_add_css_class (remove, "gf-rule-remove");
+    g_object_set_data_full (G_OBJECT (remove), "wm_class",
+                            g_strdup (rule->wm_class), g_free);
+    g_signal_connect (remove, "clicked", G_CALLBACK (on_remove_rule), ctx);
+    gtk_box_append (GTK_BOX (row), remove);
+    return row;
+}
+
+static void
+refresh_rules_list (rules_ctx_t *ctx)
+{
+    clear_box (ctx->list_box);
+    const char *path = gf_config_get_path ();
+    if (!path)
+        return;
+
+    gf_config_t config = load_or_create_config (path);
+    uint32_t n = config.window_rules_count;
+    if (n == 0)
+    {
+        GtkWidget *empty = gtk_label_new ("No rules configured yet.");
+        gtk_widget_add_css_class (empty, "gf-rule-empty");
+        gtk_box_append (GTK_BOX (ctx->list_box), empty);
+        return;
+    }
+
+    int order[GF_MAX_RULES];
+    for (uint32_t i = 0; i < n; i++)
+        order[i] = (int)i;
+    sort_rule_order (&config, order, n);
+
+    gf_ws_id_t current_ws = -1;
+    for (uint32_t i = 0; i < n; i++)
+    {
+        const gf_window_rule_t *rule = &config.window_rules[order[i]];
+        if (rule->workspace_id != current_ws)
+        {
+            current_ws = rule->workspace_id;
+            gtk_box_append (GTK_BOX (ctx->list_box), build_group_header (current_ws));
+        }
+        gtk_box_append (GTK_BOX (ctx->list_box), build_rule_row (ctx, rule));
     }
 }
 
 static void
-on_rules_window_destroy (GtkWidget *widget, gpointer user_data)
+setup_app_item (GtkSignalListItemFactory *factory, GtkListItem *item, gpointer data)
 {
-    (void)widget;
-    rules_panel_data_t *data = (rules_panel_data_t *)user_data;
-    g_free (data);
+    (void)factory;
+    (void)data;
+    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append (GTK_BOX (box), gtk_image_new ());
+    gtk_box_append (GTK_BOX (box), gtk_label_new (""));
+    gtk_list_item_set_child (item, box);
+}
+
+static void
+bind_app_item (GtkSignalListItemFactory *factory, GtkListItem *item, gpointer data)
+{
+    (void)factory;
+    GtkWidget *box = gtk_list_item_get_child (item);
+    if (!box)
+        return;
+    GtkWidget *icon = gtk_widget_get_first_child (box);
+    GtkWidget *label = gtk_widget_get_next_sibling (icon);
+    gpointer obj = gtk_list_item_get_item (item);
+    if (!obj || !GTK_IS_STRING_OBJECT (obj))
+        return;
+
+    const char *str = gtk_string_object_get_string (GTK_STRING_OBJECT (obj));
+    gtk_label_set_text (GTK_LABEL (label), str);
+    GdkPaintable *icon_p = rule_app_icon ((gf_app_state_t *)data, str);
+    if (icon_p)
+    {
+        gtk_image_set_from_paintable (GTK_IMAGE (icon), icon_p);
+        g_object_unref (icon_p);
+    }
+    else
+        gtk_image_clear (GTK_IMAGE (icon));
+}
+
+static void
+build_app_dropdown (rules_ctx_t *ctx)
+{
+    ctx->app_model = gtk_string_list_new (NULL);
+    if (ctx->app->platform && ctx->app->platform->populate_app_dropdown)
+        ctx->app->platform->populate_app_dropdown (ctx->app->platform, ctx->app_model);
+
+    GtkExpression *expr
+        = gtk_property_expression_new (GTK_TYPE_STRING_OBJECT, NULL, "string");
+    GtkListItemFactory *factory = gtk_signal_list_item_factory_new ();
+    g_signal_connect (factory, "setup", G_CALLBACK (setup_app_item), NULL);
+    g_signal_connect (factory, "bind", G_CALLBACK (bind_app_item), ctx->app);
+
+    ctx->app_dropdown = gtk_drop_down_new (G_LIST_MODEL (ctx->app_model), expr);
+    gtk_drop_down_set_factory (GTK_DROP_DOWN (ctx->app_dropdown), factory);
+    gtk_drop_down_set_list_factory (GTK_DROP_DOWN (ctx->app_dropdown), factory);
+    gtk_drop_down_set_enable_search (GTK_DROP_DOWN (ctx->app_dropdown), TRUE);
+    gtk_widget_set_hexpand (ctx->app_dropdown, TRUE);
+    g_object_unref (factory);
+}
+
+static GtkWidget *
+build_add_form (rules_ctx_t *ctx)
+{
+    GtkWidget *form = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+    build_app_dropdown (ctx);
+    gtk_box_append (GTK_BOX (form), ctx->app_dropdown);
+
+    ctx->ws_spin = gtk_spin_button_new_with_range (1, GF_MAX_WORKSPACES, 1);
+    gtk_spin_button_set_value (GTK_SPIN_BUTTON (ctx->ws_spin), 1);
+    gtk_box_append (GTK_BOX (form), ctx->ws_spin);
+
+    GtkWidget *add = gtk_button_new_with_label ("Add");
+    gtk_widget_add_css_class (add, "suggested-action");
+    g_signal_connect (add, "clicked", G_CALLBACK (on_add_rule), ctx);
+    gtk_box_append (GTK_BOX (form), add);
+    return form;
 }
 
 void
@@ -261,123 +278,45 @@ on_rules_button_clicked (GtkButton *btn, gpointer data)
 {
     (void)btn;
     gf_app_state_t *app = (gf_app_state_t *)data;
+    rules_ctx_t *ctx = g_new0 (rules_ctx_t, 1);
+    ctx->app = app;
 
-    rules_panel_data_t *panel_data = g_new0 (rules_panel_data_t, 1);
-    panel_data->app = app;
+    GtkWidget *window = gtk_window_new ();
+    gtk_window_set_title (GTK_WINDOW (window), "Window Rules");
+    gtk_window_set_default_size (GTK_WINDOW (window), 380, 460);
+    gtk_window_set_modal (GTK_WINDOW (window), TRUE);
+    gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (app->window));
+    g_object_set_data_full (G_OBJECT (window), "ctx", ctx, g_free);
+    ctx->window = window;
 
-    GtkWidget *rules_window = gtk_window_new ();
-    gtk_window_set_title (GTK_WINDOW (rules_window), "Window Rules");
-    gtk_window_set_default_size (GTK_WINDOW (rules_window), 550, 500);
-    gtk_window_set_modal (GTK_WINDOW (rules_window), TRUE);
-    gtk_window_set_transient_for (GTK_WINDOW (rules_window), GTK_WINDOW (app->window));
-    panel_data->rules_window = rules_window;
+    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_margin_start (box, 16);
+    gtk_widget_set_margin_end (box, 16);
+    gtk_widget_set_margin_top (box, 16);
+    gtk_widget_set_margin_bottom (box, 16);
+    gtk_window_set_child (GTK_WINDOW (window), box);
 
-    g_signal_connect (rules_window, "destroy", G_CALLBACK (on_rules_window_destroy),
-                      panel_data);
-
-    GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-    gtk_widget_set_margin_start (main_box, 20);
-    gtk_widget_set_margin_end (main_box, 20);
-    gtk_widget_set_margin_top (main_box, 20);
-    gtk_widget_set_margin_bottom (main_box, 20);
-    gtk_window_set_child (GTK_WINDOW (rules_window), main_box);
-
-    // --- Add Rule Section ---
-    GtkWidget *add_label = gtk_label_new ("Add New Rule");
-    gtk_widget_set_halign (add_label, GTK_ALIGN_START);
-    PangoAttrList *attrs = pango_attr_list_new ();
-    pango_attr_list_insert (attrs, pango_attr_weight_new (PANGO_WEIGHT_BOLD));
-    pango_attr_list_insert (attrs, pango_attr_size_new (14 * PANGO_SCALE));
-    gtk_label_set_attributes (GTK_LABEL (add_label), attrs);
-    pango_attr_list_unref (attrs);
-    gtk_box_append (GTK_BOX (main_box), add_label);
-
-    // Form row 1: Application dropdown
-    GtkWidget *form1 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_append (GTK_BOX (main_box), form1);
-
-    GtkWidget *app_label = gtk_label_new ("Application:");
-    gtk_widget_set_size_request (app_label, 100, -1);
-    gtk_widget_set_halign (app_label, GTK_ALIGN_START);
-    gtk_box_append (GTK_BOX (form1), app_label);
-
-    panel_data->app_model = gtk_string_list_new (NULL);
-    populate_app_dropdown (app, panel_data->app_model);
-
-    // Use GtkExpression for search to work properly
-    GtkExpression *expression
-        = gtk_property_expression_new (GTK_TYPE_STRING_OBJECT, NULL, "string");
-
-    GtkListItemFactory *factory = gtk_signal_list_item_factory_new ();
-    g_signal_connect (factory, "setup", G_CALLBACK (setup_app_list_item), NULL);
-    g_signal_connect (factory, "bind", G_CALLBACK (bind_app_list_item), app);
-
-    panel_data->app_dropdown
-        = gtk_drop_down_new (G_LIST_MODEL (panel_data->app_model), expression);
-
-    gtk_drop_down_set_factory (GTK_DROP_DOWN (panel_data->app_dropdown), factory);
-    gtk_drop_down_set_list_factory (GTK_DROP_DOWN (panel_data->app_dropdown), factory);
-    g_object_unref (factory);
-
-    gtk_widget_set_size_request (panel_data->app_dropdown, 280, -1);
-    gtk_drop_down_set_enable_search (GTK_DROP_DOWN (panel_data->app_dropdown), TRUE);
-    gtk_widget_set_hexpand (panel_data->app_dropdown, TRUE);
-    gtk_box_append (GTK_BOX (form1), panel_data->app_dropdown);
-
-    // Form row 2: Workspace + Add button
-    GtkWidget *form2 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_append (GTK_BOX (main_box), form2);
-
-    GtkWidget *ws_label = gtk_label_new ("Workspace:");
-    gtk_widget_set_size_request (ws_label, 100, -1);
-    gtk_widget_set_halign (ws_label, GTK_ALIGN_START);
-    gtk_box_append (GTK_BOX (form2), ws_label);
-
-    panel_data->ws_spin = gtk_spin_button_new_with_range (0, 32, 1);
-    gtk_spin_button_set_value (GTK_SPIN_BUTTON (panel_data->ws_spin), 1);
-    gtk_box_append (GTK_BOX (form2), panel_data->ws_spin);
-
-    GtkWidget *add_btn = gtk_button_new_with_label ("➕ Add Rule");
-    gtk_widget_set_hexpand (add_btn, TRUE);
-    g_signal_connect (add_btn, "clicked", G_CALLBACK (on_add_rule_clicked), panel_data);
-    gtk_box_append (GTK_BOX (form2), add_btn);
-
-    // --- Separator ---
-    gtk_box_append (GTK_BOX (main_box), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
-
-    // --- Current Rules Section ---
-    GtkWidget *rules_label = gtk_label_new ("Current Rules");
-    gtk_widget_set_halign (rules_label, GTK_ALIGN_START);
-    PangoAttrList *attrs2 = pango_attr_list_new ();
-    pango_attr_list_insert (attrs2, pango_attr_weight_new (PANGO_WEIGHT_BOLD));
-    pango_attr_list_insert (attrs2, pango_attr_size_new (14 * PANGO_SCALE));
-    gtk_label_set_attributes (GTK_LABEL (rules_label), attrs2);
-    pango_attr_list_unref (attrs2);
-    gtk_box_append (GTK_BOX (main_box), rules_label);
+    GtkWidget *title = gtk_label_new ("Window rules");
+    gtk_widget_add_css_class (title, "gf-pop-title");
+    gtk_widget_set_halign (title, GTK_ALIGN_START);
+    gtk_box_append (GTK_BOX (box), title);
+    gtk_box_append (GTK_BOX (box), build_add_form (ctx));
+    gtk_box_append (GTK_BOX (box), gtk_separator_new (GTK_ORIENTATION_HORIZONTAL));
 
     GtkWidget *scrolled = gtk_scrolled_window_new ();
-    gtk_widget_set_vexpand (scrolled, TRUE);
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER,
                                     GTK_POLICY_AUTOMATIC);
-    gtk_box_append (GTK_BOX (main_box), scrolled);
+    gtk_widget_set_vexpand (scrolled, TRUE);
+    gtk_box_append (GTK_BOX (box), scrolled);
 
-    panel_data->rules_grid = gtk_grid_new ();
-    gtk_grid_set_row_spacing (GTK_GRID (panel_data->rules_grid), 6);
-    gtk_grid_set_column_spacing (GTK_GRID (panel_data->rules_grid), 16);
-    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled),
-                                   panel_data->rules_grid);
+    ctx->list_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled), ctx->list_box);
 
-    refresh_rules_list (panel_data);
+    GtkWidget *close = gtk_button_new_with_label ("Close");
+    gtk_widget_set_halign (close, GTK_ALIGN_END);
+    g_signal_connect_swapped (close, "clicked", G_CALLBACK (gtk_window_destroy), window);
+    gtk_box_append (GTK_BOX (box), close);
 
-    // --- Bottom buttons ---
-    GtkWidget *btn_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_widget_set_halign (btn_box, GTK_ALIGN_END);
-    gtk_box_append (GTK_BOX (main_box), btn_box);
-
-    GtkWidget *close_btn = gtk_button_new_with_label ("Close");
-    g_signal_connect_swapped (close_btn, "clicked", G_CALLBACK (gtk_window_destroy),
-                              rules_window);
-    gtk_box_append (GTK_BOX (btn_box), close_btn);
-
-    gtk_window_present (GTK_WINDOW (rules_window));
+    refresh_rules_list (ctx);
+    gtk_window_present (GTK_WINDOW (window));
 }
