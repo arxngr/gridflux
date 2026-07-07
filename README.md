@@ -258,6 +258,13 @@ cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 Source code is formatted with clang-format (version 18, GNU style with Allman
 braces); the configuration lives in `.clang-format` and is checked in CI.
 
+**Rebuilding on Windows.** An executable can't be overwritten while it is running,
+so the build automatically stops any running GridFlux instance before linking. If
+you started GridFlux **as administrator**, a normal-user build cannot stop it and
+you will see `ld.exe: cannot open output file gridflux.exe: Permission denied`.
+Close that instance from an elevated terminal (`taskkill /F /IM gridflux.exe`) or
+reboot, then build again — and for development, run GridFlux without elevation.
+
 ---
 
 ## Contributing
