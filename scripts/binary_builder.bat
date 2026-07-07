@@ -25,14 +25,6 @@ where wix.exe >nul 2>nul || (
 echo Found WiX Toolset
 
 echo Cleaning previous build...
-:: Stop any running GridFlux binaries first. While they run, their .exe files in
-:: build\ are locked, so cleaning build\ (or re-linking later) fails with
-:: "Access is denied". Stopping your own processes needs no administrator rights.
-echo Stopping any running GridFlux processes...
-for %%P in (gridflux.exe gridflux-gui.exe gridflux-cli.exe gridflux-launcher.exe) do (
-    taskkill /f /im %%P >nul 2>nul
-)
-
 if exist build rmdir /s /q build
 if exist CMakeCache.txt del CMakeCache.txt
 

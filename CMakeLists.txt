@@ -301,20 +301,6 @@ if(MSVC)
     endif()
 endif()
 
-# A running executable can't be relinked on Windows (ld: "Permission denied").
-# Stop any running instance right before linking, so incremental builds work
-# without closing GridFlux first. No-op when nothing is running; no admin needed.
-if(WIN32)
-    foreach(gf_target gridflux gridflux-cli gridflux-gui gridflux-launcher)
-        if(TARGET ${gf_target})
-            add_custom_command(TARGET ${gf_target} PRE_LINK
-                COMMAND ${CMAKE_COMMAND} -DGF_EXE=${gf_target}.exe
-                        -P ${CMAKE_SOURCE_DIR}/scripts/stop_running.cmake
-                COMMENT "Stopping running ${gf_target}.exe before linking (if any)")
-        endif()
-    endforeach()
-endif()
-
 if(GF_DEV_MODE)
     target_compile_definitions(gridflux PRIVATE GF_DEV_MODE)
     target_compile_definitions(gridflux-cli PRIVATE GF_DEV_MODE)
