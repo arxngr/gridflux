@@ -364,8 +364,7 @@ load_or_create_config (const char *filename)
                     strncpy (cfg.window_rules[cfg.window_rules_count].wm_class, cls,
                              GF_RULE_CLASS_MAX - 1);
                     cfg.window_rules[cfg.window_rules_count]
-                        .wm_class[GF_RULE_CLASS_MAX - 1]
-                        = '\0';
+                        .wm_class[GF_RULE_CLASS_MAX - 1] = '\0';
                     cfg.window_rules[cfg.window_rules_count].workspace_id = ws;
                     cfg.window_rules_count++;
                 }
