@@ -110,54 +110,12 @@ gf_window_is_valid (gf_display_t display, gf_handle_t window)
     return XGetWindowAttributes (display, window, &attrs) != 0;
 }
 
-// True if the window is owned by the GridFlux GUI process. Its transient popups
-// (rules search dropdown, colour palette) share the GUI's PID; we read the
-// window's _NET_WM_PID and match /proc/<pid>/comm against the GUI executable.
-static bool
-window_belongs_to_gui (gf_display_t display, gf_handle_t window)
-{
-    if (!display || window == None)
-        return false;
-
-    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
-    unsigned char *data = NULL;
-    unsigned long nitems = 0;
-    if (gf_platform_get_window_property (display, window, atoms->net_wm_pid, XA_CARDINAL,
-                                         &data, &nitems)
-            != GF_SUCCESS
-        || !data)
-        return false;
-
-    unsigned long pid = (nitems >= 1) ? *(unsigned long *)data : 0;
-    XFree (data);
-    if (!pid)
-        return false;
-
-    char path[64];
-    snprintf (path, sizeof (path), "/proc/%lu/comm", pid);
-    FILE *f = fopen (path, "r");
-    if (!f)
-        return false;
-
-    char comm[64] = { 0 };
-    char *ok = fgets (comm, sizeof (comm), f);
-    fclose (f);
-    if (!ok)
-        return false;
-
-    comm[strcspn (comm, "\n")] = '\0';
-    return strcmp (comm, "gridflux-gui") == 0;
-}
-
 bool
 window_is_border_excluded (gf_display_t display, gf_handle_t window)
 {
+    // The GUI and its dialogs/popups share the app's WM_CLASS, so window_is_self
+    // already excludes them — the border is clipped around them, not drawn over.
     if (window_is_self (display, window))
-        return true;
-
-    // Clip managed borders around the GUI's own popups (rules search dropdown,
-    // colour palette) instead of drawing over them.
-    if (window_belongs_to_gui (display, window))
         return true;
 
     if (window_is_app_exception (display, window))
