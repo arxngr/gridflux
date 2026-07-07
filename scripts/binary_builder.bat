@@ -239,10 +239,20 @@ echo.
 echo Building MSI installer
 echo.
 
-set MSI_NAME=GridFlux-1.0.0.msi
+:: Derive release version from the latest git tag (e.g. v1.3.0 -> 1.3.0),
+:: falling back to 1.0.0 when no tag is reachable.
+set "GF_VERSION=1.0.0"
+for /f "delims=" %%i in ('git describe --tags --abbrev^=0 2^>nul') do set "GF_TAG=%%i"
+if defined GF_TAG (
+    if "!GF_TAG:~0,1!"=="v" (set "GF_VERSION=!GF_TAG:~1!") else (set "GF_VERSION=!GF_TAG!")
+)
+set "GF_VERSION4=!GF_VERSION!.0"
+echo Release version: !GF_VERSION!
 
-:: Build MSI with WiX v4+ command
-wix build -arch x64 -acceptEula wix7 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out %MSI_NAME%
+set "MSI_NAME=GridFlux-!GF_VERSION!.msi"
+
+:: Build MSI with WiX v4+ command (version reaches gridflux.wxs via $(var.Version))
+wix build -arch x64 -acceptEula wix7 -d Version=!GF_VERSION! -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out "%MSI_NAME%"
 if !ERRORLEVEL! neq 0 (
     echo ERROR: wix build failed
     exit /b 1
@@ -318,7 +328,7 @@ echo.
 echo   ^<Identity
 echo     Name="ArdiNugraha.GridFluxVirtualWorkspace"
 echo     Publisher="CN=C0CED2D5-3090-4872-B6DE-67F97E7E24CD"
-echo     Version="1.0.0.0"
+echo     Version="!GF_VERSION4!"
 echo     ProcessorArchitecture="x64" /^>
 echo.
 echo   ^<Properties^>
@@ -362,7 +372,7 @@ echo ^</Package^>
 ) > "!MANIFEST!"
 
 echo Building MSIX...
-"!MAKEAPPX!" pack /d "!MSIX_DIR!" /p GridFlux-1.0.0.msix /o /l
+"!MAKEAPPX!" pack /d "!MSIX_DIR!" /p "GridFlux-!GF_VERSION!.msix" /o /l
 
 if !ERRORLEVEL! neq 0 (
     echo ERROR: Failed to build MSIX package.
@@ -370,7 +380,7 @@ if !ERRORLEVEL! neq 0 (
     echo.
     echo ================================================
     echo MSIX build Complete!
-    echo Output: GridFlux-1.0.0.msix
+    echo Output: GridFlux-!GF_VERSION!.msix
     echo Submit this file to the Microsoft Store via Partner Center.
     echo ================================================
 )
