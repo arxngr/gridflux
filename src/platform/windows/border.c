@@ -6,8 +6,7 @@
 
 static LRESULT CALLBACK _border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam,
                                           LPARAM lparam);
-static void _border_update_overlay (gf_border_t *b, const RECT *gui_rects,
-                                    int gui_count);
+static void _border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count);
 
 HWND
 create_border_overlay (HWND target)
@@ -83,8 +82,8 @@ _border_compute_layout (gf_border_t *b, border_layout_t *out)
 
 // Collect intersections of the border rect with the GUI windows, capped at max.
 static int
-_border_find_intersections (const RECT *border_rect, const RECT *gui_rects,
-                            int gui_count, RECT *out, int max)
+_border_find_intersections (const RECT *border_rect, const RECT *gui_rects, int gui_count,
+                            RECT *out, int max)
 {
     int n = 0;
     for (int i = 0; i < gui_count && n < max; i++)
@@ -98,8 +97,8 @@ _border_find_intersections (const RECT *border_rect, const RECT *gui_rects,
 
 // True if the border geometry or its GUI intersections differ from the cache.
 static bool
-_border_shape_changed (gf_border_t *b, const RECT *visible,
-                       const RECT *intersections, int count)
+_border_shape_changed (gf_border_t *b, const RECT *visible, const RECT *intersections,
+                       int count)
 {
     if (memcmp (visible, &b->last_rect, sizeof (RECT)) != 0)
         return true;
@@ -162,8 +161,8 @@ _border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
         return;
 
     RECT intersections[16];
-    int count = _border_find_intersections (&lay.rect, gui_rects, gui_count,
-                                            intersections, 16);
+    int count
+        = _border_find_intersections (&lay.rect, gui_rects, gui_count, intersections, 16);
 
     bool shape_changed = _border_shape_changed (b, &lay.visible, intersections, count);
 
@@ -210,9 +209,9 @@ _border_paint (HWND hwnd)
         HBRUSH brush = CreateSolidBrush (c);
 
         RECT edges[4] = {
-            { 0, 0, t, rect.bottom },                       // left
-            { rect.right - t, 0, rect.right, rect.bottom }, // right
-            { t, 0, rect.right - t, t },                    // top
+            { 0, 0, t, rect.bottom },                            // left
+            { rect.right - t, 0, rect.right, rect.bottom },      // right
+            { t, 0, rect.right - t, t },                         // top
             { t, rect.bottom - t, rect.right - t, rect.bottom }, // bottom
         };
         for (int i = 0; i < 4; i++)

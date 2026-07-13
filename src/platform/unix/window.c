@@ -113,6 +113,8 @@ gf_window_is_valid (gf_display_t display, gf_handle_t window)
 bool
 window_is_border_excluded (gf_display_t display, gf_handle_t window)
 {
+    // The GUI and its dialogs/popups share the app's WM_CLASS, so window_is_self
+    // already excludes them — the border is clipped around them, not drawn over.
     if (window_is_self (display, window))
         return true;
 

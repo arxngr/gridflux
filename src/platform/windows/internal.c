@@ -221,6 +221,46 @@ window_is_self (gf_display_t display, gf_handle_t window)
     return false;
 }
 
+// Resolve (and cache) the GridFlux GUI's process id from its own window,
+// identified by window class/title rather than a spoofable executable name.
+// Re-resolves if the cached process has exited.
+static DWORD
+gui_process_id (void)
+{
+    static DWORD cached = 0;
+    if (cached)
+    {
+        HANDLE h = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, cached);
+        if (h)
+        {
+            CloseHandle (h);
+            return cached;
+        }
+        cached = 0;
+    }
+
+    HWND gui = FindWindowA ("GridFluxGUI", NULL);
+    if (!gui)
+        gui = FindWindowA (NULL, "GridFlux");
+    if (gui)
+        GetWindowThreadProcessId (gui, &cached);
+    return cached;
+}
+
+// True if hwnd is owned by the GUI process. Its transient popups (colour
+// palette, dropdowns) share that PID but not its title/class.
+static bool
+window_belongs_to_gui (HWND hwnd)
+{
+    DWORD gui_pid = gui_process_id ();
+    if (!gui_pid)
+        return false;
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId (hwnd, &pid);
+    return pid == gui_pid;
+}
+
 BOOL
 window_is_border_excluded (HWND hwnd)
 {
@@ -228,6 +268,11 @@ window_is_border_excluded (HWND hwnd)
         return true;
 
     if (window_is_self (NULL, hwnd))
+        return true;
+
+    // Clip managed borders around the GUI's own popups (rules search dropdown,
+    // colour palette) instead of drawing over them.
+    if (window_belongs_to_gui (hwnd))
         return true;
 
     // Treat installers like the GridFlux GUI: clip managed windows' borders

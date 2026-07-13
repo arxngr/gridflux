@@ -86,7 +86,7 @@ static bool
 _window_class_is_installer (const char *class_name)
 {
     static const char *const exact[] = {
-        "MsiDialogCloseClass", // Windows Installer / MSI / WiX 
+        "MsiDialogCloseClass", // Windows Installer / MSI / WiX
         "TWizardForm",         // Inno Setup wizard
         "TSetupLdrWindow",     // Inno Setup loader
     };
@@ -104,8 +104,8 @@ _window_title_is_installer (const char *title)
     if (_str_ends_with_ci (title, " setup") || _str_ends_with_ci (title, " installer"))
         return true;
 
-    static const char *const phrases[] = { "setup wizard", "install wizard",
-                                           "installshield", "uninstall" };
+    static const char *const phrases[]
+        = { "setup wizard", "install wizard", "installshield", "uninstall" };
     return _str_contains_any (title, phrases, 4);
 }
 

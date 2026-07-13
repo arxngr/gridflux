@@ -695,8 +695,72 @@ update_single_border (Display *dpy, gf_linux_platform_data_t *data,
                               ints, count);
 }
 
-// Gather geometries to clip borders against: configured exclude zones plus the
-// frames of border-excluded (GUI) client windows. Returns the count (up to max).
+// Read a window's _NET_WM_PID (0 if unset).
+static unsigned long
+_read_net_wm_pid (Display *dpy, gf_platform_atoms_t *atoms, Window win)
+{
+    unsigned char *data = NULL;
+    unsigned long nitems = 0, pid = 0;
+    if (gf_platform_get_window_property (dpy, win, atoms->net_wm_pid, XA_CARDINAL, &data,
+                                         &nitems)
+            == GF_SUCCESS
+        && data)
+    {
+        if (nitems >= 1)
+            pid = *(unsigned long *)data;
+        XFree (data);
+    }
+    return pid;
+}
+
+// Root-relative geometry of a viewable override-redirect window (false otherwise).
+static bool
+_override_geometry (Display *dpy, Window win, gf_rect_t *out)
+{
+    XWindowAttributes wa;
+    if (!XGetWindowAttributes (dpy, win, &wa) || wa.map_state != IsViewable
+        || !wa.override_redirect)
+        return false;
+
+    int rx = 0, ry = 0;
+    Window child;
+    XTranslateCoordinates (dpy, win, wa.root, 0, 0, &rx, &ry, &child);
+    out->x = rx;
+    out->y = ry;
+    out->width = (gf_dimension_t)wa.width;
+    out->height = (gf_dimension_t)wa.height;
+    return true;
+}
+
+// Clip around the GUI's override-redirect popups (dropdown lists, menus). These
+// aren't managed clients, so scan the root's children for ones owned by the GUI
+// process (identified by PID, resolved from the GUI's own managed window).
+static void
+_collect_gui_popups (Display *dpy, gf_platform_atoms_t *atoms, unsigned long gui_pid,
+                     Window root, gf_rect_t *gui_geoms, int *gui_count, int max)
+{
+    if (!gui_pid)
+        return;
+
+    Window qroot, qparent, *children = NULL;
+    unsigned int nchildren = 0;
+    if (!XQueryTree (dpy, root, &qroot, &qparent, &children, &nchildren) || !children)
+        return;
+    (void)qroot;
+    (void)qparent;
+
+    for (unsigned int i = 0; i < nchildren && *gui_count < max; i++)
+    {
+        if (_read_net_wm_pid (dpy, atoms, children[i]) != gui_pid)
+            continue;
+        if (_override_geometry (dpy, children[i], &gui_geoms[*gui_count]))
+            (*gui_count)++;
+    }
+    XFree (children);
+}
+
+// Gather geometries to clip borders against: configured exclude zones, the
+// frames of border-excluded (GUI) client windows, and the GUI's popups.
 static int
 _collect_gui_geoms (Display *dpy, gf_platform_atoms_t *atoms, const gf_config_t *config,
                     gf_rect_t *gui_geoms, int max)
@@ -707,6 +771,7 @@ _collect_gui_geoms (Display *dpy, gf_platform_atoms_t *atoms, const gf_config_t 
         gui_geoms[gui_count++] = config->exclude_zones[i];
 
     Window root = DefaultRootWindow (dpy);
+    unsigned long gui_pid = 0;
     unsigned char *prop_data = NULL;
     unsigned long nitems = 0;
     if (gf_platform_get_window_property (dpy, root, atoms->net_client_list, XA_WINDOW,
@@ -716,6 +781,9 @@ _collect_gui_geoms (Display *dpy, gf_platform_atoms_t *atoms, const gf_config_t 
         Window *clients = (Window *)prop_data;
         for (unsigned long i = 0; i < nitems && gui_count < max; i++)
         {
+            if (!gui_pid && window_is_self (dpy, clients[i]))
+                gui_pid = _read_net_wm_pid (dpy, atoms, clients[i]);
+
             if (window_is_border_excluded (dpy, clients[i])
                 && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_desktop)
                 && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
@@ -727,6 +795,7 @@ _collect_gui_geoms (Display *dpy, gf_platform_atoms_t *atoms, const gf_config_t 
         XFree (prop_data);
     }
 
+    _collect_gui_popups (dpy, atoms, gui_pid, root, gui_geoms, &gui_count, max);
     return gui_count;
 }
 

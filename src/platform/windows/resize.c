@@ -113,7 +113,7 @@ _resize_event_proc (HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG idObject,
 // Separate callback for EVENT_OBJECT_LOCATIONCHANGE (fired during drag)
 static void CALLBACK
 _resize_location_change_proc (HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG idObject,
-                       LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
+                              LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
 {
     (void)hook;
     (void)event;
@@ -170,9 +170,10 @@ gf_resize_hook_install (gf_platform_t *platform)
     }
 
     // Hook 2: Location change events during drag (0x800B)
-    data->location_hook = SetWinEventHook (
-        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, NULL,
-        _resize_location_change_proc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    data->location_hook
+        = SetWinEventHook (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, NULL,
+                           _resize_location_change_proc, 0, 0,
+                           WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
     if (!data->location_hook)
     {

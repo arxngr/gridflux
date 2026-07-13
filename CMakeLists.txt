@@ -220,7 +220,6 @@ if(GTK4_FOUND)
         src/gui/window/toolbar.c
         src/gui/window/statusbar.c
         src/gui/panels/workspace_panel.c
-        src/gui/panels/window_panel.c
         src/gui/panels/settings_panel.c
         src/gui/panels/rules_panel.c
         src/gui/widgets/workspace_card.c

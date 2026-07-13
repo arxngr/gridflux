@@ -12,16 +12,9 @@
 typedef struct
 {
     GtkWidget *window;
-    GtkWidget *workspace_table;
-    GtkWidget *ws_dropdown;
-    GtkStringList *ws_model;
-    GtkWidget *window_dropdown;
-    GtkStringList *window_model;
-    GtkWidget *target_ws_dropdown;
-    GtkStringList *target_ws_model;
+    GtkWidget *workspace_table; // scrolled window hosting the workspace cards
+    GtkWidget *server_btn;      // persistent start/stop toggle in the header
     gf_gui_platform_t *platform;
-    GtkWidget *start_btn;
-    GtkWidget *stop_btn;
 #ifdef _WIN32
     gboolean operation_in_progress;
     void *tray_data;

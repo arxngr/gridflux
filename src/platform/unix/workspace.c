@@ -6,8 +6,8 @@
 
 // Merge a strut array {left, right, top, bottom} into the running maximums.
 static void
-_strut_apply_max (const long *strut, int *panel_left, int *panel_right,
-                  int *panel_top, int *panel_bottom)
+_strut_apply_max (const long *strut, int *panel_left, int *panel_right, int *panel_top,
+                  int *panel_bottom)
 {
     if (strut[0] > *panel_left)
         *panel_left = strut[0];
@@ -63,8 +63,7 @@ _accumulate_client_strut (Display *dpy, Window client, gf_platform_atoms_t *atom
 
 static void
 _get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms,
-                    int *panel_left, int *panel_right, int *panel_top,
-                    int *panel_bottom)
+                    int *panel_left, int *panel_right, int *panel_top, int *panel_bottom)
 {
     unsigned char *clients_data = NULL;
     unsigned long clients_count = 0;
@@ -142,8 +141,8 @@ gf_workspace_get_count (gf_display_t display)
 // Fill bounds from _NET_WORKAREA for the current workspace. Returns true if a
 // sane (non-zero, sub-screen) work area was found.
 static bool
-_workarea_get_bounds (gf_display_t dpy, Window root, gf_platform_atoms_t *atoms,
-                      int sw, int sh, gf_rect_t *bounds)
+_workarea_get_bounds (gf_display_t dpy, Window root, gf_platform_atoms_t *atoms, int sw,
+                      int sh, gf_rect_t *bounds)
 {
     unsigned char *data = NULL;
     unsigned long nitems = 0;
