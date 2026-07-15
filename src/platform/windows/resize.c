@@ -8,7 +8,7 @@
 static gf_windows_platform_data_t *s_platform_data = NULL;
 
 static gf_resize_dir_t
-_detect_direction (const gf_rect_t *initial, const gf_rect_t *current)
+_resize_detect_direction (const gf_rect_t *initial, const gf_rect_t *current)
 {
     gf_resize_dir_t dir = GF_RESIZE_NONE;
 
@@ -31,7 +31,7 @@ _detect_direction (const gf_rect_t *initial, const gf_rect_t *current)
 }
 
 static void
-_get_dwm_rect (HWND hwnd, gf_rect_t *out)
+_dwm_get_rect (HWND hwnd, gf_rect_t *out)
 {
     RECT rect;
     if (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rect,
@@ -43,6 +43,51 @@ _get_dwm_rect (HWND hwnd, gf_rect_t *out)
         out->width = (gf_dimension_t)(rect.right - rect.left);
         out->height = (gf_dimension_t)(rect.bottom - rect.top);
     }
+}
+
+// A move/size gesture began: snapshot the window's starting rect.
+static void
+_resize_on_start (gf_resize_state_t *rs, HWND hwnd)
+{
+    rs->window = (gf_handle_t)hwnd;
+    _dwm_get_rect (hwnd, &rs->initial_rect);
+    rs->current_rect = rs->initial_rect;
+    rs->direction = GF_RESIZE_NONE;
+    rs->phase = GF_RESIZE_ACTIVE;
+    rs->pending = true;
+    GF_LOG_INFO ("[RESIZE] Start: window=%p rect=(%d,%d,%u,%u)", (void *)hwnd,
+                 rs->initial_rect.x, rs->initial_rect.y, rs->initial_rect.width,
+                 rs->initial_rect.height);
+}
+
+// A move/size gesture ended: emit a resize unless the size was unchanged (move).
+static void
+_resize_on_end (gf_resize_state_t *rs, HWND hwnd)
+{
+    if (rs->window != (gf_handle_t)hwnd)
+        return;
+
+    _dwm_get_rect (hwnd, &rs->current_rect);
+
+    // If width and height are unchanged, this was a MOVE, not a resize.
+    // Reset to idle without emitting a resize event.
+    if (rs->current_rect.width == rs->initial_rect.width
+        && rs->current_rect.height == rs->initial_rect.height)
+    {
+        GF_LOG_DEBUG ("[RESIZE] Move detected (not resize), ignoring end event");
+        rs->phase = GF_RESIZE_IDLE;
+        rs->window = 0;
+        rs->direction = GF_RESIZE_NONE;
+        rs->pending = false;
+        return;
+    }
+
+    rs->direction = _resize_detect_direction (&rs->initial_rect, &rs->current_rect);
+    rs->phase = GF_RESIZE_COMPLETE;
+    rs->pending = true;
+    GF_LOG_INFO ("[RESIZE] End: window=%p dir=%d rect=(%d,%d,%u,%u)", (void *)hwnd,
+                 rs->direction, rs->current_rect.x, rs->current_rect.y,
+                 rs->current_rect.width, rs->current_rect.height);
 }
 
 static void CALLBACK
@@ -59,57 +104,16 @@ _resize_event_proc (HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG idObject,
 
     gf_resize_state_t *rs = &s_platform_data->resize_state;
 
-    switch (event)
-    {
-    case EVENT_SYSTEM_MOVESIZESTART:
-    {
-        rs->window = (gf_handle_t)hwnd;
-        _get_dwm_rect (hwnd, &rs->initial_rect);
-        rs->current_rect = rs->initial_rect;
-        rs->direction = GF_RESIZE_NONE;
-        rs->phase = GF_RESIZE_ACTIVE;
-        rs->pending = true;
-        GF_LOG_INFO ("[RESIZE] Start: window=%p rect=(%d,%d,%u,%u)", (void *)hwnd,
-                     rs->initial_rect.x, rs->initial_rect.y, rs->initial_rect.width,
-                     rs->initial_rect.height);
-        break;
-    }
-
-    case EVENT_SYSTEM_MOVESIZEEND:
-    {
-        if (rs->window != (gf_handle_t)hwnd)
-            break;
-
-        _get_dwm_rect (hwnd, &rs->current_rect);
-
-        // If width and height are unchanged, this was a MOVE, not a resize.
-        // Reset to idle without emitting a resize event.
-        if (rs->current_rect.width == rs->initial_rect.width
-            && rs->current_rect.height == rs->initial_rect.height)
-        {
-            GF_LOG_DEBUG ("[RESIZE] Move detected (not resize), ignoring end event");
-            rs->phase = GF_RESIZE_IDLE;
-            rs->window = 0;
-            rs->direction = GF_RESIZE_NONE;
-            rs->pending = false;
-            break;
-        }
-
-        rs->direction = _detect_direction (&rs->initial_rect, &rs->current_rect);
-        rs->phase = GF_RESIZE_COMPLETE;
-        rs->pending = true;
-        GF_LOG_INFO ("[RESIZE] End: window=%p dir=%d rect=(%d,%d,%u,%u)", (void *)hwnd,
-                     rs->direction, rs->current_rect.x, rs->current_rect.y,
-                     rs->current_rect.width, rs->current_rect.height);
-        break;
-    }
-    }
+    if (event == EVENT_SYSTEM_MOVESIZESTART)
+        _resize_on_start (rs, hwnd);
+    else if (event == EVENT_SYSTEM_MOVESIZEEND)
+        _resize_on_end (rs, hwnd);
 }
 
 // Separate callback for EVENT_OBJECT_LOCATIONCHANGE (fired during drag)
 static void CALLBACK
-_location_change_proc (HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG idObject,
-                       LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
+_resize_location_change_proc (HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG idObject,
+                              LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime)
 {
     (void)hook;
     (void)event;
@@ -127,7 +131,7 @@ _location_change_proc (HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG idObject
         return;
 
     gf_rect_t new_rect;
-    _get_dwm_rect (hwnd, &new_rect);
+    _dwm_get_rect (hwnd, &new_rect);
 
     // If width and height haven't changed, this is a MOVE (title bar drag), not a resize.
     // Only border drags change the window dimensions.
@@ -138,7 +142,7 @@ _location_change_proc (HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG idObject
     }
 
     rs->current_rect = new_rect;
-    rs->direction = _detect_direction (&rs->initial_rect, &rs->current_rect);
+    rs->direction = _resize_detect_direction (&rs->initial_rect, &rs->current_rect);
     rs->pending = true;
 }
 
@@ -166,9 +170,10 @@ gf_resize_hook_install (gf_platform_t *platform)
     }
 
     // Hook 2: Location change events during drag (0x800B)
-    data->location_hook = SetWinEventHook (
-        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, NULL,
-        _location_change_proc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    data->location_hook
+        = SetWinEventHook (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, NULL,
+                           _resize_location_change_proc, 0, 0,
+                           WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 
     if (!data->location_hook)
     {

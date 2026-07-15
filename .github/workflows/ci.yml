@@ -33,6 +33,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags so the build can derive the version
 
       - name: Install Linux Dependencies
         if: matrix.os == 'ubuntu-latest'
@@ -92,24 +94,25 @@ jobs:
           echo "Running binary_builder.bat..."
           cmd.exe //c "scripts\\binary_builder.bat" > build_log.txt 2>&1 || true
           
-          if [ ! -f "GridFlux-1.0.0.msi" ]; then
+          if ! ls GridFlux-*.msi >/dev/null 2>&1; then
             echo "--- BUILD LOG ---"
             cat build_log.txt
-            echo "Build failed! GridFlux-1.0.0.msi was not created."
+            echo "Build failed! No GridFlux-*.msi was created."
             exit 1
           fi
-          echo "Build completed successfully."
+          echo "Build completed successfully: $(ls GridFlux-*.msi)"
 
       - name: Test MSI Installation (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          $msiPath = "$PWD\GridFlux-1.0.0.msi"
+          $msi = Get-ChildItem -Path $PWD -Filter "GridFlux-*.msi" | Select-Object -First 1
           $logPath = "$PWD\msi_install.log"
-          if (-not (Test-Path $msiPath)) {
-            Write-Error "MSI file NOT found at $msiPath! Directory contents:"
+          if (-not $msi) {
+            Write-Error "No GridFlux-*.msi found! Directory contents:"
             Get-ChildItem
             exit 1
           }
+          $msiPath = $msi.FullName
           Write-Host "Found MSI at $msiPath. Installing..."
           $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", "`"$msiPath`"", "/qn", "/norestart", "/l*v", "`"$logPath`"" -Wait -NoNewWindow -PassThru
           Write-Host "msiexec exited with code $($proc.ExitCode)"

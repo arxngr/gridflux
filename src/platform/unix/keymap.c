@@ -81,6 +81,32 @@ gf_keymap_cleanup (gf_platform_t *platform)
     GF_LOG_INFO ("Keymap cleaned up");
 }
 
+// Map a raw XI key-press cookie event to a workspace action (or GF_KEY_NONE).
+// Only Ctrl+Win (GF_MOD_MASK) + Left/Right are recognised.
+static gf_key_action_t
+_keymap_action_from_raw (gf_display_t display, XEvent *ev)
+{
+    XIRawEvent *raw = (XIRawEvent *)ev->xcookie.data;
+    KeySym sym = XkbKeycodeToKeysym (display, raw->detail, 0, 0);
+
+    // Read current modifier state from the keyboard. Raw events don't carry
+    // modifier state, so we query it explicitly.
+    Window root_ret, child_ret;
+    int rx, ry, wx, wy;
+    unsigned int mods = 0;
+    XQueryPointer (display, DefaultRootWindow (display), &root_ret, &child_ret, &rx, &ry,
+                   &wx, &wy, &mods);
+
+    if ((mods & ~GF_LOCK_MASK) != GF_MOD_MASK)
+        return GF_KEY_NONE;
+
+    if (sym == XK_Left)
+        return GF_KEY_WORKSPACE_PREV;
+    if (sym == XK_Right)
+        return GF_KEY_WORKSPACE_NEXT;
+    return GF_KEY_NONE;
+}
+
 gf_key_action_t
 gf_keymap_poll (gf_platform_t *platform, gf_display_t display)
 {
@@ -103,38 +129,14 @@ gf_keymap_poll (gf_platform_t *platform, gf_display_t display)
         if (!XGetEventData (display, &ev.xcookie))
             continue;
 
+        gf_key_action_t action = GF_KEY_NONE;
         if (ev.xcookie.evtype == XI_RawKeyPress)
-        {
-            XIRawEvent *raw = (XIRawEvent *)ev.xcookie.data;
-            KeySym sym = XkbKeycodeToKeysym (display, raw->detail, 0, 0);
-
-            // Read current modifier state from the keyboard. Raw events
-            // don't carry modifier state, so we query it explicitly.
-            Window root_ret, child_ret;
-            int rx, ry, wx, wy;
-            unsigned int mods = 0;
-            XQueryPointer (display, DefaultRootWindow (display), &root_ret, &child_ret,
-                           &rx, &ry, &wx, &wy, &mods);
-
-            unsigned int clean_mods = mods & ~GF_LOCK_MASK;
-
-            if (clean_mods == GF_MOD_MASK)
-            {
-                gf_key_action_t action = GF_KEY_NONE;
-                if (sym == XK_Left)
-                    action = GF_KEY_WORKSPACE_PREV;
-                else if (sym == XK_Right)
-                    action = GF_KEY_WORKSPACE_NEXT;
-
-                if (action != GF_KEY_NONE)
-                {
-                    XFreeEventData (display, &ev.xcookie);
-                    return action;
-                }
-            }
-        }
+            action = _keymap_action_from_raw (display, &ev);
 
         XFreeEventData (display, &ev.xcookie);
+
+        if (action != GF_KEY_NONE)
+            return action;
     }
 
     return GF_KEY_NONE;

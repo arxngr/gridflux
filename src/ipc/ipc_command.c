@@ -135,12 +135,11 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
     switch (result)
     {
     case GF_SUCCESS:
-        snprintf (resp.message, sizeof (resp.message), "Moved window %p to workspace %d",
-                  (void *)window_id, target_workspace);
+        snprintf (resp.message, sizeof (resp.message), "Window moved to workspace %d",
+                  target_workspace);
         break;
     case GF_ERROR_INVALID_PARAMETER:
-        snprintf (resp.message, sizeof (resp.message), "Window %p not found",
-                  (void *)window_id);
+        snprintf (resp.message, sizeof (resp.message), "Window not found");
         break;
     case GF_ERROR_WORKSPACE_LOCKED:
         snprintf (resp.message, sizeof (resp.message), "Workspace %d is locked",

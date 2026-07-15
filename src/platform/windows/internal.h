@@ -9,26 +9,21 @@
 #include <windows.h>
 
 // --- Window Management ---
-void _get_window_geometry (HWND hwnd, gf_rect_t *rect);
-BOOL _is_app_window (HWND hwnd);
-BOOL _validate_window (HWND hwnd);
+BOOL window_is_app (HWND hwnd);
+BOOL window_validate (HWND hwnd);
 bool window_is_self (gf_display_t display, gf_handle_t window);
-BOOL _is_excluded_class (const char *class_name);
+BOOL window_is_excluded_class (const char *class_name);
 BOOL window_is_border_excluded (HWND hwnd);
-BOOL _is_excluded_style (HWND hwnd);
-BOOL _is_fullscreen_window (HWND hwnd);
-BOOL _is_cloaked_window (HWND hwnd);
-BOOL _is_notification_center (HWND hwnd);
+BOOL window_is_excluded_style (HWND hwnd);
+bool window_is_installer (HWND hwnd);
+BOOL window_is_fullscreen (HWND hwnd);
+BOOL window_is_cloaked (HWND hwnd);
+BOOL window_is_notification_center (HWND hwnd);
 void gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
                           size_t bufsize);
 
-// --- Workspace & System ---
-void _get_taskbar_dimensions (int *left, int *right, int *top, int *bottom);
-
 // --- Border Rendering (Win32 Overlay) ---
-LRESULT CALLBACK _border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 HWND create_border_overlay (HWND target);
-void _update_border (gf_border_t *b, const RECT *gui_rects, int gui_count);
 void gf_border_remove (gf_platform_t *platform, gf_handle_t window);
 void gf_border_update (gf_platform_t *platform, const gf_config_t *config);
 void gf_border_cleanup (gf_platform_t *platform);

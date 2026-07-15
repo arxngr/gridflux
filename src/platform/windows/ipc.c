@@ -116,12 +116,28 @@ connect_to_client (gf_pipe_t *instance)
     return FALSE;
 }
 
+// Close the first `count` pipe instances and free the array (used to unwind a
+// partially-initialised server). Closes each instance's pipe AND event handle.
+// NOTE: the previous CreateEvent-failure path closed only pipes, leaking events.
+static void
+_pipe_destroy_instances (int count)
+{
+    for (int j = 0; j < count; j++)
+    {
+        if (pipe_instances[j].pipe != INVALID_HANDLE_VALUE)
+            CloseHandle (pipe_instances[j].pipe);
+        if (pipe_instances[j].overlapped.hEvent)
+            CloseHandle (pipe_instances[j].overlapped.hEvent);
+    }
+    free (pipe_instances);
+    pipe_instances = NULL;
+}
+
 gf_ipc_handle_t
 gf_ipc_server_create (void)
 {
     const char *pipe_path = gf_ipc_get_socket_path ();
 
-    // Allocate pipe instances array
     pipe_instances = calloc (MAX_PIPE_INSTANCES, sizeof (gf_pipe_t));
     if (!pipe_instances)
     {
@@ -133,18 +149,10 @@ gf_ipc_server_create (void)
     for (int i = 0; i < MAX_PIPE_INSTANCES; i++)
     {
         pipe_instances[i].pipe = create_pipe_instance ();
-
         if (pipe_instances[i].pipe == INVALID_HANDLE_VALUE)
         {
             fprintf (stderr, "CreateNamedPipe failed: %lu\n", GetLastError ());
-            // Clean up previous instances
-            for (int j = 0; j < i; j++)
-            {
-                CloseHandle (pipe_instances[j].pipe);
-                if (pipe_instances[j].overlapped.hEvent)
-                    CloseHandle (pipe_instances[j].overlapped.hEvent);
-            }
-            free (pipe_instances);
+            _pipe_destroy_instances (i);
             return -1;
         }
 
@@ -152,11 +160,7 @@ gf_ipc_server_create (void)
         if (!pipe_instances[i].overlapped.hEvent)
         {
             fprintf (stderr, "CreateEvent failed: %lu\n", GetLastError ());
-            for (int j = 0; j <= i; j++)
-            {
-                CloseHandle (pipe_instances[j].pipe);
-            }
-            free (pipe_instances);
+            _pipe_destroy_instances (i + 1);
             return -1;
         }
 
@@ -193,112 +197,89 @@ gf_ipc_server_destroy (gf_ipc_handle_t handle)
     }
 }
 
+// Handle a fully-read client message: dispatch it, write the reply, and reset
+// the instance to listen for the next connection.
+static void
+_pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
+{
+    inst->buffer[bytes] = '\0';
+
+    gf_ipc_response_t response = { 0 };
+    response.status = GF_IPC_SUCCESS;
+    gf_handle_client_message (inst->buffer, &response, user_data);
+
+    DWORD bytes_written;
+    WriteFile (inst->pipe, &response, sizeof (response), &bytes_written, NULL);
+
+    FlushFileBuffers (inst->pipe);
+    DisconnectNamedPipe (inst->pipe);
+
+    inst->connected = FALSE;
+    connect_to_client (inst);
+}
+
+// Advance one pipe instance: complete a pending connect, then service any
+// readable client message. Returns true if a message was processed.
+static bool
+_pipe_poll_instance (gf_pipe_t *inst, void *user_data)
+{
+    DWORD bytes;
+
+    if (inst->pending_io)
+    {
+        if (!GetOverlappedResult (inst->pipe, &inst->overlapped, &bytes, FALSE))
+        {
+            if (GetLastError () == ERROR_IO_INCOMPLETE)
+                return false; // still waiting for a client
+            // Error occurred, reset this instance
+            DisconnectNamedPipe (inst->pipe);
+            connect_to_client (inst);
+            return false;
+        }
+        inst->pending_io = FALSE;
+        inst->connected = TRUE;
+    }
+
+    if (!inst->connected)
+        return false;
+
+    if (ReadFile (inst->pipe, inst->buffer, sizeof (inst->buffer) - 1, &bytes,
+                  &inst->overlapped))
+    {
+        _pipe_handle_message (inst, bytes, user_data);
+        return true;
+    }
+
+    if (GetLastError () == ERROR_IO_PENDING)
+    {
+        if (WaitForSingleObject (inst->overlapped.hEvent, 0) == WAIT_OBJECT_0)
+        {
+            GetOverlappedResult (inst->pipe, &inst->overlapped, &bytes, FALSE);
+            _pipe_handle_message (inst, bytes, user_data);
+            return true;
+        }
+        return false;
+    }
+
+    // Error occurred
+    DisconnectNamedPipe (inst->pipe);
+    inst->connected = FALSE;
+    connect_to_client (inst);
+    return false;
+}
+
 bool
 gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
 {
+    (void)handle;
+
     if (!pipe_instances)
         return false;
 
-    BOOL processed = FALSE;
-
+    bool processed = false;
     for (int i = 0; i < num_instances; i++)
-    {
-        gf_pipe_t *inst = &pipe_instances[i];
-        DWORD bytes_transferred;
-        BOOL success;
-
-        // Check if there's a pending connection
-        if (inst->pending_io)
-        {
-            success = GetOverlappedResult (inst->pipe, &inst->overlapped,
-                                           &bytes_transferred, FALSE);
-
-            if (!success)
-            {
-                DWORD err = GetLastError ();
-                if (err == ERROR_IO_INCOMPLETE)
-                {
-                    // Still waiting for client
-                    continue;
-                }
-                // Error occurred, reset this instance
-                DisconnectNamedPipe (inst->pipe);
-                connect_to_client (inst);
-                continue;
-            }
-
-            inst->pending_io = FALSE;
-            inst->connected = TRUE;
-        }
-
-        // If connected, try to read data
-        if (inst->connected)
-        {
-            success = ReadFile (inst->pipe, inst->buffer, sizeof (inst->buffer) - 1,
-                                &bytes_transferred, &inst->overlapped);
-
-            if (success)
-            {
-                // Read completed immediately
-                inst->buffer[bytes_transferred] = '\0';
-
-                gf_ipc_response_t response = { 0 };
-                response.status = GF_IPC_SUCCESS;
-
-                gf_handle_client_message (inst->buffer, &response, user_data);
-
-                DWORD bytes_written;
-                WriteFile (inst->pipe, &response, sizeof (response), &bytes_written,
-                           NULL);
-
-                FlushFileBuffers (inst->pipe);
-                DisconnectNamedPipe (inst->pipe);
-
-                inst->connected = FALSE;
-                connect_to_client (inst);
-                processed = TRUE;
-            }
-            else
-            {
-                DWORD err = GetLastError ();
-                if (err == ERROR_IO_PENDING)
-                {
-                    // Wait a bit for the read to complete
-                    DWORD wait = WaitForSingleObject (inst->overlapped.hEvent, 0);
-                    if (wait == WAIT_OBJECT_0)
-                    {
-                        // Read completed
-                        GetOverlappedResult (inst->pipe, &inst->overlapped,
-                                             &bytes_transferred, FALSE);
-                        inst->buffer[bytes_transferred] = '\0';
-
-                        gf_ipc_response_t response = { 0 };
-                        response.status = GF_IPC_SUCCESS;
-
-                        gf_handle_client_message (inst->buffer, &response, user_data);
-
-                        DWORD bytes_written;
-                        WriteFile (inst->pipe, &response, sizeof (response),
-                                   &bytes_written, NULL);
-
-                        FlushFileBuffers (inst->pipe);
-                        DisconnectNamedPipe (inst->pipe);
-
-                        inst->connected = FALSE;
-                        connect_to_client (inst);
-                        processed = TRUE;
-                    }
-                }
-                else
-                {
-                    // Error occurred
-                    DisconnectNamedPipe (inst->pipe);
-                    inst->connected = FALSE;
-                    connect_to_client (inst);
-                }
-            }
-        }
-    }
+        if (_pipe_poll_instance (&pipe_instances[i], user_data))
+            processed = true;
 
     return processed;
 }

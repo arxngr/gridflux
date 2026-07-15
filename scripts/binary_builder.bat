@@ -86,55 +86,49 @@ echo.
 echo Collecting GTK DLLs...
 mkdir build\bin 2>nul
 
-:: Gather dependencies dynamically using ldd
-echo Resolving and copying exact DLL dependencies...
-set "LDD_CMD=!MSYS2_ROOT!\usr\bin\ldd.exe"
-if not exist "%LDD_CMD%" (
-    echo ERROR: ldd not found in MSYS2.
+:: Resolve dependencies with objdump. It reads each binary's PE import table
+:: without loading or executing it, so it works even when a binary is running or
+:: locked. (ldd loads the binary, which fails with "Permission denied" here.)
+echo Resolving and copying DLL dependencies...
+set "OBJDUMP=!MINGW_PATH!\objdump.exe"
+if not exist "!OBJDUMP!" (
+    echo ERROR: objdump not found at !OBJDUMP!
     exit /b 1
 )
 
-:: Put all gridflux binaries into a single ldd invocation, output to a temp file
-"%LDD_CMD%" build\gridflux.exe build\gridflux-gui.exe build\gridflux-cli.exe > build\ldd_out.txt
-
-:: Extract DLL filenames from ldd output for the detected MSYS2 environment
-:: Note: We extract just the DLL filename and copy from MINGW_PATH to avoid
-:: batch delayed-expansion issues with path string substitution.
-set "ENV_PATTERN=/%MSYS2_ENV%/"
-for /f "tokens=1,3" %%A in ('findstr /i "%MSYS2_ENV%" build\ldd_out.txt') do (
-    set "DLL_NAME=%%A"
-    :: Only copy .dll files (skip header lines)
-    echo !DLL_NAME! | findstr /i "\.dll" >nul 2>nul
-    if !ERRORLEVEL! equ 0 (
-        if exist "!MINGW_PATH!\!DLL_NAME!" (
-            copy /y "!MINGW_PATH!\!DLL_NAME!" build\bin\ >nul
-        )
-    )
-)
-
-echo Adding dynamically loaded DLLs that ldd may miss...
-:: Complete list of all required runtime DLLs including json-c, GTK4, and transitive deps
+:: Seed with runtime DLLs that GTK/GLib load dynamically (pixbuf loaders, GIO
+:: modules, ...). These are never listed in an import table, so objdump can't
+:: discover them; their own dependencies are then resolved by the pass below.
 set "RUNTIME_DLLS=libjson-c-5.dll libgtk-4-1.dll libgdk_pixbuf-2.0-0.dll libglib-2.0-0.dll libgobject-2.0-0.dll libgio-2.0-0.dll libgmodule-2.0-0.dll libpangocairo-1.0-0.dll libpango-1.0-0.dll libcairo-gobject-2.dll libcairo-2.dll libepoxy-0.dll libharfbuzz-0.dll libintl-8.dll libsqlite3-0.dll libtiff-6.dll libjpeg-8.dll libpng16-16.dll zlib1.dll libffi-8.dll libgcc_s_seh-1.dll libwinpthread-1.dll libstdc++-6.dll libfribidi-0.dll libthai-0.dll libiconv-2.dll libpcre2-8-0.dll libdatrie-1.dll libjbig-0.dll libdeflate.dll liblzma-5.dll libzstd.dll libwebp-7.dll libLerc.dll libfreetype-6.dll libbrotlidec.dll libbz2-1.dll libbrotlicommon.dll libgraphite2.dll libsharpyuv-0.dll libgraphene-1.0-0.dll libfontconfig-1.dll libcairo-script-interpreter-2.dll libpangoft2-1.0-0.dll libpangowin32-1.0-0.dll libpixman-1-0.dll libexpat-1.dll liblzo2-2.dll libharfbuzz-subset-0.dll liborc-0.4-0.dll"
 
 for %%D in (%RUNTIME_DLLS%) do (
-    if not exist "build\bin\%%D" (
-        if exist "!MINGW_PATH!\%%D" (
-            copy /y "!MINGW_PATH!\%%D" build\bin\ >nul
-        )
-    )
+    if not exist "build\bin\%%D" if exist "!MINGW_PATH!\%%D" copy /y "!MINGW_PATH!\%%D" build\bin\ >nul
 )
 
-:: Verify all required MSYS2 DLLs are present
-echo Verifying all required DLLs are bundled...
+:: Recursively pull in imports: scan the executables and every DLL collected so
+:: far, copy any import that lives in the MinGW bin directory (this skips Windows
+:: system DLLs, which are not there), and repeat until nothing new is found.
+set /a GF_PASS=0
+:gf_resolve
+set /a GF_PASS+=1
+set "GF_COPIED=0"
+del build\deps.txt 2>nul
+for %%B in (build\gridflux.exe build\gridflux-gui.exe build\gridflux-cli.exe build\bin\*.dll) do "!OBJDUMP!" -p "%%B" >> build\deps.txt 2>nul
+for /f "tokens=3" %%D in ('findstr /c:"DLL Name:" build\deps.txt') do (
+    if not exist "build\bin\%%D" if exist "!MINGW_PATH!\%%D" (
+        copy /y "!MINGW_PATH!\%%D" build\bin\ >nul
+        set /a GF_COPIED+=1
+    )
+)
+if !GF_COPIED! gtr 0 if !GF_PASS! lss 15 goto gf_resolve
+
+:: Verify every bundleable import dependency made it into build\bin.
+echo Verifying required DLLs are bundled...
 set "MISSING_COUNT=0"
-for /f "tokens=1,3" %%A in ('findstr /i "%MSYS2_ENV%" build\ldd_out.txt') do (
-    set "DLL_NAME=%%A"
-    echo !DLL_NAME! | findstr /i "\.dll" >nul 2>nul
-    if !ERRORLEVEL! equ 0 (
-        if not exist "build\bin\!DLL_NAME!" (
-            echo   MISSING: !DLL_NAME!
-            set /a MISSING_COUNT+=1
-        )
+for /f "tokens=3" %%D in ('findstr /c:"DLL Name:" build\deps.txt') do (
+    if exist "!MINGW_PATH!\%%D" if not exist "build\bin\%%D" (
+        echo   MISSING: %%D
+        set /a MISSING_COUNT+=1
     )
 )
 if !MISSING_COUNT! gtr 0 (
@@ -239,10 +233,20 @@ echo.
 echo Building MSI installer
 echo.
 
-set MSI_NAME=GridFlux-1.0.0.msi
+:: Derive release version from the latest git tag (e.g. v1.3.0 -> 1.3.0),
+:: falling back to 1.0.0 when no tag is reachable.
+set "GF_VERSION=1.0.0"
+for /f "delims=" %%i in ('git describe --tags --abbrev^=0 2^>nul') do set "GF_TAG=%%i"
+if defined GF_TAG (
+    if "!GF_TAG:~0,1!"=="v" (set "GF_VERSION=!GF_TAG:~1!") else (set "GF_VERSION=!GF_TAG!")
+)
+set "GF_VERSION4=!GF_VERSION!.0"
+echo Release version: !GF_VERSION!
 
-:: Build MSI with WiX v4+ command
-wix build -arch x64 -acceptEula wix7 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out %MSI_NAME%
+set "MSI_NAME=GridFlux-!GF_VERSION!.msi"
+
+:: Build MSI with WiX v4+ command (version reaches gridflux.wxs via $(var.Version))
+wix build -arch x64 -acceptEula wix7 -d Version=!GF_VERSION! -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out "%MSI_NAME%"
 if !ERRORLEVEL! neq 0 (
     echo ERROR: wix build failed
     exit /b 1
@@ -318,7 +322,7 @@ echo.
 echo   ^<Identity
 echo     Name="ArdiNugraha.GridFluxVirtualWorkspace"
 echo     Publisher="CN=C0CED2D5-3090-4872-B6DE-67F97E7E24CD"
-echo     Version="1.0.0.0"
+echo     Version="!GF_VERSION4!"
 echo     ProcessorArchitecture="x64" /^>
 echo.
 echo   ^<Properties^>
@@ -362,7 +366,7 @@ echo ^</Package^>
 ) > "!MANIFEST!"
 
 echo Building MSIX...
-"!MAKEAPPX!" pack /d "!MSIX_DIR!" /p GridFlux-1.0.0.msix /o /l
+"!MAKEAPPX!" pack /d "!MSIX_DIR!" /p "GridFlux-!GF_VERSION!.msix" /o /l
 
 if !ERRORLEVEL! neq 0 (
     echo ERROR: Failed to build MSIX package.
@@ -370,7 +374,7 @@ if !ERRORLEVEL! neq 0 (
     echo.
     echo ================================================
     echo MSIX build Complete!
-    echo Output: GridFlux-1.0.0.msix
+    echo Output: GridFlux-!GF_VERSION!.msix
     echo Submit this file to the Microsoft Store via Partner Center.
     echo ================================================
 )
