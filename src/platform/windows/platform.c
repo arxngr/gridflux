@@ -96,6 +96,27 @@ gf_platform_create (void)
     return platform;
 }
 
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT)-4)
+#endif
+
+// Request Per-Monitor-V2 DPI awareness so GetWindowRect stays in the same
+// (physical) coordinate space as the DWM extended-frame bounds we subtract from
+// it -- without this, tiling and borders drift on mixed-DPI multi-monitor
+// setups. The app manifest declares the same awareness; this covers hosts where
+// the embedded manifest is not honoured. Falls back to system DPI on older OSes.
+static void
+_ensure_dpi_awareness (void)
+{
+    HMODULE user32 = GetModuleHandleW (L"user32.dll");
+    BOOL (WINAPI * set_ctx) (DPI_AWARENESS_CONTEXT) = NULL;
+    if (user32)
+        set_ctx = (BOOL (WINAPI *) (DPI_AWARENESS_CONTEXT))GetProcAddress (
+            user32, "SetProcessDpiAwarenessContext");
+    if (!set_ctx || !set_ctx (DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+        SetProcessDPIAware ();
+}
+
 gf_err_t
 gf_platform_init (gf_platform_t *platform, gf_display_t *display)
 {
@@ -105,6 +126,8 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
         return GF_ERROR_INVALID_PARAMETER;
 
     *display = NULL;
+
+    _ensure_dpi_awareness ();
 
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;

@@ -1,6 +1,7 @@
 #ifdef _WIN32
 
 #include "../../ipc/ipc.h"
+#include <sddl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,17 +33,17 @@ gf_pipe_security_attributes (void)
     if (!sa)
         return NULL;
 
-    PSECURITY_DESCRIPTOR sd = malloc (SECURITY_DESCRIPTOR_MIN_LENGTH);
-    if (!sd)
+    // Build an explicit DACL instead of a NULL DACL (which would grant Everyone
+    // access). Grant full access (GA) only to the pipe owner / current user
+    // (OW), SYSTEM (SY) and the Administrators group (BA). The descriptor is
+    // allocated by LocalAlloc and must be released with LocalFree by the caller.
+    PSECURITY_DESCRIPTOR sd = NULL;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorA (
+            "D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)", SDDL_REVISION_1, &sd, NULL))
     {
         free (sa);
         return NULL;
     }
-
-    InitializeSecurityDescriptor (sd, SECURITY_DESCRIPTOR_REVISION);
-
-    // NULL DACL = allow same-user access (Unix chmod 0600 equivalent)
-    SetSecurityDescriptorDacl (sd, TRUE, NULL, FALSE);
 
     sa->nLength = sizeof (*sa);
     sa->lpSecurityDescriptor = sd;
@@ -64,20 +65,27 @@ gf_ipc_get_socket_path (void)
 }
 
 static HANDLE
-create_pipe_instance (void)
+create_pipe_instance (BOOL first_instance)
 {
     const char *pipe_path = gf_ipc_get_socket_path ();
 
     SECURITY_ATTRIBUTES *sa = gf_pipe_security_attributes ();
 
-    HANDLE pipe
-        = CreateNamedPipeA (pipe_path, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
-                            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-                            MAX_PIPE_INSTANCES, GF_PIPE_BUFSIZE, GF_PIPE_BUFSIZE, 0, sa);
+    // FILE_FLAG_FIRST_PIPE_INSTANCE on the first instance ensures we are the
+    // creator of the pipe (a squatter cannot pre-create it). PIPE_REJECT_REMOTE_
+    // CLIENTS blocks connections from other machines.
+    DWORD open_mode = PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED;
+    if (first_instance)
+        open_mode |= FILE_FLAG_FIRST_PIPE_INSTANCE;
+
+    HANDLE pipe = CreateNamedPipeA (
+        pipe_path, open_mode,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+        MAX_PIPE_INSTANCES, GF_PIPE_BUFSIZE, GF_PIPE_BUFSIZE, 0, sa);
 
     if (sa)
     {
-        free (sa->lpSecurityDescriptor);
+        LocalFree (sa->lpSecurityDescriptor);
         free (sa);
     }
 
@@ -148,7 +156,7 @@ gf_ipc_server_create (void)
     // Create multiple pipe instances for concurrent connections
     for (int i = 0; i < MAX_PIPE_INSTANCES; i++)
     {
-        pipe_instances[i].pipe = create_pipe_instance ();
+        pipe_instances[i].pipe = create_pipe_instance (i == 0);
         if (pipe_instances[i].pipe == INVALID_HANDLE_VALUE)
         {
             fprintf (stderr, "CreateNamedPipe failed: %lu\n", GetLastError ());
@@ -197,6 +205,27 @@ gf_ipc_server_destroy (gf_ipc_handle_t handle)
     }
 }
 
+// Synchronously write `len` bytes to a FILE_FLAG_OVERLAPPED pipe handle.
+// A blocking WriteFile with a NULL lpOverlapped is invalid on an overlapped
+// handle, so we drive the async write to completion via a temporary
+// manual-reset event and GetOverlappedResult. Returns TRUE on success.
+static BOOL
+_pipe_write_sync (HANDLE pipe, const void *data, DWORD len)
+{
+    OVERLAPPED ov = { 0 };
+    ov.hEvent = CreateEvent (NULL, TRUE, FALSE, NULL);
+    if (!ov.hEvent)
+        return FALSE;
+
+    DWORD written = 0;
+    BOOL ok = WriteFile (pipe, data, len, &written, &ov);
+    if (!ok && GetLastError () == ERROR_IO_PENDING)
+        ok = GetOverlappedResult (pipe, &ov, &written, TRUE);
+
+    CloseHandle (ov.hEvent);
+    return ok && written == len;
+}
+
 // Handle a fully-read client message: dispatch it, write the reply, and reset
 // the instance to listen for the next connection.
 static void
@@ -208,8 +237,8 @@ _pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
     response.status = GF_IPC_SUCCESS;
     gf_handle_client_message (inst->buffer, &response, user_data);
 
-    DWORD bytes_written;
-    WriteFile (inst->pipe, &response, sizeof (response), &bytes_written, NULL);
+    if (!_pipe_write_sync (inst->pipe, &response, sizeof (response)))
+        fprintf (stderr, "Pipe reply write failed: %lu\n", GetLastError ());
 
     FlushFileBuffers (inst->pipe);
     DisconnectNamedPipe (inst->pipe);
@@ -223,7 +252,7 @@ _pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
 static bool
 _pipe_poll_instance (gf_pipe_t *inst, void *user_data)
 {
-    DWORD bytes;
+    DWORD bytes = 0;
 
     if (inst->pending_io)
     {
@@ -254,7 +283,15 @@ _pipe_poll_instance (gf_pipe_t *inst, void *user_data)
     {
         if (WaitForSingleObject (inst->overlapped.hEvent, 0) == WAIT_OBJECT_0)
         {
-            GetOverlappedResult (inst->pipe, &inst->overlapped, &bytes, FALSE);
+            // Never index the buffer with an unvalidated byte count: bail out and
+            // re-arm the instance if the overlapped read did not complete cleanly.
+            if (!GetOverlappedResult (inst->pipe, &inst->overlapped, &bytes, FALSE))
+            {
+                DisconnectNamedPipe (inst->pipe);
+                inst->connected = FALSE;
+                connect_to_client (inst);
+                return false;
+            }
             _pipe_handle_message (inst, bytes, user_data);
             return true;
         }

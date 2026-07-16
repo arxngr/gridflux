@@ -124,12 +124,17 @@ remove_size_constraints (Display *dpy, Window win)
     XSizeHints *hints = XAllocSizeHints ();
     if (!hints)
         return GF_ERROR_MEMORY_ALLOCATION;
-    hints->flags = 0;
-    hints->min_width = 1;
-    hints->min_height = 1;
-    hints->max_width = INT_MAX;
-    hints->max_height = INT_MAX;
-    XSetWMNormalHints (dpy, win, hints);
+
+    // Only clear the constraint flags so the tiler can freely resize the window,
+    // while preserving every other hint (base size, gravity, etc.). If the client
+    // has no WM_NORMAL_HINTS we leave it untouched rather than zeroing the struct.
+    long supplied = 0;
+    if (XGetWMNormalHints (dpy, win, hints, &supplied))
+    {
+        hints->flags &= ~(PMinSize | PMaxSize | PResizeInc | PAspect);
+        XSetWMNormalHints (dpy, win, hints);
+    }
+
     XFree (hints);
     return GF_SUCCESS;
 }
@@ -197,13 +202,23 @@ query_window_info (Display *display, Window window, gf_platform_atoms_t *atoms,
     unsigned long desktop_nitems = 0;
     if (gf_platform_get_window_property (display, window, atoms->net_wm_desktop,
                                          XA_CARDINAL, &desktop_data, &desktop_nitems)
-            == GF_SUCCESS
-        && desktop_nitems > 0)
+            != GF_SUCCESS
+        || desktop_nitems == 0)
+    {
+        // Desktop unreadable: we cannot confirm the window is on the requested
+        // workspace, so exclude it rather than showing it on every workspace.
+        if (workspace_id != NULL)
+            return false;
+    }
+    else
     {
         unsigned long window_workspace = *(unsigned long *)desktop_data;
         XFree (desktop_data);
 
-        if (workspace_id != NULL && (gf_ws_id_t)window_workspace != *workspace_id)
+        // 0xFFFFFFFF marks a sticky window that appears on all workspaces.
+        bool is_sticky = (window_workspace == 0xFFFFFFFFUL);
+        if (workspace_id != NULL && !is_sticky
+            && (gf_ws_id_t)window_workspace != *workspace_id)
         {
             return false;
         }

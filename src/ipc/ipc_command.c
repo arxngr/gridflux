@@ -2,12 +2,24 @@
 #include "../config/rules.h"
 #include "../core/internal.h"
 #include "../core/wm.h"
+#include "../utils/logger.h"
 #include "../utils/memory.h"
 #include "ipc.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// How many fixed-layout records fit in the reply payload after a header of
+// `header_bytes`. Used to cap every list we marshal into response->message so a
+// large window/workspace count can never overrun the fixed buffer.
+static uint32_t
+gf_ipc_max_records (size_t header_bytes, size_t record_size)
+{
+    if (record_size == 0 || GF_IPC_MSG_SIZE <= header_bytes)
+        return 0;
+    return (uint32_t)((GF_IPC_MSG_SIZE - header_bytes) / record_size);
+}
 
 static void
 gf_parse_command (const char *input, char *command, char *args, size_t args_size)
@@ -47,13 +59,20 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
         }
     }
 
+    uint32_t max_items
+        = gf_ipc_max_records (2 * sizeof (uint32_t), sizeof (gf_win_info_t));
+    uint32_t send_count = (windows->count < max_items) ? windows->count : max_items;
+    if (send_count < windows->count)
+        GF_LOG_WARN ("query windows: truncating %u -> %u to fit IPC buffer",
+                     windows->count, send_count);
+
     size_t offset = 0;
-    memcpy (response->message + offset, &windows->count, sizeof (uint32_t));
+    memcpy (response->message + offset, &send_count, sizeof (uint32_t));
     offset += sizeof (uint32_t);
     memcpy (response->message + offset, &windows->capacity, sizeof (uint32_t));
     offset += sizeof (uint32_t);
     memcpy (response->message + offset, windows->items,
-            windows->count * sizeof (gf_win_info_t));
+            send_count * sizeof (gf_win_info_t));
 }
 
 static void
@@ -70,8 +89,13 @@ gf_cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *us
         return;
     }
 
+    size_t header = 2 * sizeof (uint32_t) + sizeof (gf_ws_id_t);
+    uint32_t max_items = gf_ipc_max_records (header, sizeof (gf_ws_info_t));
+    uint32_t send_count
+        = (workspaces->count < max_items) ? workspaces->count : max_items;
+
     size_t offset = 0;
-    memcpy (response->message + offset, &workspaces->count, sizeof (uint32_t));
+    memcpy (response->message + offset, &send_count, sizeof (uint32_t));
     offset += sizeof (uint32_t);
     memcpy (response->message + offset, &workspaces->capacity, sizeof (uint32_t));
     offset += sizeof (uint32_t);
@@ -79,7 +103,7 @@ gf_cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *us
             sizeof (gf_ws_id_t));
     offset += sizeof (gf_ws_id_t);
     memcpy (response->message + offset, workspaces->items,
-            workspaces->count * sizeof (gf_ws_info_t));
+            send_count * sizeof (gf_ws_info_t));
 }
 
 static void
@@ -189,10 +213,10 @@ gf_cmd_lock_workspace (const char *args, gf_ipc_response_t *response, void *user
     case GF_SUCCESS:
     {
         gf_ws_list_t *workspaces = wm_workspaces (m);
-        gf_ws_info_t *ws = &workspaces->items[workspace_id];
+        gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, workspace_id);
         snprintf (resp.message, sizeof (resp.message),
                   "Locked workspace %d (%u windows will remain)", workspace_id,
-                  ws->window_count);
+                  ws ? ws->window_count : 0);
         break;
     }
     case GF_ERROR_INVALID_PARAMETER:
@@ -238,10 +262,10 @@ gf_cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *us
     case GF_SUCCESS:
     {
         gf_ws_list_t *workspaces = wm_workspaces (m);
-        gf_ws_info_t *ws = &workspaces->items[workspace_id];
+        gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, workspace_id);
         snprintf (resp.message, sizeof (resp.message),
                   "Unlocked workspace %d (%d slots available)", workspace_id,
-                  ws->available_space);
+                  ws ? ws->available_space : 0);
         break;
     }
     case GF_ERROR_INVALID_PARAMETER:
@@ -581,6 +605,17 @@ gf_parse_workspace_list (const char *buffer)
     memcpy (&list->active_workspace, buffer + offset, sizeof (gf_ws_id_t));
     offset += sizeof (gf_ws_id_t);
 
+    // Never trust the peer-supplied count: clamp it to what the fixed reply
+    // buffer can actually hold before allocating/copying.
+    uint32_t max_items = gf_ipc_max_records (offset, sizeof (gf_ws_info_t));
+    if (list->count > max_items)
+        list->count = max_items;
+    if (list->count == 0)
+    {
+        list->items = NULL;
+        return list;
+    }
+
     list->items = gf_malloc (list->count * sizeof (gf_ws_info_t));
     if (!list->items)
     {
@@ -608,6 +643,17 @@ gf_parse_window_list (const char *buffer)
     offset += sizeof (uint32_t);
     memcpy (&list->capacity, buffer + offset, sizeof (uint32_t));
     offset += sizeof (uint32_t);
+
+    // Never trust the peer-supplied count: clamp it to what the fixed reply
+    // buffer can actually hold before allocating/copying.
+    uint32_t max_items = gf_ipc_max_records (offset, sizeof (gf_win_info_t));
+    if (list->count > max_items)
+        list->count = max_items;
+    if (list->count == 0)
+    {
+        list->items = NULL;
+        return list;
+    }
 
     list->items = gf_malloc (list->count * sizeof (gf_win_info_t));
     if (!list->items)

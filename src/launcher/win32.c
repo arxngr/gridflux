@@ -13,6 +13,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
+#include <sddl.h>
 // clang-format on
 
 #include <stdio.h>
@@ -111,54 +112,141 @@ launch_same_level (const wchar_t *exe_path, const wchar_t *working_dir)
     return pi.hProcess;
 }
 
+// Escape XML metacharacters in `in` into `out`. Prevents a path containing
+// '&', '<', '>', quotes from breaking (or injecting into) the task XML.
+// Returns FALSE if the escaped result would not fit in `out`.
+static BOOL
+xml_escape_w (const wchar_t *in, wchar_t *out, size_t out_len)
+{
+    size_t o = 0;
+    for (size_t i = 0; in[i] != L'\0'; i++)
+    {
+        const wchar_t *rep = NULL;
+        switch (in[i])
+        {
+        case L'&': rep = L"&amp;"; break;
+        case L'<': rep = L"&lt;"; break;
+        case L'>': rep = L"&gt;"; break;
+        case L'"': rep = L"&quot;"; break;
+        case L'\'': rep = L"&apos;"; break;
+        }
+        size_t rl = rep ? wcslen (rep) : 1;
+        if (o + rl >= out_len)
+            return FALSE;
+        if (rep)
+            wmemcpy (out + o, rep, rl);
+        else
+            out[o] = in[i];
+        o += rl;
+    }
+    out[o] = L'\0';
+    return TRUE;
+}
+
+// Build a SECURITY_ATTRIBUTES whose DACL grants access only to the file owner
+// (current user), SYSTEM and Administrators. Caller LocalFrees the descriptor.
+static BOOL
+make_owner_only_sa (SECURITY_ATTRIBUTES *sa)
+{
+    PSECURITY_DESCRIPTOR sd = NULL;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW (
+            L"D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)", SDDL_REVISION_1, &sd, NULL))
+        return FALSE;
+    sa->nLength = sizeof (*sa);
+    sa->lpSecurityDescriptor = sd;
+    sa->bInheritHandle = FALSE;
+    return TRUE;
+}
+
+// Write the scheduled-task XML (UTF-16LE + BOM) to xml_path with a restrictive
+// DACL so a non-privileged user cannot tamper with it before schtasks reads it.
+// launcher_path is XML-escaped before embedding. Returns FALSE on any failure.
+static BOOL
+write_task_xml (const wchar_t *xml_path, const wchar_t *launcher_path)
+{
+    wchar_t esc_path[MAX_PATH * 6];
+    if (!xml_escape_w (launcher_path, esc_path, MAX_PATH * 6))
+        return FALSE;
+
+    SECURITY_ATTRIBUTES sa = { 0 };
+    if (!make_owner_only_sa (&sa))
+        return FALSE;
+
+    // Drop any pre-existing file, then create with CREATE_NEW so our restrictive
+    // DACL is actually applied (it is ignored when opening an existing file) and
+    // creation fails closed if an attacker races to re-plant the file.
+    DeleteFileW (xml_path);
+    HANDLE h = CreateFileW (xml_path, GENERIC_WRITE, 0, &sa, CREATE_NEW,
+                            FILE_ATTRIBUTE_NORMAL, NULL);
+    LocalFree (sa.lpSecurityDescriptor);
+    if (h == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    wchar_t xml[2048];
+    int n = _snwprintf (
+        xml, 2048,
+        L"<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n"
+        L"<Task version=\"1.2\" "
+        L"xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\n"
+        L"  <Triggers>\n"
+        L"    <LogonTrigger><Enabled>true</Enabled></LogonTrigger>\n"
+        L"  </Triggers>\n"
+        L"  <Principals>\n"
+        L"    <Principal id=\"Author\">\n"
+        L"      <GroupId>S-1-5-32-545</GroupId>\n"
+        L"      <RunLevel>HighestAvailable</RunLevel>\n"
+        L"    </Principal>\n"
+        L"  </Principals>\n"
+        L"  <Settings>\n"
+        L"    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n"
+        L"    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\n"
+        L"    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\n"
+        L"    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\n"
+        L"  </Settings>\n"
+        L"  <Actions Context=\"Author\">\n"
+        L"    <Exec><Command>%s</Command></Exec>\n"
+        L"  </Actions>\n"
+        L"</Task>",
+        esc_path);
+    if (n < 0)
+    {
+        CloseHandle (h);
+        return FALSE;
+    }
+
+    static const unsigned char bom[2] = { 0xFF, 0xFE };
+    DWORD written = 0;
+    BOOL ok = WriteFile (h, bom, 2, &written, NULL) && written == 2;
+    if (ok)
+    {
+        DWORD nbytes = (DWORD)((size_t)n * sizeof (wchar_t));
+        ok = WriteFile (h, xml, nbytes, &written, NULL) && written == nbytes;
+    }
+    CloseHandle (h);
+    return ok;
+}
+
 static void
 install_task (const wchar_t *launcher_path, const wchar_t *dir)
 {
+    (void)dir;
+
     wchar_t temp_dir[MAX_PATH];
-    GetTempPathW (MAX_PATH, temp_dir);
+    if (!GetTempPathW (MAX_PATH, temp_dir))
+        return;
 
     wchar_t xml_path[MAX_PATH];
     _snwprintf (xml_path, MAX_PATH, L"%sgridflux_task.xml", temp_dir);
 
-    FILE *f = _wfopen (xml_path, L"wb");
-    if (!f)
+    if (!write_task_xml (xml_path, launcher_path))
         return;
 
-    // Write UTF-16 LE BOM
-    fputc (0xFF, f);
-    fputc (0xFE, f);
-
-    wchar_t xml[2048];
-    _snwprintf (xml, 2048,
-                L"<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n"
-                L"<Task version=\"1.2\" "
-                L"xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\n"
-                L"  <Triggers>\n"
-                L"    <LogonTrigger><Enabled>true</Enabled></LogonTrigger>\n"
-                L"  </Triggers>\n"
-                L"  <Principals>\n"
-                L"    <Principal id=\"Author\">\n"
-                L"      <GroupId>S-1-5-32-545</GroupId>\n"
-                L"      <RunLevel>HighestAvailable</RunLevel>\n"
-                L"    </Principal>\n"
-                L"  </Principals>\n"
-                L"  <Settings>\n"
-                L"    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n"
-                L"    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\n"
-                L"    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\n"
-                L"    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\n"
-                L"  </Settings>\n"
-                L"  <Actions Context=\"Author\">\n"
-                L"    <Exec><Command>%s</Command></Exec>\n"
-                L"  </Actions>\n"
-                L"</Task>",
-                launcher_path);
-
-    fwrite (xml, sizeof (wchar_t), wcslen (xml), f);
-    fclose (f);
-
     wchar_t sys_dir[MAX_PATH];
-    GetSystemDirectoryW (sys_dir, MAX_PATH);
+    if (!GetSystemDirectoryW (sys_dir, MAX_PATH))
+    {
+        DeleteFileW (xml_path);
+        return;
+    }
 
     wchar_t cmd[1024];
     _snwprintf (cmd, 1024, L"%s\\schtasks.exe /Create /TN \"GridFlux\" /XML \"%s\" /F",
@@ -229,6 +317,52 @@ uninstall_task (void)
     }
 }
 
+// Launch gridflux.exe and restart it whenever it exits non-zero (crash). Gives
+// up after repeated launch failures — most importantly when the user declines
+// the UAC elevation prompt — so we never re-prompt in an endless loop.
+static void
+run_restart_loop (const wchar_t *exe_path, const wchar_t *dir, BOOL elevated)
+{
+    int launch_failures = 0;
+
+    for (;;)
+    {
+        if (GetFileAttributesW (exe_path) == INVALID_FILE_ATTRIBUTES)
+            break;
+
+        HANDLE hProcess = elevated ? launch_same_level (exe_path, dir)
+                                   : launch_elevated (exe_path, dir);
+
+        if (!hProcess)
+        {
+            // NULL handle: ShellExecuteExW/CreateProcessW failed, typically
+            // because the user declined UAC. Stop after a few attempts.
+            if (++launch_failures >= 3)
+            {
+                MessageBoxW (NULL,
+                             L"GridFlux could not start: administrator elevation "
+                             L"was declined or the process failed to launch.",
+                             L"GridFlux", MB_OK | MB_ICONERROR);
+                break;
+            }
+            Sleep (RESTART_DELAY);
+            continue;
+        }
+
+        launch_failures = 0;
+        WaitForSingleObject (hProcess, INFINITE);
+
+        DWORD exit_code = 0;
+        GetExitCodeProcess (hProcess, &exit_code);
+        CloseHandle (hProcess);
+
+        if (exit_code == 0)
+            break;
+
+        Sleep (RESTART_DELAY);
+    }
+}
+
 int WINAPI
 WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -278,35 +412,7 @@ WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd
 
     BOOL elevated_at_start = is_elevated ();
 
-    for (;;)
-    {
-        if (GetFileAttributesW (exe_path) == INVALID_FILE_ATTRIBUTES)
-            break;
-
-        HANDLE hProcess;
-
-        if (elevated_at_start)
-            hProcess = launch_same_level (exe_path, dir);
-        else
-            hProcess = launch_elevated (exe_path, dir);
-
-        if (!hProcess)
-        {
-            Sleep (RESTART_DELAY);
-            continue;
-        }
-
-        WaitForSingleObject (hProcess, INFINITE);
-
-        DWORD exit_code = 0;
-        GetExitCodeProcess (hProcess, &exit_code);
-        CloseHandle (hProcess);
-
-        if (exit_code == 0)
-            break;
-
-        Sleep (RESTART_DELAY);
-    }
+    run_restart_loop (exe_path, dir, elevated_at_start);
 
     ReleaseMutex (mutex);
     CloseHandle (mutex);
