@@ -1,11 +1,12 @@
 #ifdef _WIN32
 
 #include "../../ipc/ipc.h"
+#include <windows.h>
+
 #include <sddl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <windows.h>
 
 #define GF_PIPE_NAME "\\\\.\\pipe\\gridflux"
 #define GF_PIPE_BUFSIZE 8192
