@@ -111,7 +111,14 @@ read_file (const char *filename)
     long len = ftell (f);
     rewind (f);
 
-    char *data = malloc (len + 1);
+    if (len < 0)
+    {
+        fprintf (stderr, "Error: Unable to determine size of file '%s'.\n", filename);
+        fclose (f);
+        return NULL;
+    }
+
+    char *data = malloc ((size_t)len + 1);
     if (!data)
     {
         fprintf (stderr, "Error: Memory allocation failed while reading file '%s'.\n",
@@ -120,8 +127,10 @@ read_file (const char *filename)
         return NULL;
     }
 
-    fread (data, 1, len, f);
-    data[len] = '\0';
+    // Use the actual bytes read to place the NUL, so a short read can never
+    // leave uninitialised bytes before the terminator.
+    size_t nread = fread (data, 1, (size_t)len, f);
+    data[nread] = '\0';
     fclose (f);
     return data;
 }
@@ -280,6 +289,15 @@ load_or_create_config (const char *filename)
 
     set_if_missing_int (json, "max_workspaces", &cfg.max_workspaces,
                         DEFAULT_CONFIG.max_workspaces, &changed);
+
+    // Clamp to the fixed array bounds so a malicious/typo'd config can never
+    // drive locked_workspaces[] (size GF_MAX_LOCKED_WORKSPACES) out of range.
+    if (cfg.max_workspaces == 0 || cfg.max_workspaces > GF_MAX_WORKSPACES)
+    {
+        cfg.max_workspaces = (cfg.max_workspaces == 0) ? DEFAULT_CONFIG.max_workspaces
+                                                       : GF_MAX_WORKSPACES;
+        changed = true;
+    }
 
     set_if_missing_int (json, "min_window_size", &cfg.min_window_size,
                         DEFAULT_CONFIG.min_window_size, &changed);
@@ -450,6 +468,8 @@ gf_config_workspace_lock (gf_config_t *config, gf_ws_id_t ws_id)
         }
     }
 
+    // max_workspaces is clamped to the array size at load, so it is the
+    // authoritative (config-driven) limit here.
     if (config->locked_workspaces_count >= config->max_workspaces)
     {
         return GF_ERROR_INVALID_PARAMETER;

@@ -117,6 +117,50 @@ gf_verify_peer_credentials (int client_sock)
     return cred.uid == getuid ();
 }
 
+// Send exactly len bytes, retrying on EINTR and looping over partial writes.
+static bool
+send_all (int fd, const void *buf, size_t len)
+{
+    const char *p = (const char *)buf;
+    size_t sent = 0;
+
+    while (sent < len)
+    {
+        ssize_t n = send (fd, p + sent, len - sent, 0);
+        if (n > 0)
+        {
+            sent += (size_t)n;
+            continue;
+        }
+        if (n < 0 && errno == EINTR)
+            continue;
+        return false; // error or peer closed
+    }
+    return true;
+}
+
+// Receive exactly len bytes, retrying on EINTR and looping over partial reads.
+static bool
+recv_all (int fd, void *buf, size_t len)
+{
+    char *p = (char *)buf;
+    size_t got = 0;
+
+    while (got < len)
+    {
+        ssize_t n = recv (fd, p + got, len - got, 0);
+        if (n > 0)
+        {
+            got += (size_t)n;
+            continue;
+        }
+        if (n < 0 && errno == EINTR)
+            continue;
+        return false; // error or peer closed
+    }
+    return true;
+}
+
 bool
 gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
 {
@@ -152,7 +196,8 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
 
         gf_handle_client_message (buffer, &response, user_data);
 
-        send (client, &response, sizeof (response), 0);
+        if (!send_all (client, &response, sizeof (response)))
+            perror ("send");
     }
 
     close (client);
@@ -199,14 +244,13 @@ gf_ipc_client_send (gf_ipc_handle_t handle, const char *command,
     setsockopt (handle, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof (timeout));
 
     size_t len = strlen (command);
-    if (send (handle, command, len, 0) != (ssize_t)len)
+    if (!send_all (handle, command, len))
     {
         perror ("send");
         return false;
     }
 
-    ssize_t n = recv (handle, response, sizeof (*response), 0);
-    if (n != sizeof (*response))
+    if (!recv_all (handle, response, sizeof (*response)))
     {
         perror ("recv");
         return false;

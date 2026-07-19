@@ -92,8 +92,16 @@ gf_window_get_geometry (gf_display_t display, gf_handle_t window, gf_rect_t *geo
         return GF_ERROR_PLATFORM_ERROR;
     }
 
-    geometry->x = attrs.x;
-    geometry->y = attrs.y;
+    // XGetWindowAttributes reports parent-relative x/y; translate to root
+    // coordinates so callers get absolute geometry.
+    Window root = DefaultRootWindow (display);
+    int abs_x, abs_y;
+    Window child;
+    if (!XTranslateCoordinates (display, window, root, 0, 0, &abs_x, &abs_y, &child))
+        return GF_ERROR_PLATFORM_ERROR;
+
+    geometry->x = abs_x;
+    geometry->y = abs_y;
     geometry->width = attrs.width;
     geometry->height = attrs.height;
 
@@ -335,8 +343,10 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
     }
 
     // Map the window first — XIconifyWindow unmaps it, so we need to
-    // re-map before any focus requests can succeed.
+    // re-map before any focus requests can succeed. XSync ensures the WM has
+    // processed the map before we later attempt to set input focus.
     XMapRaised (display, window);
+    XSync (display, False);
 
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     if (!atoms)
@@ -359,9 +369,14 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
                                          5);
     }
 
-    // Force focus transfer — _NET_ACTIVE_WINDOW is advisory, this is
-    // required so gf_wm_event sees the correct focused window.
-    XSetInputFocus (display, window, RevertToPointerRoot, CurrentTime);
+    // Force focus transfer — _NET_ACTIVE_WINDOW is advisory, this is required so
+    // gf_wm_event sees the correct focused window. Only focus once the window is
+    // actually viewable: XSetInputFocus on an unmapped window yields BadMatch.
+    if (XGetWindowAttributes (display, window, &attr) != 0
+        && attr.map_state == IsViewable)
+    {
+        XSetInputFocus (display, window, RevertToPointerRoot, CurrentTime);
+    }
     XFlush (display);
 
     return GF_SUCCESS;

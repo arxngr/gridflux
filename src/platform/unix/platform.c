@@ -155,6 +155,7 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
     if (!data->borders)
     {
         XCloseDisplay (*display);
+        *display = NULL;
         return GF_ERROR_MEMORY_ALLOCATION;
     }
     data->border_count = 0;
@@ -190,6 +191,8 @@ gf_platform_cleanup (gf_display_t display, gf_platform_t *platform)
 
     gf_free (data->borders);
     gf_free (data);
+    // Prevent a double free: gf_platform_destroy also frees platform_data.
+    platform->platform_data = NULL;
 }
 
 gf_err_t
