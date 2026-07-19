@@ -363,8 +363,7 @@ _clamp_edge (gf_win_list_t *windows, gf_win_info_t *source, const gf_rect_t *ini
                                            windows->count, source->workspace_id,
                                            source->monitor_id);
 
-    int32_t target_line
-        = _edge_target_line (dir, *clamp_x, *clamp_y, *clamp_w, *clamp_h);
+    int32_t target_line = _edge_target_line (dir, *clamp_x, *clamp_y, *clamp_w, *clamp_h);
     for (uint32_t i = 0; i < nc; i++)
         target_line = _clamp_line_to_neighbor (target_line, neighbors[i].win,
                                                neighbors[i].align, min_size);
@@ -452,9 +451,8 @@ _propagate_edge_to_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
                                            source->monitor_id);
 
     // The source's edge in its new position -- the line neighbours follow.
-    int32_t new_line = _edge_target_line (dir, current->x, current->y,
-                                          (int32_t)current->width,
-                                          (int32_t)current->height);
+    int32_t new_line = _edge_target_line (
+        dir, current->x, current->y, (int32_t)current->width, (int32_t)current->height);
 
     for (uint32_t i = 0; i < nc; i++)
         _resize_neighbor_edge (neighbors[i].win, neighbors[i].align, new_line, min_size,
@@ -668,9 +666,8 @@ _clamp_all_corner_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
     if (!nbs)
         return;
 
-    uint32_t count
-        = _find_all_corner_neighbors (windows, source_id, initial, dir, workspace_id,
-                                      monitor_id, nbs, windows->count);
+    uint32_t count = _find_all_corner_neighbors (
+        windows, source_id, initial, dir, workspace_id, monitor_id, nbs, windows->count);
     if (!count)
     {
         gf_free (nbs);
@@ -784,9 +781,8 @@ _propagate_all_corner_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
     if (!nbs)
         return;
 
-    uint32_t count
-        = _find_all_corner_neighbors (windows, source->id, initial, dir, workspace_id,
-                                      monitor_id, nbs, windows->count);
+    uint32_t count = _find_all_corner_neighbors (
+        windows, source->id, initial, dir, workspace_id, monitor_id, nbs, windows->count);
     if (!count)
     {
         gf_free (nbs);

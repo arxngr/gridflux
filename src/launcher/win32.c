@@ -124,11 +124,21 @@ xml_escape_w (const wchar_t *in, wchar_t *out, size_t out_len)
         const wchar_t *rep = NULL;
         switch (in[i])
         {
-        case L'&': rep = L"&amp;"; break;
-        case L'<': rep = L"&lt;"; break;
-        case L'>': rep = L"&gt;"; break;
-        case L'"': rep = L"&quot;"; break;
-        case L'\'': rep = L"&apos;"; break;
+        case L'&':
+            rep = L"&amp;";
+            break;
+        case L'<':
+            rep = L"&lt;";
+            break;
+        case L'>':
+            rep = L"&gt;";
+            break;
+        case L'"':
+            rep = L"&quot;";
+            break;
+        case L'\'':
+            rep = L"&apos;";
+            break;
         }
         size_t rl = rep ? wcslen (rep) : 1;
         if (o + rl >= out_len)

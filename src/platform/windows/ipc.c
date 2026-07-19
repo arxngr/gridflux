@@ -79,10 +79,11 @@ create_pipe_instance (BOOL first_instance)
     if (first_instance)
         open_mode |= FILE_FLAG_FIRST_PIPE_INSTANCE;
 
-    HANDLE pipe = CreateNamedPipeA (
-        pipe_path, open_mode,
-        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
-        MAX_PIPE_INSTANCES, GF_PIPE_BUFSIZE, GF_PIPE_BUFSIZE, 0, sa);
+    HANDLE pipe
+        = CreateNamedPipeA (pipe_path, open_mode,
+                            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT
+                                | PIPE_REJECT_REMOTE_CLIENTS,
+                            MAX_PIPE_INSTANCES, GF_PIPE_BUFSIZE, GF_PIPE_BUFSIZE, 0, sa);
 
     if (sa)
     {

@@ -91,8 +91,7 @@ gf_cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *us
 
     size_t header = 2 * sizeof (uint32_t) + sizeof (gf_ws_id_t);
     uint32_t max_items = gf_ipc_max_records (header, sizeof (gf_ws_info_t));
-    uint32_t send_count
-        = (workspaces->count < max_items) ? workspaces->count : max_items;
+    uint32_t send_count = (workspaces->count < max_items) ? workspaces->count : max_items;
 
     size_t offset = 0;
     memcpy (response->message + offset, &send_count, sizeof (uint32_t));
