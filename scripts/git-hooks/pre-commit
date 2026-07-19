@@ -1,22 +1,15 @@
 #!/bin/sh
 # Git pre-commit hook to run clang-format on staged C/H files.
-
-# Resolve clang-format: prefer PATH (Linux/macOS package managers put it there),
-# fall back to the default Windows LLVM install location.
+#
+# CI lints with clang-format 18 (see .github/workflows/ci.yml), so make sure
+# whatever "clang-format" resolves to on PATH is the same major version --
+# other versions format the same .clang-format style differently.
 CLANG_FORMAT=clang-format
-if ! command -v "$CLANG_FORMAT" >/dev/null 2>&1; then
-    for candidate in "/c/Program Files/LLVM/bin/clang-format.exe" \
-        "C:/Program Files/LLVM/bin/clang-format.exe"; do
-        if [ -x "$candidate" ]; then
-            CLANG_FORMAT="$candidate"
-            break
-        fi
-    done
-fi
 
 if ! command -v "$CLANG_FORMAT" >/dev/null 2>&1; then
-    echo "pre-commit: clang-format not found (checked PATH and default LLVM install path)." >&2
-    echo "pre-commit: install it or add it to PATH, then retry the commit." >&2
+    echo "pre-commit: clang-format not found on PATH." >&2
+    echo "pre-commit: install clang-format 18 (e.g. 'pip install clang-format==18.1.8')," >&2
+    echo "pre-commit: add it to PATH, then retry the commit." >&2
     exit 1
 fi
 
