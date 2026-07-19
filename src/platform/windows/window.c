@@ -215,6 +215,33 @@ gf_window_get_geometry (gf_display_t display, gf_handle_t window, gf_rect_t *geo
     return GF_ERROR_PLATFORM_ERROR;
 }
 
+// Arrange runs before gf_wm_event notices a fresh maximize, so a window that
+// just got zoomed can still get an immediate restore-and-retile; only treat
+// the zoom as stale (and worth restoring) after it survives a couple of ticks.
+#define GF_ZOOM_DEBOUNCE_MS 250
+static const wchar_t *const GF_ZOOM_PROP = L"GridFluxZoomedSinceTick";
+
+static bool
+_window_zoom_is_stale (HWND hwnd)
+{
+    if (!IsZoomed (hwnd))
+    {
+        RemovePropW (hwnd, GF_ZOOM_PROP);
+        return false;
+    }
+
+    DWORD now = GetTickCount ();
+    HANDLE prop = GetPropW (hwnd, GF_ZOOM_PROP);
+    if (!prop)
+    {
+        SetPropW (hwnd, GF_ZOOM_PROP, (HANDLE)(UINT_PTR)now);
+        return false;
+    }
+
+    DWORD since = (DWORD)(UINT_PTR)prop;
+    return (DWORD)(now - since) >= GF_ZOOM_DEBOUNCE_MS;
+}
+
 gf_err_t
 gf_window_set_geometry (gf_display_t display, gf_handle_t window,
                         const gf_rect_t *geometry, gf_geom_flags_t flags,
@@ -229,7 +256,7 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
 
     // A maximized (zoomed) window ignores SetWindowPos moves/resizes; restore it
     // first so the requested tiled geometry can actually be applied.
-    if (IsZoomed ((HWND)window))
+    if (IsZoomed ((HWND)window) && _window_zoom_is_stale ((HWND)window))
         ShowWindow ((HWND)window, SW_RESTORE);
 
     int new_x = geometry->x;
