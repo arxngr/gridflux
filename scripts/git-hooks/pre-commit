@@ -1,6 +1,25 @@
 #!/bin/sh
 # Git pre-commit hook to run clang-format on staged C/H files.
 
+# Resolve clang-format: prefer PATH (Linux/macOS package managers put it there),
+# fall back to the default Windows LLVM install location.
+CLANG_FORMAT=clang-format
+if ! command -v "$CLANG_FORMAT" >/dev/null 2>&1; then
+    for candidate in "/c/Program Files/LLVM/bin/clang-format.exe" \
+        "C:/Program Files/LLVM/bin/clang-format.exe"; do
+        if [ -x "$candidate" ]; then
+            CLANG_FORMAT="$candidate"
+            break
+        fi
+    done
+fi
+
+if ! command -v "$CLANG_FORMAT" >/dev/null 2>&1; then
+    echo "pre-commit: clang-format not found (checked PATH and default LLVM install path)." >&2
+    echo "pre-commit: install it or add it to PATH, then retry the commit." >&2
+    exit 1
+fi
+
 # Find staged files with .c or .h extension
 FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(c|h)$')
 
@@ -12,7 +31,7 @@ echo "Running clang-format on staged files..."
 
 for FILE in $FILES; do
     if [ -f "$FILE" ]; then
-        clang-format -i "$FILE"
+        "$CLANG_FORMAT" -i "$FILE"
         git add "$FILE"
     fi
 done
