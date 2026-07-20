@@ -17,6 +17,7 @@ a.out
 
 # Build system (CMake)
 build/
+build-tests/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
