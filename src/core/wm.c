@@ -15,6 +15,11 @@
 #include <string.h>
 #include <time.h>
 
+// Poll cadence for changes that emit no root property event (maximize, user
+// resize): the loop wakes this often to run a light focus/maximize check.
+// Property events (focus, window open/close) still wake it immediately.
+#define GF_EVENT_TIMEOUT_MS 250
+
 static void
 handle_max_windows_change (gf_wm_t *m, const gf_config_t *old, const gf_config_t *new)
 {
@@ -45,15 +50,24 @@ wm_reset_monitor_state (gf_wm_t *m)
 }
 
 static void
-wm_tick (gf_wm_t *m)
+wm_tick (gf_wm_t *m, gf_wake_t wake)
 {
-    gf_wm_load_cfg (m);
-    gf_wm_watch (m);
+    if (gf_wm_load_cfg (m))
+        wake |= GF_WAKE_LAYOUT; // new config may change gaps, rules or workspaces
+
+    // The full re-scan is the costliest step: run it only on real window changes.
+    if (wake & GF_WAKE_LAYOUT)
+    {
+        gf_wm_watch (m);
+        gf_wm_layout_rebalance (m);
+    }
 
     gf_wm_resize_event (m);
-    gf_wm_layout_rebalance (m);
     gf_wm_layout_apply (m);
-    gf_wm_event (m);
+
+    // Focus/maximize tracking hits the X server; skip it on a bare timeout.
+    if (wake != GF_WAKE_IDLE)
+        gf_wm_event (m);
 
     /*
      * Keymap must run AFTER gf_wm_event so that a workspace switch is not
@@ -193,31 +207,31 @@ gf_wm_cleanup (gf_wm_t *m)
     GF_LOG_INFO ("Window manager cleaned up");
 }
 
-void
+bool
 gf_wm_load_cfg (gf_wm_t *m)
 {
     if (!m->config)
     {
         GF_LOG_ERROR ("Config not initialized in main()");
-        return;
+        return false;
     }
 
     const char *path = gf_config_get_path ();
     if (!path)
     {
         GF_LOG_ERROR ("Failed to determine config file path");
-        return;
+        return false;
     }
 
     struct stat st;
     if (stat (path, &st) != 0)
     {
         GF_LOG_ERROR ("Failed to stat config file: %s", path);
-        return;
+        return false;
     }
 
     if (st.st_mtime <= m->config->last_modified)
-        return;
+        return false;
 
     gf_config_t old_cfg = *m->config;
     gf_config_t new_cfg = load_or_create_config (path);
@@ -225,7 +239,7 @@ gf_wm_load_cfg (gf_wm_t *m)
     if (!gf_config_changed (&old_cfg, &new_cfg))
     {
         m->config->last_modified = st.st_mtime;
-        return;
+        return false;
     }
 
     GF_LOG_INFO ("Configuration changed, reloading from: %s", path);
@@ -236,6 +250,7 @@ gf_wm_load_cfg (gf_wm_t *m)
     sync_workspaces (m);
     handle_max_windows_change (m, &old_cfg, &new_cfg);
     gf_wm_debug_stats (m);
+    return true;
 }
 
 gf_err_t
@@ -244,11 +259,21 @@ gf_wm_run (gf_wm_t *m)
     if (!m || !m->state.initialized)
         return GF_ERROR_INVALID_PARAMETER;
 
+    gf_platform_t *platform = wm_platform (m);
+    bool evented = platform->event_subscribe && platform->event_wait;
+    if (evented)
+        platform->event_subscribe (platform);
+    else
+        GF_LOG_INFO ("Event-driven loop unavailable; using fixed-rate polling");
+
+    // First pass does a full sync; thereafter each wait tells us what changed.
+    gf_wake_t wake = GF_WAKE_FOCUS | GF_WAKE_LAYOUT;
+
     while (true)
     {
         m->state.loop_counter++;
 
-        wm_tick (m);
+        wm_tick (m, wake);
 
         if (time (NULL) - m->state.last_cleanup_time >= 1)
         {
@@ -256,7 +281,24 @@ gf_wm_run (gf_wm_t *m)
             m->state.last_cleanup_time = time (NULL);
         }
 
-        gf_usleep (33000);
+        // Wait on events rather than spin; without platform support fall back
+        // to a fixed sleep and a full tick, matching the old behaviour.
+        if (evented)
+        {
+            wake = platform->event_wait (platform, (int)m->ipc_handle,
+                                         GF_EVENT_TIMEOUT_MS);
+            // A quiet wake (timeout, or churn we don't classify) still gets a
+            // light focus/maximize check — the cheap way to notice a maximize,
+            // which emits no root property event. The costly re-scan stays
+            // gated on real window-list changes.
+            if (wake == GF_WAKE_IDLE)
+                wake = GF_WAKE_FOCUS;
+        }
+        else
+        {
+            gf_usleep (33000);
+            wake = GF_WAKE_FOCUS | GF_WAKE_LAYOUT;
+        }
     }
 
     return GF_SUCCESS;

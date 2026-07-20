@@ -18,6 +18,14 @@ typedef enum
     GF_KEY_WORKSPACE_NEXT,
 } gf_key_action_t;
 
+// Why the loop woke (bitmask); LAYOUT means the window set changed.
+typedef enum
+{
+    GF_WAKE_IDLE = 0,
+    GF_WAKE_FOCUS = 1 << 0,
+    GF_WAKE_LAYOUT = 1 << 1,
+} gf_wake_t;
+
 struct gf_platform
 {
     // --- Lifecycle & Core ---
@@ -79,6 +87,11 @@ struct gf_platform
     gf_err_t (*resize_hook_install) (gf_platform_t *platform);
     void (*resize_hook_uninstall) (gf_platform_t *platform);
     bool (*resize_poll) (gf_platform_t *platform, gf_resize_event_t *event);
+
+    // Optional; NULL keeps fixed-rate polling. wait() blocks on X events plus
+    // extra_fd (IPC) until timeout_ms and reports why it woke.
+    void (*event_subscribe) (gf_platform_t *platform);
+    gf_wake_t (*event_wait) (gf_platform_t *platform, int extra_fd, int timeout_ms);
 
     void *platform_data;
 };

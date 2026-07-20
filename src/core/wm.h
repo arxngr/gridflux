@@ -8,6 +8,8 @@
 #include "../platform/platform.h"
 #include "../utils/list.h"
 
+#include <stdbool.h>
+
 typedef struct
 {
     gf_win_list_t windows;
@@ -40,7 +42,7 @@ gf_err_t gf_wm_create (gf_wm_t **manager, gf_platform_t *platform,
 void gf_wm_destroy (gf_wm_t *manager);
 gf_err_t gf_wm_init (gf_wm_t *manager);
 void gf_wm_init_window_list (gf_wm_t *m);
-void gf_wm_load_cfg (gf_wm_t *manager);
+bool gf_wm_load_cfg (gf_wm_t *manager);
 gf_err_t gf_wm_run (gf_wm_t *manager);
 
 // --- Event Handling ---

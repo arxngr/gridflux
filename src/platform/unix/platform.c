@@ -7,6 +7,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -25,6 +26,67 @@ platform_io_error_handler (Display *dpy)
 {
     (void)dpy;
     return 0; // prevent abort
+}
+
+// Watch only root PROPERTY changes (focus, client list, current desktop) — set
+// by the WM, never by us. NOT SubstructureNotify: our own tiling and border
+// overlay moves would return as events and spin the loop. Geometry and maximize
+// changes emit no root property, so they're picked up on the poll timeout.
+#define GF_ROOT_EVENT_MASK (PropertyChangeMask)
+
+static void
+gf_event_subscribe (gf_platform_t *platform)
+{
+    gf_linux_platform_data_t *data = platform->platform_data;
+    if (!data || !data->display)
+        return;
+
+    XSelectInput (data->display, data->root_window, GF_ROOT_EVENT_MASK);
+    XFlush (data->display);
+}
+
+static gf_wake_t
+classify_event (const gf_platform_atoms_t *atoms, const XEvent *ev)
+{
+    if (ev->type != PropertyNotify)
+        return GF_WAKE_IDLE;
+
+    Atom a = ev->xproperty.atom;
+    if (a == atoms->net_client_list)
+        return GF_WAKE_LAYOUT; // a window opened or closed
+    if (a == atoms->net_active_window || a == atoms->net_current_desktop)
+        return GF_WAKE_FOCUS;
+    return GF_WAKE_IDLE; // e.g. stacking-order churn, which tiling ignores
+}
+
+// Block until an event we selected for, data on extra_fd, or the timeout. XI2
+// key events aren't in our mask, so poll() wakes on them but keymap_poll keeps
+// them.
+static gf_wake_t
+gf_event_wait (gf_platform_t *platform, int extra_fd, int timeout_ms)
+{
+    gf_linux_platform_data_t *data = platform->platform_data;
+    if (!data || !data->display)
+        return GF_WAKE_IDLE;
+
+    Display *dpy = data->display;
+    XFlush (dpy);
+
+    // Nothing buffered yet? Then it's safe to block on the fds.
+    if (!XPending (dpy))
+    {
+        struct pollfd fds[2] = {
+            { .fd = ConnectionNumber (dpy), .events = POLLIN },
+            { .fd = extra_fd, .events = POLLIN },
+        };
+        poll (fds, extra_fd >= 0 ? 2 : 1, timeout_ms);
+    }
+
+    gf_wake_t woke = GF_WAKE_IDLE;
+    XEvent ev;
+    while (XCheckMaskEvent (dpy, GF_ROOT_EVENT_MASK, &ev))
+        woke |= classify_event (&data->atoms, &ev);
+    return woke;
 }
 
 // Bind the window enumeration, info, geometry and state operations.
@@ -81,6 +143,9 @@ _platform_bind_system_ops (gf_platform_t *p)
     p->keymap_init = gf_keymap_init;
     p->keymap_cleanup = gf_keymap_cleanup;
     p->keymap_poll = gf_keymap_poll;
+
+    p->event_subscribe = gf_event_subscribe;
+    p->event_wait = gf_event_wait;
 }
 
 gf_platform_t *
