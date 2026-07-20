@@ -146,8 +146,8 @@ gf_wm_watch (gf_wm_t *m)
             else
             {
                 win->workspace_id = existing->workspace_id;
-                strncpy (win->name, existing->name, sizeof (win->name) - 1);
-                win->name[sizeof (win->name) - 1] = '\0';
+                gf_wm_resolve_window_name (m, win->id, existing->name, win->name,
+                                          sizeof (win->name));
 
                 const gf_window_rule_t *rule = gf_rules_find (m->config, win->name);
 

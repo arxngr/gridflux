@@ -62,6 +62,24 @@ gf_wm_window_class (const gf_wm_t *m, gf_handle_t handle, char *buffer, size_t s
         snprintf (buffer, size, "N/A");
 }
 
+/* Use cached_name if it was already resolved; otherwise re-query the
+ * platform. Callers pass NULL/"" for a never-seen window (always queries),
+ * or a previous name for a tracked window whose class may have arrived
+ * late (e.g. GTK apps that set WM_CLASS a moment after mapping). */
+void
+gf_wm_resolve_window_name (const gf_wm_t *m, gf_handle_t handle, const char *cached_name,
+                           char *out_name, size_t out_size)
+{
+    if (cached_name && cached_name[0] != '\0')
+    {
+        strncpy (out_name, cached_name, out_size - 1);
+        out_name[out_size - 1] = '\0';
+        return;
+    }
+
+    gf_wm_window_class (m, handle, out_name, out_size);
+}
+
 gf_monitor_id_t
 find_active_monitor (gf_wm_t *m)
 {

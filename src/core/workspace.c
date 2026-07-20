@@ -215,11 +215,35 @@ switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace)
     }
 }
 
+/* Ensure every rule's target workspace exists and is flagged has_rule=true
+ * immediately, rather than waiting for its app to actually appear. Without
+ * this, a workspace reserved for a rule looks like ordinary free space to
+ * lookup_or_create_ws/gf_workspace_list_find_free until the first matching
+ * window is placed, letting an unrelated window claim it first. */
+static void
+create_rule_workspaces (gf_wm_t *m)
+{
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+    uint32_t max_per_ws = m->config->max_windows_per_workspace;
+
+    for (uint32_t i = 0; i < m->config->window_rules_count; i++)
+    {
+        gf_ws_id_t rule_ws = m->config->window_rules[i].workspace_id;
+        gf_workspace_list_ensure (workspaces, rule_ws, max_per_ws);
+
+        gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, rule_ws);
+        if (ws)
+            ws->has_rule = true;
+    }
+}
+
 void
 sync_workspaces (gf_wm_t *m)
 {
     if (!m || !m->config)
         return;
+
+    create_rule_workspaces (m);
 
     gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_platform_t *platform = wm_platform (m);
@@ -240,19 +264,6 @@ sync_workspaces (gf_wm_t *m)
             = ws->has_rule ? true : gf_config_workspace_is_locked (m->config, i);
         ws->max_windows = max_per_ws;
         ws->available_space = ws->is_locked ? 0 : (max_per_ws - ws->window_count);
-    }
-}
-
-static void
-create_rule_workspaces (gf_wm_t *m)
-{
-    gf_ws_list_t *workspaces = wm_workspaces (m);
-    uint32_t max_per_ws = m->config->max_windows_per_workspace;
-
-    for (uint32_t i = 0; i < m->config->window_rules_count; i++)
-    {
-        gf_ws_id_t rule_ws = m->config->window_rules[i].workspace_id;
-        gf_workspace_list_ensure (workspaces, rule_ws, max_per_ws);
     }
 }
 
@@ -424,6 +435,15 @@ assign_maximized_window (gf_wm_t *m, gf_win_info_t *win)
 {
     win->is_maximized = true;
     win->workspace_id = lookup_or_create_maximized_ws (m);
+
+    // Claim the slot immediately: the window isn't in the tracked list yet
+    // (that happens later in finalize_window_registration), so
+    // recount_workspace_windows won't see it until the end of this tick.
+    // Without this, several already-maximized windows discovered in the
+    // same tick would all see window_count == 0 and pile onto one workspace.
+    gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), win->workspace_id);
+    if (ws)
+        ws->window_count++;
 }
 
 static void
@@ -497,10 +517,7 @@ register_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    char class_name[256];
-    gf_wm_window_class (m, win->id, class_name, sizeof (class_name));
-    strncpy (win->name, class_name, sizeof (win->name) - 1);
-    win->name[sizeof (win->name) - 1] = '\0';
+    gf_wm_resolve_window_name (m, win->id, NULL, win->name, sizeof (win->name));
 
     if (platform->window_is_maximized && platform->window_is_maximized (display, win->id))
     {
@@ -519,7 +536,7 @@ register_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws)
         current_ws->is_custom_layout = false;
 
     GF_LOG_INFO ("New window %p → workspace %u (%s)", (void *)win->id, win->workspace_id,
-                 class_name);
+                 win->name);
 
     finalize_window_registration (m, win);
 }
