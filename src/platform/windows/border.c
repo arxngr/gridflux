@@ -60,6 +60,13 @@ _border_target_visible (gf_border_t *b)
 
 // Compute the overlay rect from the target's DWM and Win32 bounds. The shadow
 // inset converts DWM coords (visible frame) into Win32 coords (incl. shadow).
+// NOTE (DPI): DWMWA_EXTENDED_FRAME_BOUNDS is always physical pixels while
+// GetWindowRect is DPI-virtualized under system-DPI awareness. Mixing d_rect and
+// w_rect below is only correct when both share one coordinate space, which holds
+// under Per-Monitor-V2 awareness (enable via the app manifest <dpiAwareness> /
+// SetProcessDpiAwarenessContext in the server entry point — outside this file).
+// On monitors whose DPI differs from the system DPI this still needs per-monitor
+// DPI conversion.
 static bool
 _border_compute_layout (gf_border_t *b, border_layout_t *out)
 {
@@ -292,6 +299,15 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     if (!overlay)
     {
         GF_LOG_WARN ("Failed to create border overlay");
+        return;
+    }
+
+    int capacity = (int)(sizeof (data->borders) / sizeof (data->borders[0]));
+    if (data->border_count >= capacity)
+    {
+        GF_LOG_WARN ("Border array full (%d); dropping border for window %p", capacity,
+                     window);
+        DestroyWindow (overlay);
         return;
     }
 

@@ -94,18 +94,19 @@ gf_window_list_remove (gf_win_list_t *list, gf_handle_t window_id)
         {
             gf_ws_id_t workspace_id = list->items[i].workspace_id;
 
-            // Move last item to this position
+            // Shift the tail down to keep windows in stable insertion order, so
+            // surviving tiles keep their layout cells instead of reshuffling.
             if (i < list->count - 1)
             {
-                list->items[i] = list->items[list->count - 1];
+                memmove (&list->items[i], &list->items[i + 1],
+                         (list->count - i - 1) * sizeof (list->items[0]));
             }
             list->count--;
 
             memset (&list->items[list->count], 0, sizeof (list->items[0]));
             gf_window_list_mark_all_needs_update (list, &workspace_id);
-            GF_LOG_DEBUG (
-                "Removed window %p with status %d from workspace %d (total: %u)",
-                (void *)window_id, list->items[i].is_valid, workspace_id, list->count);
+            GF_LOG_DEBUG ("Removed window %p from workspace %d (total: %u)",
+                          (void *)window_id, workspace_id, list->count);
             return GF_SUCCESS;
         }
     }
@@ -223,7 +224,9 @@ gf_window_list_get_by_workspace (const gf_win_list_t *list, gf_ws_id_t workspace
     }
 
     uint32_t idx = 0;
-    for (uint32_t i = list->count; i-- > 0 && idx < *count;)
+    // Collect in forward (insertion) order so the layout engine assigns stable
+    // cells; iterating backwards made tiles jump whenever the list changed.
+    for (uint32_t i = 0; i < list->count && idx < *count; i++)
     {
         if (list->items[i].workspace_id == workspace_id)
         {

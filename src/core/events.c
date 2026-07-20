@@ -146,8 +146,8 @@ gf_wm_watch (gf_wm_t *m)
             else
             {
                 win->workspace_id = existing->workspace_id;
-                strncpy (win->name, existing->name, sizeof (win->name) - 1);
-                win->name[sizeof (win->name) - 1] = '\0';
+                gf_wm_resolve_window_name (m, win->id, existing->name, win->name,
+                                           sizeof (win->name));
 
                 const gf_window_rule_t *rule = gf_rules_find (m->config, win->name);
 
@@ -183,10 +183,14 @@ enter_maximized_mode (gf_wm_t *m, gf_win_info_t *focused, gf_handle_t curr_win_i
 
     focused->is_maximized = true;
 
+    /* Capture the origin workspace BEFORE the move overwrites focused->workspace_id;
+     * otherwise we would minimize the (empty) maximized workspace instead of the
+     * windows the maximized window is covering. */
+    gf_ws_id_t origin_ws = focused->workspace_id;
+
     gf_ws_id_t max_ws = lookup_or_create_maximized_ws (m);
     move_window_to_workspace (m, focused, max_ws);
-    minimize_workspace_windows (m, focused->workspace_id, focused->id,
-                                focused->monitor_id);
+    minimize_workspace_windows (m, origin_ws, focused->id, focused->monitor_id);
 
     if (!m->state.dock_hidden && platform->dock_hide)
     {

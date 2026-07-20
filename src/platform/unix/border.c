@@ -7,6 +7,7 @@
 #include <X11/extensions/shape.h>
 #include <limits.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +18,13 @@
 
 static pthread_mutex_t g_notification_mutex = PTHREAD_MUTEX_INITIALIZER;
 static volatile time_t g_notification_expire_time = 0;
-static bool g_notification_threads_started = false;
+
+// The dbus/gsettings/inotify monitor threads are process-lifetime: they are
+// started once and run until the process exits (they are detached and never
+// cancelled). This flag guards against spawning a duplicate set across
+// cleanup+update cycles and is only ever set from 0 to 1, so a plain
+// sig_atomic_t (accessed atomically) is sufficient to avoid a data race.
+static volatile sig_atomic_t g_notification_threads_started = 0;
 
 static void *
 dbus_monitor_thread (void *arg)
@@ -150,7 +157,7 @@ start_notification_threads (void)
     if (g_notification_threads_started)
         return;
 
-    g_notification_threads_started = true;
+    g_notification_threads_started = 1;
 
     pthread_t tid1, tid2, tid3;
     if (pthread_create (&tid1, NULL, dbus_monitor_thread, NULL) == 0)
@@ -488,7 +495,8 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
 void
 gf_border_cleanup (gf_platform_t *platform)
 {
-    g_notification_threads_started = false;
+    // Do NOT reset g_notification_threads_started here: the monitor threads are
+    // process-lifetime and must not be re-spawned on a later cleanup+update cycle.
 
     if (!platform || !platform->platform_data)
         return;
@@ -571,16 +579,14 @@ inject_notification_zone (gf_platform_t *platform, gf_border_t *b,
         return count;
 
     gf_monitor_id_t mon = gf_monitor_from_window (platform, (gf_handle_t)b->target);
+    Display *dpy = ((gf_linux_platform_data_t *)platform->platform_data)->display;
     gf_rect_t mb;
-    if (gf_screen_get_bounds_for_monitor (*(Display **)platform->platform_data, mon, &mb)
-        != GF_SUCCESS)
+    if (gf_screen_get_bounds_for_monitor (dpy, mon, &mb) != GF_SUCCESS)
     {
         mb.x = 0;
         mb.y = 0;
-        mb.width = DisplayWidth (*(Display **)platform->platform_data,
-                                 DefaultScreen (*(Display **)platform->platform_data));
-        mb.height = DisplayHeight (*(Display **)platform->platform_data,
-                                   DefaultScreen (*(Display **)platform->platform_data));
+        mb.width = DisplayWidth (dpy, DefaultScreen (dpy));
+        mb.height = DisplayHeight (dpy, DefaultScreen (dpy));
     }
 
     int nw = (mb.width > 1920) ? 1400 : 900;

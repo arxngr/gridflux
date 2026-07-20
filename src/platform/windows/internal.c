@@ -66,7 +66,7 @@ window_is_excluded_class (const char *class_name)
             "RecordingAreaIndicatorWindow",
             "XamlExplorerHostIslandWindow_WASDK",
             "TWizardForm",
-            "#32769"
+            "#32769",
             "XamlWindow" };
 
     for (size_t i = 0; i < sizeof (excluded_classes) / sizeof (excluded_classes[0]); i++)

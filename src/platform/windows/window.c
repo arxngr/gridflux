@@ -215,6 +215,33 @@ gf_window_get_geometry (gf_display_t display, gf_handle_t window, gf_rect_t *geo
     return GF_ERROR_PLATFORM_ERROR;
 }
 
+// Arrange runs before gf_wm_event notices a fresh maximize, so a window that
+// just got zoomed can still get an immediate restore-and-retile; only treat
+// the zoom as stale (and worth restoring) after it survives a couple of ticks.
+#define GF_ZOOM_DEBOUNCE_MS 250
+static const wchar_t *const GF_ZOOM_PROP = L"GridFluxZoomedSinceTick";
+
+static bool
+_window_zoom_is_stale (HWND hwnd)
+{
+    if (!IsZoomed (hwnd))
+    {
+        RemovePropW (hwnd, GF_ZOOM_PROP);
+        return false;
+    }
+
+    DWORD now = GetTickCount ();
+    HANDLE prop = GetPropW (hwnd, GF_ZOOM_PROP);
+    if (!prop)
+    {
+        SetPropW (hwnd, GF_ZOOM_PROP, (HANDLE)(UINT_PTR)now);
+        return false;
+    }
+
+    DWORD since = (DWORD)(UINT_PTR)prop;
+    return (DWORD)(now - since) >= GF_ZOOM_DEBOUNCE_MS;
+}
+
 gf_err_t
 gf_window_set_geometry (gf_display_t display, gf_handle_t window,
                         const gf_rect_t *geometry, gf_geom_flags_t flags,
@@ -227,12 +254,25 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
     if (!window_validate (window) || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
+    // A maximized (zoomed) window ignores SetWindowPos moves/resizes; restore it
+    // first so the requested tiled geometry can actually be applied.
+    if (IsZoomed ((HWND)window) && _window_zoom_is_stale ((HWND)window))
+        ShowWindow ((HWND)window, SW_RESTORE);
+
     int new_x = geometry->x;
     int new_y = geometry->y;
     int new_w = geometry->width;
     int new_h = geometry->height;
 
-    // Compensate for the invisible DWM shadow/border that shifts the window rect
+    // Compensate for the invisible DWM shadow/border that shifts the window rect.
+    // NOTE (DPI): DWMWA_EXTENDED_FRAME_BOUNDS is always in physical pixels, while
+    // GetWindowRect is DPI-virtualized under system-DPI awareness. The delta below
+    // is only correct when both are in the SAME coordinate space, which holds under
+    // Per-Monitor-V2 awareness (enable via the app manifest <dpiAwareness> /
+    // SetProcessDpiAwarenessContext in the server entry point — outside this file).
+    // Until then, on monitors whose DPI differs from the system DPI this
+    // subtraction mixes physical and virtualized coordinates and needs per-monitor
+    // DPI conversion.
     RECT d_rect, w_rect;
     if (SUCCEEDED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &d_rect,
                                           sizeof (d_rect)))
@@ -343,14 +383,10 @@ gf_window_is_fullscreen (gf_display_t display, gf_handle_t window)
     if (!window_validate (window))
         return false;
 
-    RECT rect;
-    GetWindowRect (window, &rect);
-
-    int screenWidth = GetSystemMetrics (SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics (SM_CYSCREEN);
-
-    return (rect.left <= 0 && rect.top <= 0 && rect.right >= screenWidth
-            && rect.bottom >= screenHeight);
+    // Reuse the monitor-aware detection in internal.c, which compares the window
+    // against its actual monitor (MonitorFromWindow + GetMonitorInfo) and checks
+    // GetWindowRect's return, instead of the primary monitor's GetSystemMetrics.
+    return window_is_fullscreen ((HWND)window);
 }
 
 gf_handle_t
@@ -398,7 +434,11 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
             return GF_ERROR_PLATFORM_ERROR;
     }
 
-    SetForegroundWindow (window);
+    // Intentionally do NOT call SetForegroundWindow here: gf_window_unminimize is
+    // invoked in loops (e.g. restoring a whole workspace), and forcing the
+    // foreground on every window steals focus. The window is shown without
+    // activation; a caller that needs a specific window focused must do so
+    // explicitly on that window alone.
     return GF_SUCCESS;
 }
 

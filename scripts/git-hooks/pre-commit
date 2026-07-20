@@ -1,5 +1,17 @@
 #!/bin/sh
 # Git pre-commit hook to run clang-format on staged C/H files.
+#
+# CI lints with clang-format 18 (see .github/workflows/ci.yml), so make sure
+# whatever "clang-format" resolves to on PATH is the same major version --
+# other versions format the same .clang-format style differently.
+CLANG_FORMAT=clang-format
+
+if ! command -v "$CLANG_FORMAT" >/dev/null 2>&1; then
+    echo "pre-commit: clang-format not found on PATH." >&2
+    echo "pre-commit: install clang-format 18 (e.g. 'pip install clang-format==18.1.8')," >&2
+    echo "pre-commit: add it to PATH, then retry the commit." >&2
+    exit 1
+fi
 
 # Find staged files with .c or .h extension
 FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(c|h)$')
@@ -12,7 +24,7 @@ echo "Running clang-format on staged files..."
 
 for FILE in $FILES; do
     if [ -f "$FILE" ]; then
-        clang-format -i "$FILE"
+        "$CLANG_FORMAT" -i "$FILE"
         git add "$FILE"
     fi
 done

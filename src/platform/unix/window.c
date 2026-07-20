@@ -6,6 +6,7 @@
 #include "internal.h"
 #include <X11/Xatom.h>
 #include <X11/Xutil.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -92,8 +93,16 @@ gf_window_get_geometry (gf_display_t display, gf_handle_t window, gf_rect_t *geo
         return GF_ERROR_PLATFORM_ERROR;
     }
 
-    geometry->x = attrs.x;
-    geometry->y = attrs.y;
+    // XGetWindowAttributes reports parent-relative x/y; translate to root
+    // coordinates so callers get absolute geometry.
+    Window root = DefaultRootWindow (display);
+    int abs_x, abs_y;
+    Window child;
+    if (!XTranslateCoordinates (display, window, root, 0, 0, &abs_x, &abs_y, &child))
+        return GF_ERROR_PLATFORM_ERROR;
+
+    geometry->x = abs_x;
+    geometry->y = abs_y;
     geometry->width = attrs.width;
     geometry->height = attrs.height;
 
@@ -135,16 +144,24 @@ window_is_self (gf_display_t display, gf_handle_t window)
     if (!display || window == None)
         return false;
 
-    char class_name[256] = { 0 };
-    gf_window_get_class (display, window, class_name, sizeof (class_name));
+    // Check res_name/res_class individually (not via gf_window_get_class,
+    // which concatenates both for rule matching) so this exact-identity
+    // check can't be thrown off by whatever the other half contains.
+    XClassHint class_hint = { NULL, NULL };
+    if (!XGetClassHint (display, window, &class_hint))
+        return false;
 
-    if (strcmp (class_name, "gridflux-gui") == 0
-        || strstr (class_name, "com.gridflux.gui") != NULL)
-    {
-        return true;
-    }
+    bool match
+        = (class_hint.res_name && strcmp (class_hint.res_name, "gridflux-gui") == 0)
+          || (class_hint.res_class
+              && strstr (class_hint.res_class, "com.gridflux.gui") != NULL);
 
-    return false;
+    if (class_hint.res_name)
+        XFree (class_hint.res_name);
+    if (class_hint.res_class)
+        XFree (class_hint.res_class);
+
+    return match;
 }
 
 bool
@@ -335,8 +352,10 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
     }
 
     // Map the window first — XIconifyWindow unmaps it, so we need to
-    // re-map before any focus requests can succeed.
+    // re-map before any focus requests can succeed. XSync ensures the WM has
+    // processed the map before we later attempt to set input focus.
     XMapRaised (display, window);
+    XSync (display, False);
 
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     if (!atoms)
@@ -359,9 +378,14 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
                                          5);
     }
 
-    // Force focus transfer — _NET_ACTIVE_WINDOW is advisory, this is
-    // required so gf_wm_event sees the correct focused window.
-    XSetInputFocus (display, window, RevertToPointerRoot, CurrentTime);
+    // Force focus transfer — _NET_ACTIVE_WINDOW is advisory, this is required so
+    // gf_wm_event sees the correct focused window. Only focus once the window is
+    // actually viewable: XSetInputFocus on an unmapped window yields BadMatch.
+    if (XGetWindowAttributes (display, window, &attr) != 0
+        && attr.map_state == IsViewable)
+    {
+        XSetInputFocus (display, window, RevertToPointerRoot, CurrentTime);
+    }
     XFlush (display);
 
     return GF_SUCCESS;
@@ -375,20 +399,23 @@ gf_window_get_class (gf_display_t dpy, gf_handle_t win, char *buffer, size_t buf
 
     buffer[0] = '\0';
 
-    XClassHint class_hint;
-    if (XGetClassHint (dpy, win, &class_hint))
-    {
-        if (class_hint.res_name)
-        {
-            strncpy (buffer, class_hint.res_name, bufsize - 1);
-            buffer[bufsize - 1] = '\0';
-            XFree (class_hint.res_name);
-        }
-        if (class_hint.res_class)
-        {
-            XFree (class_hint.res_class);
-        }
-    }
+    XClassHint class_hint = { NULL, NULL };
+    if (!XGetClassHint (dpy, win, &class_hint))
+        return;
+
+    // WM_CLASS has two parts (instance, class); which one carries the
+    // identifier a rule targets varies by app (e.g. GTK apps commonly leave
+    // the reverse-DNS id, like "org.gnome.Nautilus", only in res_class).
+    // Concatenate both so rule matching can find either.
+    const char *name = class_hint.res_name ? class_hint.res_name : "";
+    const char *cls = class_hint.res_class ? class_hint.res_class : "";
+    const char *sep = (name[0] && cls[0]) ? " " : "";
+    snprintf (buffer, bufsize, "%s%s%s", name, sep, cls);
+
+    if (class_hint.res_name)
+        XFree (class_hint.res_name);
+    if (class_hint.res_class)
+        XFree (class_hint.res_class);
 }
 
 bool
