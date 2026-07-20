@@ -29,7 +29,11 @@ signal_handler (int sig)
 int
 main ()
 {
-    gf_log_init (GF_LOG_DEBUG);
+    // Default to INFO so the hot paths stay quiet; set GRIDFLUX_LOG=debug to
+    // get the verbose per-event logging back when diagnosing.
+    const char *log_env = getenv ("GRIDFLUX_LOG");
+    gf_log_init (log_env && strcmp (log_env, "debug") == 0 ? GF_LOG_DEBUG : GF_LOG_INFO);
+
     signal (SIGINT, signal_handler);
     signal (SIGTERM, signal_handler);
 
