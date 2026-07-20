@@ -94,6 +94,67 @@ gf_wm_keymap_event (gf_wm_t *m)
     GF_LOG_INFO ("Keymap: switched to workspace %d", target_ws);
 }
 
+// Register a new window, or refresh an existing one keeping its workspace.
+static void
+watch_process_window (gf_wm_t *m, gf_win_info_t *win)
+{
+    gf_platform_t *platform = wm_platform (m);
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+    gf_win_list_t *windows = wm_windows (m);
+
+    if (!win->is_valid || wm_is_excluded (m, win->id))
+        return;
+
+    if (platform->monitor_from_window)
+        win->monitor_id = platform->monitor_from_window (platform, win->id);
+
+    gf_win_info_t *existing = gf_window_list_find_by_window_id (windows, win->id);
+    if (!existing)
+    {
+        register_new_window (m, win, NULL);
+        return;
+    }
+
+    win->workspace_id = existing->workspace_id;
+    gf_wm_resolve_window_name (m, win->id, existing->name, win->name, sizeof (win->name));
+
+    const gf_window_rule_t *rule = gf_rules_find (m->config, win->name);
+    gf_ws_info_t *current_ws
+        = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
+
+    if (current_ws && !rule && current_ws->has_rule)
+    {
+        gf_ws_id_t free_ws = gf_workspace_list_find_free (workspaces);
+        if (gf_workspace_list_find_by_id (workspaces, free_ws))
+            move_window_to_workspace (m, win, free_ws);
+    }
+
+    win->is_maximized = existing->is_maximized;
+    win->is_minimized = existing->is_minimized;
+    if (win->is_minimized)
+        win->geometry = existing->geometry;
+
+    gf_window_list_update (windows, win);
+}
+
+// New-window placement depends on visit order (workspaces fill up), so keep it
+// deterministic in desktop order, as the old per-workspace scan was.
+static void
+sort_by_workspace (gf_win_info_t *wins, uint32_t count)
+{
+    for (uint32_t i = 1; i < count; i++)
+    {
+        gf_win_info_t key = wins[i];
+        uint32_t j = i;
+        while (j > 0 && wins[j - 1].workspace_id > key.workspace_id)
+        {
+            wins[j] = wins[j - 1];
+            j--;
+        }
+        wins[j] = key;
+    }
+}
+
 void
 gf_wm_watch (gf_wm_t *m)
 {
@@ -101,78 +162,24 @@ gf_wm_watch (gf_wm_t *m)
         return;
 
     gf_platform_t *platform = wm_platform (m);
-    gf_ws_list_t *workspaces = wm_workspaces (m);
-    gf_win_list_t *windows = wm_windows (m);
     gf_display_t display = *wm_display (m);
 
     sync_workspaces (m);
     enforce_fullscreen (m);
 
-    for (uint32_t mon_idx = 0; mon_idx < GF_MAX_MONITORS; mon_idx++)
-    {
-        gf_ws_info_t *current_ws = gf_workspace_list_find_by_id (
-            workspaces, workspaces->active_workspace[mon_idx]);
-        (void)current_ws;
-    }
+    // Enumerate once, not once per workspace; placement is decided per window.
+    gf_win_info_t *wins = NULL;
+    uint32_t count = 0;
+    if (!platform->window_enumerate
+        || platform->window_enumerate (display, NULL, &wins, &count) != GF_SUCCESS)
+        return;
 
-    for (uint32_t wsi = 0; wsi < workspaces->count; wsi++)
-    {
-        gf_ws_id_t ws_id = workspaces->items[wsi].id - GF_FIRST_WORKSPACE_ID;
+    sort_by_workspace (wins, count);
 
-        gf_win_info_t *ws_wins = NULL;
-        uint32_t ws_count = 0;
+    for (uint32_t i = 0; i < count; i++)
+        watch_process_window (m, &wins[i]);
 
-        if (!platform->window_enumerate
-            || platform->window_enumerate (display, &ws_id, &ws_wins, &ws_count)
-                   != GF_SUCCESS)
-            continue;
-
-        for (uint32_t i = 0; i < ws_count; i++)
-        {
-            gf_win_info_t *win = &ws_wins[i];
-
-            if (!win->is_valid || wm_is_excluded (m, win->id))
-                continue;
-
-            if (platform->monitor_from_window)
-                win->monitor_id = platform->monitor_from_window (platform, win->id);
-
-            gf_win_info_t *existing = gf_window_list_find_by_window_id (windows, win->id);
-
-            if (!existing)
-            {
-                register_new_window (m, win, NULL);
-            }
-            else
-            {
-                win->workspace_id = existing->workspace_id;
-                gf_wm_resolve_window_name (m, win->id, existing->name, win->name,
-                                           sizeof (win->name));
-
-                const gf_window_rule_t *rule = gf_rules_find (m->config, win->name);
-
-                gf_ws_info_t *current_ws
-                    = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
-
-                if (current_ws && !rule && current_ws->has_rule)
-                {
-                    gf_ws_id_t free_ws = gf_workspace_list_find_free (workspaces);
-                    if (gf_workspace_list_find_by_id (workspaces, free_ws))
-                        move_window_to_workspace (m, win, free_ws);
-                }
-
-                win->is_maximized = existing->is_maximized;
-                win->is_minimized = existing->is_minimized;
-
-                if (win->is_minimized)
-                    win->geometry = existing->geometry;
-
-                gf_window_list_update (windows, win);
-            }
-        }
-
-        gf_free (ws_wins);
-    }
+    gf_free (wins);
 }
 
 static void

@@ -205,23 +205,19 @@ query_window_info (Display *display, Window window, gf_platform_atoms_t *atoms,
             != GF_SUCCESS
         || desktop_nitems == 0)
     {
-        // Desktop unreadable: we cannot confirm the window is on the requested
-        // workspace, so exclude it rather than showing it on every workspace.
-        if (workspace_id != NULL)
-            return false;
+        // Desktop unreadable: can't place it on any workspace, so drop it.
+        return false;
     }
-    else
-    {
-        unsigned long window_workspace = *(unsigned long *)desktop_data;
-        XFree (desktop_data);
 
-        // 0xFFFFFFFF marks a sticky window that appears on all workspaces.
-        bool is_sticky = (window_workspace == 0xFFFFFFFFUL);
-        if (workspace_id != NULL && !is_sticky
-            && (gf_ws_id_t)window_workspace != *workspace_id)
-        {
-            return false;
-        }
+    unsigned long window_workspace = *(unsigned long *)desktop_data;
+    XFree (desktop_data);
+
+    // 0xFFFFFFFF marks a sticky window that appears on all workspaces.
+    bool is_sticky = (window_workspace == 0xFFFFFFFFUL);
+    if (workspace_id != NULL && !is_sticky
+        && (gf_ws_id_t)window_workspace != *workspace_id)
+    {
+        return false;
     }
 
     gf_rect_t geometry;
@@ -231,8 +227,11 @@ query_window_info (Display *display, Window window, gf_platform_atoms_t *atoms,
     bool is_maximized = gf_window_is_maximized (display, window);
     bool is_excluded = gf_window_is_excluded (display, window);
 
-    gf_ws_id_t resolved_workspace
-        = (workspace_id != NULL) ? *workspace_id : GF_FIRST_WORKSPACE_ID;
+    // Per-workspace scan keeps the requested id; single-pass (NULL) uses the
+    // window's own desktop, with sticky windows on the first workspace.
+    gf_ws_id_t resolved_workspace = (workspace_id != NULL) ? *workspace_id
+                                    : is_sticky            ? GF_FIRST_WORKSPACE_ID
+                                                           : (gf_ws_id_t)window_workspace;
 
     *info = (gf_win_info_t){ .id = window,
                              .workspace_id = resolved_workspace,
