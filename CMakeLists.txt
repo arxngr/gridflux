@@ -343,6 +343,38 @@ if(NOT GF_DEV_MODE)
 endif()
 
 
+option(GF_BUILD_TESTS "Build unit tests" OFF)
+if(GF_BUILD_TESTS AND UNIX AND NOT APPLE)
+    enable_testing()
+    add_executable(gridflux-tests
+        tests/test_wm_watch.c
+        tests/mock_platform.c
+        src/ipc/ipc_command.c
+        src/core/wm.c
+        src/core/arrange.c
+        src/core/workspace.c
+        src/core/window.c
+        src/core/events.c
+        src/core/debug.c
+        src/core/border.c
+        src/utils/list.c
+        src/utils/memory.c
+        src/utils/logger.c
+        src/config/config.c
+        src/core/layout.c
+        src/core/resize.c
+        src/utils/file.c
+        src/config/rules.c
+        src/platform/unix/ipc.c
+    )
+    target_include_directories(gridflux-tests PRIVATE ${PLATFORM_INCLUDES})
+    target_link_libraries(gridflux-tests PRIVATE ${PLATFORM_LIBRARIES})
+    if(JSONC_LIBRARY_DIRS)
+        target_link_directories(gridflux-tests PRIVATE ${JSONC_LIBRARY_DIRS})
+    endif()
+    add_test(NAME wm_watch COMMAND gridflux-tests)
+endif()
+
 message(STATUS "")
 message(STATUS "GridFlux Build Configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
