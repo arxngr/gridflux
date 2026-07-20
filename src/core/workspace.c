@@ -164,6 +164,33 @@ win_has_assigned_workspace (gf_win_info_t *win, gf_ws_list_t *workspaces)
            && ws_is_valid (workspaces, win->workspace_id);
 }
 
+// Sync the dock to the target workspace (hidden when maximized), re-tiling if
+// it changed. Runs before windows are shown so they tile against the final area.
+static void
+apply_dock_state (gf_wm_t *m, gf_ws_info_t *target_ws, gf_ws_id_t current_workspace)
+{
+    gf_platform_t *platform = wm_platform (m);
+    bool wants_hidden = (target_ws && target_ws->has_maximized_state);
+
+    if (wants_hidden && !m->state.dock_hidden && platform->dock_hide)
+    {
+        platform->dock_hide (platform);
+        m->state.dock_hidden = true;
+    }
+    else if (!wants_hidden && m->state.dock_hidden && platform->dock_restore)
+    {
+        platform->dock_restore (platform);
+        m->state.dock_hidden = false;
+    }
+    else
+    {
+        return; // dock already in the desired state
+    }
+
+    if (target_ws && !target_ws->is_custom_layout)
+        gf_window_list_mark_all_needs_update (wm_windows (m), &current_workspace);
+}
+
 void
 switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace)
 {
@@ -182,37 +209,17 @@ switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace)
     }
 
     gf_platform_t *platform = wm_platform (m);
+    gf_ws_info_t *target_ws
+        = gf_workspace_list_find_by_id (workspaces, current_workspace);
+
+    // Dock before windows, or they tile full-screen then snap when it returns.
+    apply_dock_state (m, target_ws, current_workspace);
+
     gf_handle_t active_window = 0;
     if (platform->window_get_focused)
         active_window = platform->window_get_focused (*wm_display (m));
 
     restore_workspace_windows (m, current_workspace, active_window, active_monitor);
-
-    gf_ws_info_t *target_ws
-        = gf_workspace_list_find_by_id (workspaces, current_workspace);
-
-    if (target_ws && target_ws->has_maximized_state)
-    {
-        if (!m->state.dock_hidden && platform->dock_hide)
-        {
-            platform->dock_hide (platform);
-            m->state.dock_hidden = true;
-
-            if (!target_ws->is_custom_layout)
-                gf_window_list_mark_all_needs_update (wm_windows (m), &current_workspace);
-        }
-    }
-    else
-    {
-        if (m->state.dock_hidden && platform->dock_restore)
-        {
-            platform->dock_restore (platform);
-            m->state.dock_hidden = false;
-
-            if (target_ws && !target_ws->is_custom_layout)
-                gf_window_list_mark_all_needs_update (wm_windows (m), &current_workspace);
-        }
-    }
 }
 
 /* Ensure every rule's target workspace exists and is flagged has_rule=true
