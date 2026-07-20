@@ -153,7 +153,8 @@ window_is_self (gf_display_t display, gf_handle_t window)
 
     bool match
         = (class_hint.res_name && strcmp (class_hint.res_name, "gridflux-gui") == 0)
-          || (class_hint.res_class && strstr (class_hint.res_class, "com.gridflux.gui") != NULL);
+          || (class_hint.res_class
+              && strstr (class_hint.res_class, "com.gridflux.gui") != NULL);
 
     if (class_hint.res_name)
         XFree (class_hint.res_name);

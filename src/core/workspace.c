@@ -441,7 +441,8 @@ assign_maximized_window (gf_wm_t *m, gf_win_info_t *win)
     // recount_workspace_windows won't see it until the end of this tick.
     // Without this, several already-maximized windows discovered in the
     // same tick would all see window_count == 0 and pile onto one workspace.
-    gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), win->workspace_id);
+    gf_ws_info_t *ws
+        = gf_workspace_list_find_by_id (wm_workspaces (m), win->workspace_id);
     if (ws)
         ws->window_count++;
 }
