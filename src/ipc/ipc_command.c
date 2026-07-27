@@ -1,4 +1,5 @@
 #include "ipc_command.h"
+#include "../config/excludes.h"
 #include "../config/rules.h"
 #include "../core/internal.h"
 #include "../core/wm.h"
@@ -412,6 +413,107 @@ gf_cmd_rule_list (const char *args, gf_ipc_response_t *response, void *user_data
     memcpy (response->message, &resp, sizeof (resp));
 }
 
+// Copy the whole argument as the class name — exclusion/rule identities can
+// contain spaces (window title fragments, "class|exe"), so first-token parsing
+// would truncate them. Trims surrounding whitespace; false if empty.
+static bool
+gf_copy_class_arg (const char *args, char *out, size_t out_size)
+{
+    if (!args)
+        return false;
+    while (*args == ' ' || *args == '\t')
+        args++;
+    gf_safe_strcpy (out, out_size, args);
+    size_t len = strlen (out);
+    while (len > 0
+           && (out[len - 1] == '\n' || out[len - 1] == '\r' || out[len - 1] == ' '
+               || out[len - 1] == '\t'))
+        out[--len] = '\0';
+    return out[0] != '\0';
+}
+
+static void
+gf_cmd_exclude_add (const char *args, gf_ipc_response_t *response, void *user_data)
+{
+    gf_wm_t *m = (gf_wm_t *)user_data;
+    gf_command_response_t resp;
+
+    char wm_class[GF_RULE_CLASS_MAX] = { 0 };
+    if (!gf_copy_class_arg (args, wm_class, sizeof (wm_class)))
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        resp.type = 1;
+        snprintf (resp.message, sizeof (resp.message), "Usage: exclude add <wm_class>");
+        memcpy (response->message, &resp, sizeof (resp));
+        return;
+    }
+
+    gf_err_t result = gf_excludes_add (m->config, wm_class);
+    resp.type = (result == GF_SUCCESS) ? 0 : 1;
+
+    if (result == GF_SUCCESS)
+        snprintf (resp.message, sizeof (resp.message), "Excluded: %s", wm_class);
+    else
+        snprintf (resp.message, sizeof (resp.message), "Failed to exclude %s (error %d)",
+                  wm_class, result);
+
+    memcpy (response->message, &resp, sizeof (resp));
+}
+
+static void
+gf_cmd_exclude_remove (const char *args, gf_ipc_response_t *response, void *user_data)
+{
+    gf_wm_t *m = (gf_wm_t *)user_data;
+    gf_command_response_t resp;
+
+    char wm_class[GF_RULE_CLASS_MAX] = { 0 };
+    if (!gf_copy_class_arg (args, wm_class, sizeof (wm_class)))
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        resp.type = 1;
+        snprintf (resp.message, sizeof (resp.message),
+                  "Usage: exclude remove <wm_class>");
+        memcpy (response->message, &resp, sizeof (resp));
+        return;
+    }
+
+    gf_err_t result = gf_excludes_remove (m->config, wm_class);
+    resp.type = (result == GF_SUCCESS) ? 0 : 1;
+
+    if (result == GF_SUCCESS)
+        snprintf (resp.message, sizeof (resp.message), "Exclusion removed: %s", wm_class);
+    else
+        snprintf (resp.message, sizeof (resp.message), "No exclusion for: %s", wm_class);
+
+    memcpy (response->message, &resp, sizeof (resp));
+}
+
+static void
+gf_cmd_exclude_list (const char *args, gf_ipc_response_t *response, void *user_data)
+{
+    (void)args;
+    gf_wm_t *m = (gf_wm_t *)user_data;
+    gf_command_response_t resp;
+    resp.type = 0;
+
+    const gf_exclude_list_t *list = &m->config->excluded_apps;
+    if (list->count == 0)
+    {
+        snprintf (resp.message, sizeof (resp.message), "No apps excluded");
+        memcpy (response->message, &resp, sizeof (resp));
+        return;
+    }
+
+    size_t pos = 0;
+    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
+                     "Excluded apps (%u):\n", list->count);
+    for (uint32_t i = 0; i < list->count && pos < sizeof (resp.message) - 130; i++)
+        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%s\n",
+                         list->items[i].wm_class);
+
+    memcpy (response->message, &resp, sizeof (resp));
+}
+
 static void
 gf_cmd_query_apps (const char *args, gf_ipc_response_t *response, void *user_data)
 {
@@ -572,6 +674,34 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
             gf_command_response_t resp;
             resp.type = 1;
             snprintf (resp.message, sizeof (resp.message), "Unknown rule command: %s",
+                      subcommand);
+            memcpy (response->message, &resp, sizeof (resp));
+        }
+    }
+    else if (strcmp (command, "exclude") == 0)
+    {
+        char subcommand[64] = { 0 };
+        char subargs[256] = { 0 };
+        gf_parse_command (args, subcommand, subargs, sizeof (subargs));
+
+        if (strcmp (subcommand, "add") == 0)
+        {
+            gf_cmd_exclude_add (subargs, response, user_data);
+        }
+        else if (strcmp (subcommand, "remove") == 0)
+        {
+            gf_cmd_exclude_remove (subargs, response, user_data);
+        }
+        else if (strcmp (subcommand, "list") == 0)
+        {
+            gf_cmd_exclude_list (subargs, response, user_data);
+        }
+        else
+        {
+            response->status = GF_IPC_ERROR_INVALID_COMMAND;
+            gf_command_response_t resp;
+            resp.type = 1;
+            snprintf (resp.message, sizeof (resp.message), "Unknown exclude command: %s",
                       subcommand);
             memcpy (response->message, &resp, sizeof (resp));
         }

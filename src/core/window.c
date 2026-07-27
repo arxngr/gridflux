@@ -1,4 +1,5 @@
 #include "../config/config.h"
+#include "../config/excludes.h"
 #include "../platform/platform_compat.h"
 #include "../utils/list.h"
 #include "../utils/logger.h"
@@ -18,17 +19,23 @@ static void
 remove_stale_windows (gf_wm_t *m, gf_win_list_t *windows)
 {
     uint32_t removed = 0;
+    gf_platform_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
     for (uint32_t i = 0; i < windows->count;)
     {
         gf_win_info_t *win = &windows->items[i];
-        bool excluded = wm_is_excluded (m, win->id);
-        bool invalid = !wm_is_valid (m, win->id);
-        bool hidden = m->platform->window_is_hidden
-                      && m->platform->window_is_hidden (m->display, win->id);
+        gf_handle_t win_id = win->id;
 
-        if (excluded || invalid || hidden)
+        bool invalid = !wm_is_valid (m, win_id);
+        bool hidden
+            = platform->window_is_hidden && platform->window_is_hidden (display, win_id);
+        bool sys_excluded = platform->window_is_excluded
+                            && platform->window_is_excluded (display, win_id);
+
+        // Dead, hidden, or system windows are dropped from management entirely.
+        if (invalid || hidden || sys_excluded)
         {
             if (win->is_maximized)
             {
@@ -37,12 +44,12 @@ remove_stale_windows (gf_wm_t *m, gf_win_list_t *windows)
                 if (ws && ws->has_maximized_state)
                     cleanup_empty_maximized_ws (m, ws->id);
             }
-            gf_handle_t stale_id = win->id;
-            m->platform->border_remove (m->platform, stale_id);
-            gf_window_list_remove (windows, stale_id);
+            platform->border_remove (platform, win_id);
+            gf_window_list_remove (windows, win_id);
             removed++;
             continue;
         }
+
         i++;
     }
 
@@ -51,6 +58,134 @@ remove_stale_windows (gf_wm_t *m, gf_win_list_t *windows)
         m->state.resize_active = false;
         GF_LOG_DEBUG ("Cleaned %u invalid/excluded windows", removed);
     }
+}
+
+static gf_exclude_cache_entry_t g_exclude_cache[GF_EXCLUDE_CACHE_SIZE];
+static int g_exclude_cache_next;
+
+// Resolve a window's class|exe with a short-lived per-handle cache, so the
+// platform lookup (OpenProcess) doesn't run for every window on every tick.
+static const char *
+cached_window_class (gf_wm_t *m, gf_handle_t w, char *scratch, size_t size)
+{
+    uint64_t now = m->state.loop_counter;
+    for (int i = 0; i < GF_EXCLUDE_CACHE_SIZE; i++)
+        if (g_exclude_cache[i].id == w
+            && now - g_exclude_cache[i].stamp < GF_EXCLUDE_CACHE_TTL)
+            return g_exclude_cache[i].name;
+
+    gf_wm_window_class (m, w, scratch, size);
+    if (scratch[0] == '\0')
+        return scratch;
+
+    gf_exclude_cache_entry_t *slot = &g_exclude_cache[g_exclude_cache_next];
+    slot->id = w;
+    slot->stamp = now;
+    strncpy (slot->name, scratch, sizeof (slot->name) - 1);
+    slot->name[sizeof (slot->name) - 1] = '\0';
+    g_exclude_cache_next = (g_exclude_cache_next + 1) % GF_EXCLUDE_CACHE_SIZE;
+    return slot->name;
+}
+
+bool
+wm_user_excluded (gf_wm_t *m, gf_handle_t w)
+{
+    if (!m || !m->config || m->config->excluded_apps.count == 0)
+        return false;
+
+    // Resolve the class the same way exclusions are stored (class|exe), so the
+    // match can't miss on a differently-formatted cached name.
+    char scratch[256] = { 0 };
+    const char *class_name = cached_window_class (m, w, scratch, sizeof (scratch));
+    if (class_name[0] == '\0')
+        return false;
+
+    return gf_exclude_list_contains (&m->config->excluded_apps, class_name);
+}
+
+// Full re-tile: recount (parked windows no longer count on normal workspaces),
+// flag every window for update, drop custom layouts, and clear resize state so
+// gf_wm_layout_apply doesn't bail out early.
+static void
+excluded_force_retile (gf_wm_t *m)
+{
+    gf_ws_list_t *ws_list = wm_workspaces (m);
+
+    m->state.resize_active = false;
+    recount_workspace_windows (m, ws_list, wm_windows (m),
+                               m->config->max_windows_per_workspace);
+    gf_window_list_mark_all_needs_update (wm_windows (m), NULL);
+    for (uint32_t i = 0; i < ws_list->count; i++)
+        ws_list->items[i].is_custom_layout = false;
+}
+
+// Park user-excluded windows on the excluded workspace (minimized, no border)
+// and bring restored ones back to a normal workspace. Runs each tick after the
+// window list is synced; only acts on state transitions, so it is idle once
+// everything is reconciled.
+void
+reconcile_excluded_windows (gf_wm_t *m)
+{
+    gf_platform_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+    gf_win_list_t *windows = wm_windows (m);
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+    bool changed = false;
+
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        gf_win_info_t *win = &windows->items[i];
+        if (!win->is_valid)
+            continue;
+
+        gf_ws_info_t *cur = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
+
+        // Leave maximized windows on their maximized workspace; only reconcile
+        // them once they are unmaximized.
+        if (win->is_maximized || (cur && cur->has_maximized_state))
+            continue;
+
+        bool parked = cur && cur->is_excluded_ws;
+        bool excluded = wm_user_excluded (m, win->id);
+
+        if (excluded && !parked)
+        {
+            platform->border_remove (platform, win->id);
+            move_window_to_workspace (m, win, lookup_or_create_excluded_ws (m));
+            if (platform->window_minimize)
+                platform->window_minimize (display, win->id);
+            win->is_minimized = true;
+            changed = true;
+        }
+        else if (excluded && parked)
+        {
+            // Already parked: keep any border off (idempotent no-op once gone).
+            platform->border_remove (platform, win->id);
+        }
+        else if (!excluded && parked)
+        {
+            // Bring the window back to the workspace currently in view, not an
+            // arbitrary free one, so it re-tiles where the user can see it.
+            gf_monitor_id_t mon = find_active_monitor (m);
+            gf_ws_id_t target = workspaces->active_workspace[mon];
+            gf_ws_info_t *tws = gf_workspace_list_find_by_id (workspaces, target);
+            if (!tws || tws->is_locked || tws->has_maximized_state || tws->is_excluded_ws
+                || tws->available_space <= 0)
+                target = lookup_or_create_ws (m);
+
+            move_window_to_workspace (m, win, target);
+            if (platform->window_unminimize)
+                platform->window_unminimize (display, win->id);
+            win->is_minimized = false;
+            if (m->config->enable_borders && platform->border_add)
+                platform->border_add (platform, win->id, m->config->border_color,
+                                      GF_BORDER_WIDTH);
+            changed = true;
+        }
+    }
+
+    if (changed)
+        excluded_force_retile (m);
 }
 
 void

@@ -1,3 +1,4 @@
+#include "../../config/excludes.h"
 #include "../../utils/logger.h"
 #include "internal.h"
 #include "platform.h"
@@ -332,16 +333,63 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     _border_update_overlay (b, NULL, 0);
 }
 
-// Collect the frame rects of all visible, border-excluded (GUI) windows so the
-// overlay can be clipped around them. Returns the number gathered (up to max).
+// Resolving class+exe walks a process handle per window; cache it per HWND
+// (class_cache_entry_t, see internal.h) so a ~30 Hz border update doesn't re-run
+// OpenProcess for every top-level window. A window's class is immutable, so the
+// short TTL only bounds staleness from the rare case of a recycled HWND value.
+static class_cache_entry_t g_class_cache[GF_CLASS_CACHE_SIZE];
+static int g_class_cache_next;
+
+static const char *
+_cached_window_class (HWND hwnd, char *scratch, size_t scratch_size)
+{
+    DWORD now = GetTickCount ();
+    for (int i = 0; i < GF_CLASS_CACHE_SIZE; i++)
+        if (g_class_cache[i].hwnd == hwnd
+            && (now - g_class_cache[i].stamp) < GF_CLASS_CACHE_TTL_MS)
+            return g_class_cache[i].cls;
+
+    gf_window_get_class (NULL, (gf_handle_t)hwnd, scratch, scratch_size);
+    if (scratch[0] == '\0')
+        return scratch;
+
+    class_cache_entry_t *slot = &g_class_cache[g_class_cache_next];
+    slot->hwnd = hwnd;
+    slot->stamp = now;
+    strncpy (slot->cls, scratch, sizeof (slot->cls) - 1);
+    slot->cls[sizeof (slot->cls) - 1] = '\0';
+    g_class_cache_next = (g_class_cache_next + 1) % GF_CLASS_CACHE_SIZE;
+    return slot->cls;
+}
+
+// True if the window's app is on the user's exclude list. Resolved lazily so
+// the class/exe lookup only runs when exclusions actually exist.
+static bool
+_window_user_excluded (const gf_config_t *config, HWND hwnd)
+{
+    if (config->excluded_apps.count == 0)
+        return false;
+
+    char scratch[256] = { 0 };
+    const char *class_name = _cached_window_class (hwnd, scratch, sizeof (scratch));
+    if (class_name[0] == '\0')
+        return false;
+
+    return gf_exclude_list_contains (&config->excluded_apps, class_name);
+}
+
+// Collect the frame rects of all visible windows the overlay should be clipped
+// around: the GUI/system windows plus any user-excluded app. Returns the number
+// gathered (up to max).
 static int
-_border_collect_gui_rects (RECT *out, int max)
+_border_collect_gui_rects (const gf_config_t *config, RECT *out, int max)
 {
     int count = 0;
     HWND hwnd = GetTopWindow (NULL);
     while (hwnd && count < max)
     {
-        if (IsWindowVisible (hwnd) && window_is_border_excluded (hwnd)
+        if (IsWindowVisible (hwnd)
+            && (window_is_border_excluded (hwnd) || _window_user_excluded (config, hwnd))
             && (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
                                                   &out[count], sizeof (RECT)))
                 || GetWindowRect (hwnd, &out[count])))
@@ -359,8 +407,11 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     if (!platform || !platform->platform_data || !config)
         return;
 
-    RECT gui_rects[16];
-    int gui_count = _border_collect_gui_rects (gui_rects, 16);
+    // Sized to hold GUI/system windows plus every user-excluded app; a single
+    // 16-slot buffer could be exhausted by excluded apps and drop the GUI's own
+    // clip rect, painting the border across it.
+    RECT gui_rects[GF_BORDER_MAX_CLIP];
+    int gui_count = _border_collect_gui_rects (config, gui_rects, GF_BORDER_MAX_CLIP);
 
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;

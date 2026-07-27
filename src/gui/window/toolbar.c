@@ -1,6 +1,7 @@
 #include "toolbar.h"
 #include "../bridge/process_manager.h"
 #include "../bridge/refresh.h"
+#include "../panels/exclude_panel.h"
 #include "../panels/rules_panel.h"
 #include "../panels/settings_panel.h"
 #include "../platform/async.h"
@@ -100,11 +101,14 @@ gf_gui_toolbar_new (gf_app_state_t *app)
         "emblem-system-symbolic", NULL, G_CALLBACK (on_config_button_clicked), app);
     GtkWidget *rules
         = build_action_button (NULL, "Rules", G_CALLBACK (on_rules_button_clicked), app);
+    GtkWidget *exclude = build_action_button (
+        NULL, "Exclusions", G_CALLBACK (on_exclude_button_clicked), app);
     GtkWidget *refresh = build_action_button ("view-refresh-symbolic", NULL,
                                               G_CALLBACK (on_refresh_clicked), app);
 
     gtk_header_bar_pack_end (GTK_HEADER_BAR (bar), settings);
     gtk_header_bar_pack_end (GTK_HEADER_BAR (bar), refresh);
     gtk_header_bar_pack_end (GTK_HEADER_BAR (bar), rules);
+    gtk_header_bar_pack_end (GTK_HEADER_BAR (bar), exclude);
     return bar;
 }

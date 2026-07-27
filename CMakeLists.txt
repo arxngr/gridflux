@@ -204,6 +204,7 @@ add_executable(gridflux-cli
     src/core/resize.c
     src/utils/file.c
     src/config/rules.c
+    src/config/excludes.c
 )
 
 if(UNIX AND NOT APPLE)
@@ -222,6 +223,8 @@ if(GTK4_FOUND)
         src/gui/panels/workspace_panel.c
         src/gui/panels/settings_panel.c
         src/gui/panels/rules_panel.c
+        src/gui/panels/exclude_panel.c
+        src/gui/panels/panel_common.c
         src/gui/widgets/workspace_card.c
         src/gui/bridge/ipc_client.c
         src/gui/bridge/refresh.c
@@ -242,6 +245,7 @@ if(GTK4_FOUND)
         src/core/resize.c
         src/utils/file.c
         src/config/rules.c
+        src/config/excludes.c
         ${PLATFORM_SOURCES}
     )
 

@@ -6,6 +6,7 @@
 
 static HHOOK g_keymap_hook = NULL;
 static gf_key_action_t g_pending_action = GF_KEY_NONE;
+static HWND g_pending_window = NULL;
 
 static LRESULT CALLBACK
 LowLevelKeyboardProc (int nCode, WPARAM wParam, LPARAM lParam)
@@ -19,6 +20,7 @@ LowLevelKeyboardProc (int nCode, WPARAM wParam, LPARAM lParam)
             bool ctrl_pressed = (GetAsyncKeyState (VK_CONTROL) & 0x8000) != 0;
             bool win_pressed = (GetAsyncKeyState (VK_LWIN) & 0x8000) != 0
                                || (GetAsyncKeyState (VK_RWIN) & 0x8000) != 0;
+            bool alt_pressed = (GetAsyncKeyState (VK_MENU) & 0x8000) != 0;
 
             if (ctrl_pressed && win_pressed)
             {
@@ -32,6 +34,16 @@ LowLevelKeyboardProc (int nCode, WPARAM wParam, LPARAM lParam)
                     g_pending_action = GF_KEY_WORKSPACE_NEXT;
                     return 1; // Consume key
                 }
+            }
+            else if (alt_pressed && !ctrl_pressed && !win_pressed && p->vkCode == 'E')
+            {
+                // Require Alt alone: Ctrl+Alt (== AltGr on EU layouts) must not
+                // trigger, so AltGr+E still types the euro sign.
+                // Capture the focused window now, before the arrangement loop
+                // can shift focus to another window.
+                g_pending_window = GetForegroundWindow ();
+                g_pending_action = GF_KEY_EXCLUDE_FOCUSED;
+                return 1; // Consume key
             }
         }
     }
@@ -57,8 +69,8 @@ gf_keymap_init (gf_platform_t *platform, gf_display_t display)
         return GF_ERROR_PLATFORM_ERROR;
     }
 
-    GF_LOG_INFO ("Keymap initialized (WH_KEYBOARD_LL): Ctrl+Win+Left/Right for workspace "
-                 "switching");
+    GF_LOG_INFO ("Keymap initialized (WH_KEYBOARD_LL): Ctrl+Win+Left/Right to switch "
+                 "workspace, Alt+E to exclude the focused app");
     return GF_SUCCESS;
 }
 
@@ -74,6 +86,13 @@ gf_keymap_cleanup (gf_platform_t *platform)
     }
 
     GF_LOG_INFO ("Keymap cleaned up");
+}
+
+gf_handle_t
+gf_keymap_focused_window (gf_platform_t *platform)
+{
+    (void)platform;
+    return (gf_handle_t)g_pending_window;
 }
 
 gf_key_action_t

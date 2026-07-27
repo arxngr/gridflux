@@ -123,10 +123,19 @@ filter_monitor_windows (gf_win_info_t *ws_wins, uint32_t ws_count, gf_monitor_t 
                         uint32_t monitor_count, gf_win_info_t *out, uint32_t *out_count,
                         gf_wm_t *m, gf_ws_info_t *ws)
 {
+    gf_platform_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+
     *out_count = 0;
     for (uint32_t j = 0; j < ws_count; j++)
     {
-        if (ws_wins[j].is_maximized && !ws->has_maximized_state)
+        // Consult the live maximized state, not just the tracked flag: a window
+        // maximized this tick would otherwise be re-tiled (un-maximized) before
+        // gf_wm_event detects the transition.
+        bool maximized = ws_wins[j].is_maximized
+                         || (platform->window_is_maximized
+                             && platform->window_is_maximized (display, ws_wins[j].id));
+        if (maximized && !ws->has_maximized_state)
             continue;
         if (ws_wins[j].is_minimized || wm_is_excluded (m, ws_wins[j].id))
             continue;
@@ -215,7 +224,7 @@ gf_wm_layout_apply (gf_wm_t *m)
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_ws_info_t *ws = &workspaces->items[i];
-        if (!ws->has_maximized_state)
+        if (!ws->has_maximized_state && !ws->is_excluded_ws)
             apply_layout_to_workspace (m, ws, monitors, monitor_count);
     }
 
@@ -356,7 +365,8 @@ gf_wm_layout_rebalance (gf_wm_t *m)
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_ws_info_t *src_ws = &workspaces->items[i];
-        if (src_ws->has_maximized_state || src_ws->window_count <= max_per_ws)
+        if (src_ws->has_maximized_state || src_ws->is_excluded_ws
+            || src_ws->window_count <= max_per_ws)
             continue;
         rebalance_workspace (m, src_ws);
     }

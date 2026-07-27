@@ -205,6 +205,13 @@ gf_config_save (const char *filename, const gf_config_t *cfg)
     }
     json_object_object_add (json, "exclude_zones", exclude_arr);
 
+    // Serialize excluded apps
+    struct json_object *apps_arr = json_object_new_array ();
+    for (uint32_t i = 0; i < cfg->excluded_apps.count; i++)
+        json_object_array_add (
+            apps_arr, json_object_new_string (cfg->excluded_apps.items[i].wm_class));
+    json_object_object_add (json, "excluded_apps", apps_arr);
+
     const char *out = json_object_to_json_string_ext (json, JSON_C_TO_STRING_PRETTY);
     write_file (filename, out);
 
@@ -226,10 +233,19 @@ gf_config_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
            || old_cfg->enable_live_resize != new_cfg->enable_live_resize
            || old_cfg->locked_workspaces_count != new_cfg->locked_workspaces_count
            || old_cfg->window_rules_count != new_cfg->window_rules_count
-           || old_cfg->exclude_zones_count != new_cfg->exclude_zones_count);
+           || old_cfg->exclude_zones_count != new_cfg->exclude_zones_count
+           || old_cfg->excluded_apps.count != new_cfg->excluded_apps.count);
 
     if (basic_changed)
         return true;
+
+    for (uint32_t i = 0; i < old_cfg->excluded_apps.count; i++)
+    {
+        if (strcmp (old_cfg->excluded_apps.items[i].wm_class,
+                    new_cfg->excluded_apps.items[i].wm_class)
+            != 0)
+            return true;
+    }
 
     for (uint32_t i = 0; i < old_cfg->exclude_zones_count; i++)
     {
@@ -426,6 +442,23 @@ load_or_create_config (const char *filename)
         }
     }
 
+    // Parse excluded apps
+    struct json_object *apps_obj = NULL;
+    if (json_object_object_get_ex (json, "excluded_apps", &apps_obj)
+        && json_object_is_type (apps_obj, json_type_array))
+    {
+        size_t apps_len = json_object_array_length (apps_obj);
+        for (size_t i = 0; i < apps_len; i++)
+        {
+            struct json_object *item = json_object_array_get_idx (apps_obj, i);
+            if (!json_object_is_type (item, json_type_string))
+                continue;
+            const char *cls = json_object_get_string (item);
+            if (cls && cls[0] != '\0')
+                gf_exclude_list_push (&cfg.excluded_apps, cls);
+        }
+    }
+
     json_object_put (json);
 
     if (changed)
@@ -435,6 +468,27 @@ load_or_create_config (const char *filename)
     }
 
     return cfg;
+}
+
+gf_err_t
+gf_config_dup (gf_config_t *dst, const gf_config_t *src)
+{
+    if (!dst || !src)
+        return GF_ERROR_INVALID_PARAMETER;
+
+    *dst = *src;
+    dst->excluded_apps.items = NULL;
+    dst->excluded_apps.count = 0;
+    dst->excluded_apps.capacity = 0;
+    return gf_exclude_list_copy (&dst->excluded_apps, &src->excluded_apps);
+}
+
+void
+gf_config_release (gf_config_t *cfg)
+{
+    if (!cfg)
+        return;
+    gf_exclude_list_free (&cfg->excluded_apps);
 }
 
 bool

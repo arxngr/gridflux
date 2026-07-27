@@ -32,6 +32,7 @@ typedef struct
     // Keymap state
     bool keymap_initialized;
     int xi_opcode;
+    gf_handle_t pending_focus_window; // window focused when the last hotkey fired
 } gf_linux_platform_data_t;
 
 // Platform interface (Linux implementation)
@@ -98,5 +99,6 @@ void gf_dock_restore (gf_platform_t *platform);
 gf_err_t gf_keymap_init (gf_platform_t *platform, gf_display_t display);
 void gf_keymap_cleanup (gf_platform_t *platform);
 gf_key_action_t gf_keymap_poll (gf_platform_t *platform, gf_display_t display);
+gf_handle_t gf_keymap_focused_window (gf_platform_t *platform);
 
 #endif // GF_PLATFORM_LINUX_H

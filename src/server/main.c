@@ -68,6 +68,7 @@ main ()
     {
         GF_LOG_ERROR ("X11 session required, found: %s",
                       session_type ? session_type : "none");
+        gf_config_release (config);
         gf_free (config);
         return 1;
     }
@@ -78,6 +79,7 @@ main ()
     if (!platform)
     {
         GF_LOG_ERROR ("Failed to create platform interface");
+        gf_config_release (config);
         gf_free (config);
         return 1;
     }
@@ -115,8 +117,9 @@ cleanup:
         gf_wm_cleanup (g_manager);
         gf_wm_destroy (g_manager);
     }
-    else if (config)
+    if (config)
     {
+        gf_config_release (config);
         gf_free (config);
     }
 
