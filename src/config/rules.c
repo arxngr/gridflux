@@ -4,8 +4,8 @@
 #include <ctype.h>
 #include <string.h>
 
-static bool
-class_matches (const char *rule_class, const char *window_class)
+bool
+gf_class_matches (const char *rule_class, const char *window_class)
 {
     if (!rule_class || !window_class)
         return false;
@@ -51,7 +51,7 @@ gf_rules_add (gf_config_t *cfg, const char *wm_class, gf_ws_id_t ws_id)
     // Check if rule already exists for this class — update it
     for (uint32_t i = 0; i < cfg->window_rules_count; i++)
     {
-        if (class_matches (cfg->window_rules[i].wm_class, wm_class))
+        if (gf_class_matches (cfg->window_rules[i].wm_class, wm_class))
         {
             cfg->window_rules[i].workspace_id = ws_id;
             GF_LOG_INFO ("Updated rule: %s → workspace %d", wm_class, ws_id);
@@ -90,7 +90,7 @@ gf_rules_remove (gf_config_t *cfg, const char *wm_class)
 
     for (uint32_t i = 0; i < cfg->window_rules_count; i++)
     {
-        if (class_matches (cfg->window_rules[i].wm_class, wm_class))
+        if (gf_class_matches (cfg->window_rules[i].wm_class, wm_class))
         {
             // Shift remaining rules down
             for (uint32_t j = i; j < cfg->window_rules_count - 1; j++)
@@ -120,7 +120,7 @@ gf_rules_find (const gf_config_t *cfg, const char *wm_class)
 
     for (uint32_t i = 0; i < cfg->window_rules_count; i++)
     {
-        if (class_matches (cfg->window_rules[i].wm_class, wm_class))
+        if (gf_class_matches (cfg->window_rules[i].wm_class, wm_class))
             return &cfg->window_rules[i];
     }
 

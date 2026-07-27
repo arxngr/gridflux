@@ -57,6 +57,7 @@ on_settings_save (GtkButton *btn, gpointer user_data)
     apply_border_color (&config, color);
 
     gf_config_save (path, &config);
+    gf_config_release (&config);
     GtkAlertDialog *alert = gtk_alert_dialog_new ("Configuration saved");
     gtk_alert_dialog_show (alert, GTK_WINDOW (win));
 }
@@ -161,5 +162,6 @@ on_config_button_clicked (GtkButton *btn, gpointer data)
     gtk_box_append (GTK_BOX (box), form);
 
     gtk_box_append (GTK_BOX (box), build_button_bar (window));
+    gf_config_release (&config);
     gtk_window_present (GTK_WINDOW (window));
 }

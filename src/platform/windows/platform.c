@@ -6,6 +6,7 @@
 extern gf_err_t gf_keymap_init (gf_platform_t *platform, gf_display_t display);
 extern void gf_keymap_cleanup (gf_platform_t *platform);
 extern gf_key_action_t gf_keymap_poll (gf_platform_t *platform, gf_display_t display);
+extern gf_handle_t gf_keymap_focused_window (gf_platform_t *platform);
 extern gf_err_t gf_resize_hook_install (gf_platform_t *platform);
 extern void gf_resize_hook_uninstall (gf_platform_t *platform);
 extern bool gf_resize_poll (gf_platform_t *platform, gf_resize_event_t *event);
@@ -64,6 +65,7 @@ _platform_bind_system_ops (gf_platform_t *p)
     p->keymap_init = gf_keymap_init;
     p->keymap_cleanup = gf_keymap_cleanup;
     p->keymap_poll = gf_keymap_poll;
+    p->keymap_focused_window = gf_keymap_focused_window;
 
     // --- Resize Interaction ---
     p->resize_hook_install = gf_resize_hook_install;

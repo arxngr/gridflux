@@ -41,6 +41,24 @@ wm_is_valid (gf_wm_t *m, gf_handle_t w)
     return !p->window_is_valid || p->window_is_valid (*wm_display (m), w);
 }
 
+// Per-window cache of the resolved class|exe, so wm_user_excluded avoids the
+// platform class+exe lookup (OpenProcess) on every tick. TTL is in loop
+// iterations; a window's class is immutable so this only bounds handle reuse.
+#define GF_EXCLUDE_CACHE_SIZE 128
+#define GF_EXCLUDE_CACHE_TTL 120
+
+typedef struct
+{
+    gf_handle_t id;
+    uint64_t stamp;
+    char name[256];
+} gf_exclude_cache_entry_t;
+
+bool wm_user_excluded (gf_wm_t *m, gf_handle_t w);
+
+// Platform (system) exclusion only: windows GridFlux never manages (shell, its
+// own GUI, tool windows). User exclusions are handled separately by parking the
+// window on the excluded workspace, so they stay tracked/managed.
 static inline bool
 wm_is_excluded (gf_wm_t *m, gf_handle_t w)
 {
@@ -63,6 +81,8 @@ void recount_workspace_windows (gf_wm_t *m, gf_ws_list_t *workspaces,
 void sync_workspaces (gf_wm_t *m);
 bool ws_has_capacity (gf_ws_info_t *ws, uint32_t max_per_ws);
 bool ws_is_valid (gf_ws_list_t *workspaces, gf_ws_id_t id);
+gf_ws_id_t lookup_or_create_excluded_ws (gf_wm_t *m);
+void reconcile_excluded_windows (gf_wm_t *m);
 
 /* --- Window Management --- */
 void detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace);

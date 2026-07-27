@@ -23,6 +23,23 @@ void gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer
                           size_t bufsize);
 
 // --- Border Rendering (Win32 Overlay) ---
+
+// Max windows the border overlay can be clipped around in one pass (GUI/system
+// windows plus user-excluded apps).
+#define GF_BORDER_MAX_CLIP 64
+
+// Per-HWND cache of resolved window classes, so the border clip path does not
+// re-run the class+exe resolution (OpenProcess) for every window each update.
+#define GF_CLASS_CACHE_SIZE 256
+#define GF_CLASS_CACHE_TTL_MS 2000
+
+typedef struct
+{
+    HWND hwnd;
+    DWORD stamp;
+    char cls[MAX_CLASS_NAME_LENGTH];
+} class_cache_entry_t;
+
 HWND create_border_overlay (HWND target);
 void gf_border_remove (gf_platform_t *platform, gf_handle_t window);
 void gf_border_update (gf_platform_t *platform, const gf_config_t *config);

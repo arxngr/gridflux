@@ -404,12 +404,32 @@ lookup_or_create_ws (gf_wm_t *m)
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         if (!workspaces->items[i].has_maximized_state
+            && !workspaces->items[i].is_excluded_ws
             && workspaces->items[i].available_space > 0 && !workspaces->items[i].has_rule)
             return workspaces->items[i].id;
     }
 
     return gf_workspace_create (workspaces, m->config->max_windows_per_workspace, false,
                                 false);
+}
+
+// The single workspace that parks user-excluded windows. Created locked so
+// assignment never places normal windows on it.
+gf_ws_id_t
+lookup_or_create_excluded_ws (gf_wm_t *m)
+{
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+
+    for (uint32_t i = 0; i < workspaces->count; i++)
+        if (workspaces->items[i].is_excluded_ws)
+            return workspaces->items[i].id;
+
+    gf_ws_id_t id = gf_workspace_create (workspaces, m->config->max_windows_per_workspace,
+                                         false, true);
+    gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, id);
+    if (ws)
+        ws->is_excluded_ws = true;
+    return id;
 }
 
 gf_ws_id_t

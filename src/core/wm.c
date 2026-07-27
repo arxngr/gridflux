@@ -219,22 +219,35 @@ gf_wm_load_cfg (gf_wm_t *m)
     if (st.st_mtime <= m->config->last_modified)
         return;
 
-    gf_config_t old_cfg = *m->config;
     gf_config_t new_cfg = load_or_create_config (path);
 
-    if (!gf_config_changed (&old_cfg, &new_cfg))
+    if (!gf_config_changed (m->config, &new_cfg))
     {
         m->config->last_modified = st.st_mtime;
+        gf_config_release (&new_cfg);
         return;
     }
 
     GF_LOG_INFO ("Configuration changed, reloading from: %s", path);
+
+    // Snapshot the old config for the delta handlers. If the copy fails (OOM),
+    // still apply new_cfg and advance last_modified so the reload isn't dropped
+    // and re-attempted every tick — only the old-vs-new handlers are skipped.
+    gf_config_t old_cfg;
+    bool have_old = (gf_config_dup (&old_cfg, m->config) == GF_SUCCESS);
+
+    // Move new_cfg into m->config (do not release new_cfg afterwards).
+    gf_config_release (m->config);
     *m->config = new_cfg;
     m->config->last_modified = st.st_mtime;
 
-    gf_border_handle_toggle (m, &old_cfg, &new_cfg);
+    if (have_old)
+    {
+        gf_border_handle_toggle (m, &old_cfg, &new_cfg);
+        handle_max_windows_change (m, &old_cfg, &new_cfg);
+        gf_config_release (&old_cfg);
+    }
     sync_workspaces (m);
-    handle_max_windows_change (m, &old_cfg, &new_cfg);
     gf_wm_debug_stats (m);
 }
 

@@ -17,6 +17,8 @@ typedef struct
 // Forward declaration
 struct gf_config;
 
+bool gf_class_matches (const char *pattern, const char *window_class);
+
 // --- Rule CRUD ---
 gf_err_t gf_rules_add (struct gf_config *cfg, const char *wm_class, gf_ws_id_t ws_id);
 gf_err_t gf_rules_remove (struct gf_config *cfg, const char *wm_class);

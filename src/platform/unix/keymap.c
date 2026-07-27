@@ -51,8 +51,8 @@ gf_keymap_init (gf_platform_t *platform, gf_display_t display)
     XFlush (display);
 
     data->keymap_initialized = true;
-    GF_LOG_INFO (
-        "Keymap initialized (XInput2): Ctrl+Super+Left/Right for workspace switching");
+    GF_LOG_INFO ("Keymap initialized (XInput2): Ctrl+Super+Left/Right to switch "
+                 "workspace, Alt+E to exclude the focused app");
 
     return GF_SUCCESS;
 }
@@ -81,10 +81,11 @@ gf_keymap_cleanup (gf_platform_t *platform)
     GF_LOG_INFO ("Keymap cleaned up");
 }
 
-// Map a raw XI key-press cookie event to a workspace action (or GF_KEY_NONE).
-// Only Ctrl+Win (GF_MOD_MASK) + Left/Right are recognised.
+// Map a raw XI key-press cookie event to an action (or GF_KEY_NONE):
+// Ctrl+Super+Left/Right switch workspace; Alt+E (Alt alone) excludes the
+// focused window, captured here before arrangement can shift focus.
 static gf_key_action_t
-_keymap_action_from_raw (gf_display_t display, XEvent *ev)
+_keymap_action_from_raw (gf_display_t display, XEvent *ev, gf_linux_platform_data_t *data)
 {
     XIRawEvent *raw = (XIRawEvent *)ev->xcookie.data;
     KeySym sym = XkbKeycodeToKeysym (display, raw->detail, 0, 0);
@@ -96,15 +97,33 @@ _keymap_action_from_raw (gf_display_t display, XEvent *ev)
     unsigned int mods = 0;
     XQueryPointer (display, DefaultRootWindow (display), &root_ret, &child_ret, &rx, &ry,
                    &wx, &wy, &mods);
+    mods &= ~GF_LOCK_MASK;
 
-    if ((mods & ~GF_LOCK_MASK) != GF_MOD_MASK)
+    if (mods == GF_MOD_MASK)
+    {
+        if (sym == XK_Left)
+            return GF_KEY_WORKSPACE_PREV;
+        if (sym == XK_Right)
+            return GF_KEY_WORKSPACE_NEXT;
         return GF_KEY_NONE;
+    }
 
-    if (sym == XK_Left)
-        return GF_KEY_WORKSPACE_PREV;
-    if (sym == XK_Right)
-        return GF_KEY_WORKSPACE_NEXT;
+    if (mods == Mod1Mask && (sym == XK_e || sym == XK_E))
+    {
+        data->pending_focus_window = gf_window_get_focused (display);
+        return GF_KEY_EXCLUDE_FOCUSED;
+    }
+
     return GF_KEY_NONE;
+}
+
+gf_handle_t
+gf_keymap_focused_window (gf_platform_t *platform)
+{
+    if (!platform || !platform->platform_data)
+        return 0;
+    gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
+    return data->pending_focus_window;
 }
 
 gf_key_action_t
@@ -131,7 +150,7 @@ gf_keymap_poll (gf_platform_t *platform, gf_display_t display)
 
         gf_key_action_t action = GF_KEY_NONE;
         if (ev.xcookie.evtype == XI_RawKeyPress)
-            action = _keymap_action_from_raw (display, &ev);
+            action = _keymap_action_from_raw (display, &ev, data);
 
         XFreeEventData (display, &ev.xcookie);
 

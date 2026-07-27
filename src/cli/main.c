@@ -19,6 +19,9 @@ print_usage (const char *prog)
     printf ("  rule add <WM_CLASS> <WS_ID>     Add a window rule\n");
     printf ("  rule remove <WM_CLASS>          Remove a window rule\n");
     printf ("  rule list                       List all window rules\n");
+    printf ("  exclude add <WM_CLASS>          Exclude an app from arrangement\n");
+    printf ("  exclude remove <WM_CLASS>       Remove an app exclusion\n");
+    printf ("  exclude list                    List excluded apps\n");
     printf ("\nExamples:\n");
     printf ("  %s query windows              # List all windows\n", prog);
     printf ("  %s query workspaces           # List all workspaces\n", prog);
@@ -30,6 +33,8 @@ print_usage (const char *prog)
     printf ("  %s rule add firefox 3         # Assign Firefox to workspace 3\n", prog);
     printf ("  %s rule remove firefox        # Remove Firefox rule\n", prog);
     printf ("  %s rule list                  # Show all rules\n", prog);
+    printf ("  %s exclude add Spotify        # Exclude Spotify from arrangement\n", prog);
+    printf ("  %s exclude remove Spotify     # Remove Spotify exclusion\n", prog);
 }
 
 int

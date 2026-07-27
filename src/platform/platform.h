@@ -16,6 +16,7 @@ typedef enum
     GF_KEY_NONE = 0,
     GF_KEY_WORKSPACE_PREV,
     GF_KEY_WORKSPACE_NEXT,
+    GF_KEY_EXCLUDE_FOCUSED,
 } gf_key_action_t;
 
 struct gf_platform
@@ -74,6 +75,9 @@ struct gf_platform
     gf_err_t (*keymap_init) (gf_platform_t *platform, gf_display_t display);
     void (*keymap_cleanup) (gf_platform_t *platform);
     gf_key_action_t (*keymap_poll) (gf_platform_t *platform, gf_display_t display);
+    // Foreground window captured at the moment the last hotkey was pressed,
+    // before arrangement can shift focus. 0 if none.
+    gf_handle_t (*keymap_focused_window) (gf_platform_t *platform);
 
     // --- Resize Interaction ---
     gf_err_t (*resize_hook_install) (gf_platform_t *platform);

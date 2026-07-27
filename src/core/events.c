@@ -1,4 +1,5 @@
 #include "../config/config.h"
+#include "../config/excludes.h"
 #include "../config/rules.h"
 #include "../utils/list.h"
 #include "../utils/logger.h"
@@ -14,6 +15,67 @@
 #include <string.h>
 #include <time.h>
 
+// Alt+E: toggle the focused window's app in the exclude list. The actual work —
+// parking the window on the excluded workspace or bringing it back and re-tiling
+// — is done by reconcile_excluded_windows on the next tick.
+static void
+exclude_focused_window (gf_wm_t *m)
+{
+    gf_platform_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+
+    // Prefer the window captured at keypress time; the live foreground window
+    // may already have changed as the arrangement loop shifts focus.
+    gf_handle_t focused = 0;
+    if (platform->keymap_focused_window)
+        focused = platform->keymap_focused_window (platform);
+    if (!focused && platform->window_get_focused)
+        focused = platform->window_get_focused (display);
+    if (!focused)
+        return;
+
+    // Never toggle GridFlux's own GUI, the shell, or other system windows.
+    if (platform->window_is_excluded && platform->window_is_excluded (display, focused))
+    {
+        GF_LOG_DEBUG ("Keymap: ignoring exclude for system/non-app window");
+        return;
+    }
+
+    char class_name[256] = { 0 };
+    gf_wm_window_class (m, focused, class_name, sizeof (class_name));
+    if (class_name[0] == '\0')
+        return;
+
+    // Restoring is always allowed; the guard below only blocks new exclusions.
+    if (gf_exclude_list_contains (&m->config->excluded_apps, class_name))
+    {
+        if (gf_excludes_remove (m->config, class_name) == GF_SUCCESS)
+        {
+            GF_LOG_INFO ("Keymap: restored focused app '%s'", class_name);
+            // Reconcile now so the border is redrawn and the layout re-flows
+            // immediately, rather than a tick later.
+            reconcile_excluded_windows (m);
+        }
+        return;
+    }
+
+    // Only exclude normal tiled windows, not maximized/fullscreen ones.
+    if ((platform->window_is_maximized
+         && platform->window_is_maximized (display, focused))
+        || (platform->window_is_fullscreen
+            && platform->window_is_fullscreen (display, focused)))
+    {
+        GF_LOG_DEBUG ("Keymap: ignoring exclude for maximized/fullscreen window");
+        return;
+    }
+
+    if (gf_excludes_add (m->config, class_name) == GF_SUCCESS)
+    {
+        GF_LOG_INFO ("Keymap: excluded focused app '%s'", class_name);
+        reconcile_excluded_windows (m);
+    }
+}
+
 void
 gf_wm_keymap_event (gf_wm_t *m)
 {
@@ -27,6 +89,12 @@ gf_wm_keymap_event (gf_wm_t *m)
 
     if (action == GF_KEY_NONE)
         return;
+
+    if (action == GF_KEY_EXCLUDE_FOCUSED)
+    {
+        exclude_focused_window (m);
+        return;
+    }
 
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
@@ -59,7 +127,8 @@ gf_wm_keymap_event (gf_wm_t *m)
     for (int offset = 1; offset < n; offset++)
     {
         int idx = (current_idx + step * offset + n) % n;
-        if (workspaces->items[idx].window_count > 0)
+        if (workspaces->items[idx].window_count > 0
+            && !workspaces->items[idx].is_excluded_ws)
         {
             target_idx = idx;
             break;
@@ -173,6 +242,8 @@ gf_wm_watch (gf_wm_t *m)
 
         gf_free (ws_wins);
     }
+
+    reconcile_excluded_windows (m);
 }
 
 static void

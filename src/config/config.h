@@ -2,6 +2,7 @@
 #define GF_CORE_CONFIG_H
 
 #include "../core/types.h"
+#include "excludes.h"
 #include "rules.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -29,11 +30,17 @@ struct gf_config
     uint32_t window_rules_count;
     gf_rect_t exclude_zones[GF_MAX_EXCLUDE_ZONES];
     uint32_t exclude_zones_count;
+    gf_exclude_list_t excluded_apps;
 };
 // --- Configuration Lifecycle ---
 const char *gf_config_get_path (void);
 void gf_config_save (const char *filename, const gf_config_t *cfg);
 gf_config_t load_or_create_config (const char *filename);
+
+// gf_config_dup deep-copies owned memory; gf_config_release frees it. A plain
+// struct assignment is a move, after which the source must not be released.
+gf_err_t gf_config_dup (gf_config_t *dst, const gf_config_t *src);
+void gf_config_release (gf_config_t *cfg);
 
 // --- Comparison & State ---
 bool config_has_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg);

@@ -81,6 +81,7 @@ _platform_bind_system_ops (gf_platform_t *p)
     p->keymap_init = gf_keymap_init;
     p->keymap_cleanup = gf_keymap_cleanup;
     p->keymap_poll = gf_keymap_poll;
+    p->keymap_focused_window = gf_keymap_focused_window;
 }
 
 gf_platform_t *
