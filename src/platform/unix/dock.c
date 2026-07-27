@@ -1,17 +1,32 @@
 #include "../../utils/logger.h"
 #include "internal.h"
 #include <X11/Xlib.h>
+#include <gio/gio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Apply a single `gsettings set <schema> <key> <value>` (fails silently if the
-// schema is absent, which is expected when a given dock extension isn't installed).
+// Set a boolean dconf key in-process via GSettings (no subprocess). g_settings_new
+// aborts on a missing schema, so look it up first — that's how we "fail silently"
+// when a given dock extension isn't installed.
 static void
-_gsettings_set (const char *schema, const char *key, const char *value)
+_gsettings_set_bool (const char *schema_id, const char *key, gboolean value)
 {
-    char *args[]
-        = { "gsettings", "set", (char *)schema, (char *)key, (char *)value, NULL };
-    run_cmd_sync ("gsettings", args);
+    GSettingsSchemaSource *source = g_settings_schema_source_get_default ();
+    if (!source)
+        return;
+
+    GSettingsSchema *schema = g_settings_schema_source_lookup (source, schema_id, TRUE);
+    if (!schema)
+        return;
+
+    if (g_settings_schema_has_key (schema, key))
+    {
+        GSettings *settings = g_settings_new_full (schema, NULL, NULL);
+        g_settings_set_boolean (settings, key, value);
+        g_object_unref (settings);
+    }
+
+    g_settings_schema_unref (schema);
 }
 
 // Ask GNOME's Ubuntu Dock / Dash to Dock extensions to auto-hide.
@@ -22,14 +37,15 @@ _dock_hide_gnome (void)
     if (!desktop || !strstr (desktop, "GNOME"))
         return;
 
-    // Fire at both extensions; whichever isn't installed fails silently.
+    // Fire at both extensions; whichever isn't installed is skipped.
     const char *schemas[] = { "org.gnome.shell.extensions.ubuntu-dock",
                               "org.gnome.shell.extensions.dash-to-dock" };
     for (int i = 0; i < 2; i++)
     {
-        _gsettings_set (schemas[i], "dock-fixed", "false");
-        _gsettings_set (schemas[i], "intellihide", "true");
+        _gsettings_set_bool (schemas[i], "dock-fixed", FALSE);
+        _gsettings_set_bool (schemas[i], "intellihide", TRUE);
     }
+    g_settings_sync (); // flush to dconf now — the daemon runs no GLib main loop
 
     GF_LOG_INFO ("Tried auto-hiding GNOME docks");
 }
@@ -146,8 +162,9 @@ _dock_restore_gnome (void)
     if (!desktop || !strstr (desktop, "GNOME"))
         return;
 
-    _gsettings_set ("org.gnome.shell.extensions.ubuntu-dock", "dock-fixed", "true");
-    _gsettings_set ("org.gnome.shell.extensions.dash-to-dock", "dock-fixed", "true");
+    _gsettings_set_bool ("org.gnome.shell.extensions.ubuntu-dock", "dock-fixed", TRUE);
+    _gsettings_set_bool ("org.gnome.shell.extensions.dash-to-dock", "dock-fixed", TRUE);
+    g_settings_sync ();
 
     GF_LOG_INFO ("Tried restoring GNOME docks");
 }
@@ -161,10 +178,10 @@ gf_dock_restore (gf_platform_t *platform)
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
     Display *dpy = data->display;
 
-    _dock_restore_gnome ();
-
     if (!data->dock_hidden)
-        return;
+        return; // nothing we hid — don't spawn gsettings or touch windows
+
+    _dock_restore_gnome ();
 
     if (data->saved_dock_count == 0)
     {

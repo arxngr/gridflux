@@ -6,7 +6,6 @@
 #include <X11/Xatom.h>
 
 /* --- Shell & Background --- */
-void run_cmd_sync (const char *cmd, char *const argv[]);
 
 /* --- Window Identification & State --- */
 bool window_is_app_exception (gf_display_t display, gf_handle_t window);

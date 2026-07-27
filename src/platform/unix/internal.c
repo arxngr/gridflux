@@ -4,7 +4,6 @@
 #include <X11/Xutil.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -137,23 +136,6 @@ remove_size_constraints (Display *dpy, Window win)
 
     XFree (hints);
     return GF_SUCCESS;
-}
-
-void
-run_cmd_sync (const char *cmd, char *const argv[])
-{
-    pid_t pid;
-    posix_spawnattr_t attr;
-    posix_spawnattr_init (&attr);
-
-    // posix_spawnp uses the PATH to find the executable
-    if (posix_spawnp (&pid, cmd, NULL, &attr, argv, environ) == 0)
-    {
-        // Removing WNOHANG makes the parent wait here until the child exits
-        waitpid (pid, NULL, 0);
-    }
-
-    posix_spawnattr_destroy (&attr);
 }
 
 bool

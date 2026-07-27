@@ -77,6 +77,7 @@ if(UNIX AND NOT APPLE)
     pkg_check_modules(GTK4 gtk4)
     pkg_check_modules(DBUS dbus-1)
     pkg_check_modules(JSONC REQUIRED json-c)
+    pkg_check_modules(GIO REQUIRED gio-2.0)
 
     add_compile_definitions(_GNU_SOURCE)
 
@@ -93,11 +94,13 @@ if(UNIX AND NOT APPLE)
         m
         pthread
         ${JSONC_LIBRARIES}
+        ${GIO_LIBRARIES}
     )
 
     set(PLATFORM_INCLUDES
         ${X11_INCLUDE_DIR}
         ${JSONC_INCLUDE_DIRS}
+        ${GIO_INCLUDE_DIRS}
     )
 
     # KWin and DBus support removed as per user request
