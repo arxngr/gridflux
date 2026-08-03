@@ -35,12 +35,17 @@ gf_pipe_security_attributes (void)
         return NULL;
 
     // Build an explicit DACL instead of a NULL DACL (which would grant Everyone
-    // access). Grant full access (GA) only to the pipe owner / current user
-    // (OW), SYSTEM (SY) and the Administrators group (BA). The descriptor is
-    // allocated by LocalAlloc and must be released with LocalFree by the caller.
+    // access). Grant full access (GA) to the pipe owner / current user (OW),
+    // SYSTEM (SY) and the Administrators group (BA) — these manage the pipe.
+    // Interactive Users (IU) get only read+write (GR|GW), the minimum a client
+    // needs: this lets the non-elevated GUI reach the pipe when the server runs
+    // elevated (its UAC-filtered token has Administrators disabled, so the BA ACE
+    // alone would deny it) without granting WRITE_DAC/WRITE_OWNER/DELETE. The
+    // descriptor is allocated by LocalAlloc and released with LocalFree.
     PSECURITY_DESCRIPTOR sd = NULL;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorA (
-            "D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)", SDDL_REVISION_1, &sd, NULL))
+            "D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)", SDDL_REVISION_1, &sd,
+            NULL))
     {
         free (sa);
         return NULL;
@@ -230,6 +235,55 @@ _pipe_write_sync (HANDLE pipe, const void *data, DWORD len)
 
 // Handle a fully-read client message: dispatch it, write the reply, and reset
 // the instance to listen for the next connection.
+// True if `client_path` is a GridFlux front-end (gridflux-gui/cli.exe) in the
+// same directory as this server. That directory is the install location (under
+// Program Files, writable only by administrators), so an unprivileged process
+// cannot plant a look-alike binary there.
+static bool
+_client_path_trusted (const wchar_t *client_path)
+{
+    wchar_t self[MAX_PATH];
+    DWORD n = GetModuleFileNameW (NULL, self, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH)
+        return false;
+
+    wchar_t *self_slash = wcsrchr (self, L'\\');
+    const wchar_t *cli_slash = wcsrchr (client_path, L'\\');
+    if (!self_slash || !cli_slash)
+        return false;
+
+    size_t self_dir_len = (size_t)(self_slash - self);
+    if (self_dir_len != (size_t)(cli_slash - client_path)
+        || _wcsnicmp (self, client_path, self_dir_len) != 0)
+        return false; // different directory
+
+    const wchar_t *base = cli_slash + 1;
+    return _wcsicmp (base, L"gridflux-gui.exe") == 0
+           || _wcsicmp (base, L"gridflux-cli.exe") == 0;
+}
+
+// Authenticate the connected client so an arbitrary local process that obtained
+// pipe access via the Interactive-Users ACE cannot feed crafted bytes to the
+// (elevated) command parser. Only the trusted GridFlux front-ends are accepted.
+static bool
+_pipe_client_trusted (HANDLE pipe)
+{
+    DWORD pid = 0;
+    if (!GetNamedPipeClientProcessId (pipe, &pid))
+        return false;
+
+    HANDLE proc = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!proc)
+        return false;
+
+    wchar_t path[MAX_PATH];
+    DWORD sz = MAX_PATH;
+    BOOL ok = QueryFullProcessImageNameW (proc, 0, path, &sz);
+    CloseHandle (proc);
+
+    return ok && _client_path_trusted (path);
+}
+
 static void
 _pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
 {
@@ -237,7 +291,11 @@ _pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
 
     gf_ipc_response_t response = { 0 };
     response.status = GF_IPC_SUCCESS;
-    gf_handle_client_message (inst->buffer, &response, user_data);
+
+    if (!_pipe_client_trusted (inst->pipe))
+        response.status = GF_IPC_ERROR_PERMISSION; // reject untrusted callers
+    else
+        gf_handle_client_message (inst->buffer, &response, user_data);
 
     if (!_pipe_write_sync (inst->pipe, &response, sizeof (response)))
         fprintf (stderr, "Pipe reply write failed: %lu\n", GetLastError ());
