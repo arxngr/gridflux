@@ -152,9 +152,6 @@ reconcile_excluded_windows (gf_wm_t *m)
         {
             platform->border_remove (platform, win->id);
             move_window_to_workspace (m, win, lookup_or_create_excluded_ws (m));
-            if (platform->window_minimize)
-                platform->window_minimize (display, win->id);
-            win->is_minimized = true;
             changed = true;
         }
         else if (excluded && parked)
