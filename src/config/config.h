@@ -35,7 +35,7 @@ struct gf_config
 // --- Configuration Lifecycle ---
 const char *gf_config_get_path (void);
 void gf_config_save (const char *filename, const gf_config_t *cfg);
-gf_config_t load_or_create_config (const char *filename);
+gf_config_t gf_config_load_or_create (const char *filename);
 
 // gf_config_dup deep-copies owned memory; gf_config_release frees it. A plain
 // struct assignment is a move, after which the source must not be released.

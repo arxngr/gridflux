@@ -8,7 +8,7 @@ static gf_platform_atoms_t g_atoms = { 0 };
 
 // Intern WM/EWMH state and desktop/client-list atoms.
 static void
-_atoms_init_state (Display *display, gf_platform_atoms_t *atoms)
+atoms_init_state (Display *display, gf_platform_atoms_t *atoms)
 {
     atoms->net_active_window = XInternAtom (display, "_NET_ACTIVE_WINDOW", False);
     atoms->wm_state = XInternAtom (display, "WM_STATE", False);
@@ -39,7 +39,7 @@ _atoms_init_state (Display *display, gf_platform_atoms_t *atoms)
 
 // Intern the _NET_WM_WINDOW_TYPE_* atoms.
 static void
-_atoms_init_window_type (Display *display, gf_platform_atoms_t *atoms)
+atoms_init_window_type (Display *display, gf_platform_atoms_t *atoms)
 {
     atoms->net_wm_window_type = XInternAtom (display, "_NET_WM_WINDOW_TYPE", False);
     atoms->net_wm_window_type_normal
@@ -72,7 +72,7 @@ _atoms_init_window_type (Display *display, gf_platform_atoms_t *atoms)
 
 // Intern frame-extent, strut, naming and miscellaneous atoms.
 static void
-_atoms_init_misc (Display *display, gf_platform_atoms_t *atoms)
+atoms_init_misc (Display *display, gf_platform_atoms_t *atoms)
 {
     atoms->net_frame_extents = XInternAtom (display, "_NET_FRAME_EXTENTS", False);
     atoms->gtk_frame_extents = XInternAtom (display, "_GTK_FRAME_EXTENTS", False);
@@ -96,9 +96,9 @@ gf_platform_atoms_init (Display *display, gf_platform_atoms_t *atoms)
     if (!display || !atoms)
         return GF_ERROR_INVALID_PARAMETER;
 
-    _atoms_init_state (display, atoms);
-    _atoms_init_window_type (display, atoms);
-    _atoms_init_misc (display, atoms);
+    atoms_init_state (display, atoms);
+    atoms_init_window_type (display, atoms);
+    atoms_init_misc (display, atoms);
 
     g_atoms = *atoms;
     GF_LOG_DEBUG ("Platform atoms initialized successfully");

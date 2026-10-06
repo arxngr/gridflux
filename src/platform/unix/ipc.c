@@ -104,7 +104,7 @@ gf_ipc_server_destroy (gf_ipc_handle_t handle)
 }
 
 static bool
-gf_verify_peer_credentials (int client_sock)
+verify_peer_credentials (int client_sock)
 {
     struct ucred cred;
     socklen_t len = sizeof (cred);
@@ -174,7 +174,7 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
         return false;
     }
 
-    if (!gf_verify_peer_credentials (client))
+    if (!verify_peer_credentials (client))
     {
         close (client);
         return false;

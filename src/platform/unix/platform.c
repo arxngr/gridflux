@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 static int
-gf_platform_error_handler (Display *display, XErrorEvent *error)
+platform_error_handler (Display *display, XErrorEvent *error)
 {
     char error_text[256];
     XGetErrorText (display, error->error_code, error_text, sizeof (error_text));
@@ -29,7 +29,7 @@ platform_io_error_handler (Display *dpy)
 
 // Bind the window enumeration, info, geometry and state operations.
 static bool
-gf_window_is_interacting (gf_display_t display)
+window_is_interacting (gf_display_t display)
 {
     Window root, child;
     int root_x, root_y, win_x, win_y;
@@ -40,9 +40,9 @@ gf_window_is_interacting (gf_display_t display)
 }
 
 static void
-_platform_bind_window_ops (gf_platform_t *p)
+platform_bind_window_ops (gf_platform_t *p)
 {
-    p->window_is_interacting = gf_window_is_interacting;
+    p->window_is_interacting = window_is_interacting;
     // --- Window Enumeration & Info ---
     p->window_enumerate = gf_platform_get_windows;
     p->window_get_focused = gf_window_get_focused;
@@ -66,7 +66,7 @@ _platform_bind_window_ops (gf_platform_t *p)
 
 // Bind lifecycle, screen, monitor, border, dock and keymap operations.
 static void
-_platform_bind_system_ops (gf_platform_t *p)
+platform_bind_system_ops (gf_platform_t *p)
 {
     // --- Lifecycle & Core ---
     p->init = gf_platform_init;
@@ -116,8 +116,8 @@ gf_platform_create (void)
     memset (platform, 0, sizeof (gf_platform_t));
     memset (data, 0, sizeof (gf_linux_platform_data_t));
 
-    _platform_bind_window_ops (platform);
-    _platform_bind_system_ops (platform);
+    platform_bind_window_ops (platform);
+    platform_bind_system_ops (platform);
 
     platform->platform_data = data;
 
@@ -148,7 +148,7 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
         return GF_ERROR_DISPLAY_CONNECTION;
     }
 
-    XSetErrorHandler (gf_platform_error_handler);
+    XSetErrorHandler (platform_error_handler);
 
     // Get platform data and initialize atoms
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;

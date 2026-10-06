@@ -30,20 +30,20 @@
  * The drag runs as this sequence of function calls:
  *
  *   1. gf_wm_resize_event   -- poll the platform; get the drag event each tick.
- *   2. _propagate_resize    -- handle one tick (repeats while the mouse is held):
- *        a. _clamp_source_edges        find neighbours, stop them under min size
- *             (_clamp_edge per edge, _clamp_all_corner_neighbors for corners)
- *        b. _enforce_source_min_size   keep the dragged window above min size
+ *   2. propagate_resize    -- handle one tick (repeats while the mouse is held):
+ *        a. clamp_source_edges        find neighbours, stop them under min size
+ *             (clamp_edge per edge, clamp_all_corner_neighbors for corners)
+ *        b. enforce_source_min_size   keep the dragged window above min size
  *        c. window_set_geometry        apply the new size to the dragged window
- *        d. _apply_edges_to_neighbors  move the neighbours to follow
- *             (_propagate_edge_to_neighbors, _propagate_all_corner_neighbors)
- *   3. _commit_resize       -- only when released: save where windows ended up.
+ *        d. apply_edges_to_neighbors  move the neighbours to follow
+ *             (propagate_edge_to_neighbors, propagate_all_corner_neighbors)
+ *   3. commit_resize       -- only when released: save where windows ended up.
  *
  * Finding the neighbours (inside steps a and d) is itself a few calls:
- *   _find_segment_neighbors (edges): _edge_line_from_dir, _find_nearest_edge_dist,
- *       _expand_neighbor_set, _collect_edge_neighbors
- *   _find_all_corner_neighbors (corners): _corner_point_from_dir,
- *       _find_min_corner_dist_sq, _collect_close_corners
+ *   find_segment_neighbors (edges): edge_line_from_dir, find_nearest_edge_dist,
+ *       expand_neighbor_set, collect_edge_neighbors
+ *   find_all_corner_neighbors (corners): corner_point_from_dir,
+ *       find_min_corner_dist_sq, collect_close_corners
  *
  *
  * The math, with real numbers, so it does not have to be worked out again.
@@ -99,8 +99,8 @@
 // A LEFT/RIGHT drag moves a vertical line (an x); a TOP/BOTTOM drag moves a
 // horizontal line (a y). Returns false if `dir` is not a single edge.
 static bool
-_edge_line_from_dir (const gf_rect_t *r, gf_resize_dir_t dir, int32_t *out_line,
-                     bool *out_horiz)
+edge_line_from_dir (const gf_rect_t *r, gf_resize_dir_t dir, int32_t *out_line,
+                    bool *out_horiz)
 {
     if (dir == GF_RESIZE_BOTTOM)
     {
@@ -133,10 +133,10 @@ _edge_line_from_dir (const gf_rect_t *r, gf_resize_dir_t dir, int32_t *out_line,
 // dists[i] holds each window's distance (-1 if skipped); aligns[i] its edge.
 // The "+ 5"/"- 5" are slop so tiles with a small padding gap still count.
 static int32_t
-_find_nearest_edge_dist (gf_win_list_t *windows, gf_handle_t source_id,
-                         gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id,
-                         int32_t line, bool is_horiz, int32_t seg_min, int32_t seg_max,
-                         int32_t search_range, int32_t *dists, gf_align_type_t *aligns)
+find_nearest_edge_dist (gf_win_list_t *windows, gf_handle_t source_id,
+                        gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id, int32_t line,
+                        bool is_horiz, int32_t seg_min, int32_t seg_max,
+                        int32_t search_range, int32_t *dists, gf_align_type_t *aligns)
 {
     int32_t min_dist = search_range;
     for (uint32_t i = 0; i < windows->count; i++)
@@ -184,8 +184,8 @@ _find_nearest_edge_dist (gf_win_list_t *windows, gf_handle_t source_id,
 // repeat until a pass adds nothing. This is what lets a whole stack of windows
 // share one edge and move together, not just the single closest one.
 static void
-_expand_neighbor_set (gf_win_list_t *windows, int32_t *dists, int32_t min_dist,
-                      bool is_horiz, bool *affected, int32_t *seg_min, int32_t *seg_max)
+expand_neighbor_set (gf_win_list_t *windows, int32_t *dists, int32_t min_dist,
+                     bool is_horiz, bool *affected, int32_t *seg_min, int32_t *seg_max)
 {
     bool changed = true;
     while (changed)
@@ -215,8 +215,8 @@ _expand_neighbor_set (gf_win_list_t *windows, int32_t *dists, int32_t min_dist,
 
 // Copy the affected windows (and the touching edge of each) into `out`.
 static uint32_t
-_collect_edge_neighbors (gf_win_list_t *windows, bool *affected, gf_align_type_t *aligns,
-                         gf_segment_neighbor_t *out, uint32_t max_out)
+collect_edge_neighbors (gf_win_list_t *windows, bool *affected, gf_align_type_t *aligns,
+                        gf_segment_neighbor_t *out, uint32_t max_out)
 {
     uint32_t count = 0;
     for (uint32_t i = 0; i < windows->count && count < max_out; i++)
@@ -235,14 +235,14 @@ _collect_edge_neighbors (gf_win_list_t *windows, bool *affected, gf_align_type_t
 // find the nearest touching distance, flood-fill the stack, then collect them.
 // seg_min/seg_max start as the source's span perpendicular to the drag.
 static uint32_t
-_find_segment_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
-                         const gf_rect_t *initial, gf_resize_dir_t dir,
-                         gf_segment_neighbor_t *out, uint32_t max_out,
-                         gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id)
+find_segment_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
+                        const gf_rect_t *initial, gf_resize_dir_t dir,
+                        gf_segment_neighbor_t *out, uint32_t max_out,
+                        gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id)
 {
     int32_t line = 0;
     bool is_horiz = false;
-    if (!_edge_line_from_dir (initial, dir, &line, &is_horiz) || windows->count == 0)
+    if (!edge_line_from_dir (initial, dir, &line, &is_horiz) || windows->count == 0)
         return 0;
 
     int32_t seg_min = is_horiz ? initial->x : initial->y;
@@ -266,12 +266,12 @@ _find_segment_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
         return 0;
     }
 
-    int32_t min_dist = _find_nearest_edge_dist (windows, source_id, workspace_id,
-                                                monitor_id, line, is_horiz, seg_min,
-                                                seg_max, search_range, dists, aligns);
-    _expand_neighbor_set (windows, dists, min_dist, is_horiz, affected, &seg_min,
-                          &seg_max);
-    uint32_t n = _collect_edge_neighbors (windows, affected, aligns, out, max_out);
+    int32_t min_dist = find_nearest_edge_dist (windows, source_id, workspace_id,
+                                               monitor_id, line, is_horiz, seg_min,
+                                               seg_max, search_range, dists, aligns);
+    expand_neighbor_set (windows, dists, min_dist, is_horiz, affected, &seg_min,
+                         &seg_max);
+    uint32_t n = collect_edge_neighbors (windows, affected, aligns, out, max_out);
 
     gf_free (dists);
     gf_free (aligns);
@@ -282,8 +282,8 @@ _find_segment_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
 // Pull a dragged edge's target line back so this one neighbour keeps at least
 // min_size, based on which of its edges touches the source.
 static int32_t
-_clamp_line_to_neighbor (int32_t target_line, const gf_win_info_t *nb,
-                         gf_align_type_t align, uint32_t min_size)
+clamp_line_to_neighbor (int32_t target_line, const gf_win_info_t *nb,
+                        gf_align_type_t align, uint32_t min_size)
 {
     if (align == GF_ALIGN_TOP)
     {
@@ -311,7 +311,7 @@ _clamp_line_to_neighbor (int32_t target_line, const gf_win_info_t *nb,
 // Where the dragged edge sits, expressed as a single coordinate, given the
 // source's current x/y/w/h. Shared by the clamp and propagate paths.
 static int32_t
-_edge_target_line (gf_resize_dir_t dir, int32_t cx, int32_t cy, int32_t cw, int32_t ch)
+edge_target_line (gf_resize_dir_t dir, int32_t cx, int32_t cy, int32_t cw, int32_t ch)
 {
     if (dir == GF_RESIZE_BOTTOM)
         return cy + ch;
@@ -325,8 +325,8 @@ _edge_target_line (gf_resize_dir_t dir, int32_t cx, int32_t cy, int32_t cw, int3
 // Write a (clamped) edge line back into the source's x/y/w/h: the touching edge
 // moves to `line`, the opposite edge stays fixed.
 static void
-_edge_apply_line (gf_resize_dir_t dir, int32_t line, int32_t *cx, int32_t *cy,
-                  int32_t *cw, int32_t *ch)
+edge_apply_line (gf_resize_dir_t dir, int32_t line, int32_t *cx, int32_t *cy, int32_t *cw,
+                 int32_t *ch)
 {
     if (dir == GF_RESIZE_BOTTOM)
         *ch = line - *cy;
@@ -349,9 +349,9 @@ _edge_apply_line (gf_resize_dir_t dir, int32_t line, int32_t *cx, int32_t *cy,
 // Limit how far the dragged edge may travel so no neighbour drops below
 // min_size, then write the clamped line back into the source's x/y/w/h.
 static void
-_clamp_edge (gf_win_list_t *windows, gf_win_info_t *source, const gf_rect_t *initial,
-             gf_resize_dir_t dir, uint32_t min_size, int32_t *clamp_x, int32_t *clamp_y,
-             int32_t *clamp_w, int32_t *clamp_h)
+clamp_edge (gf_win_list_t *windows, gf_win_info_t *source, const gf_rect_t *initial,
+            gf_resize_dir_t dir, uint32_t min_size, int32_t *clamp_x, int32_t *clamp_y,
+            int32_t *clamp_w, int32_t *clamp_h)
 {
     if (windows->count == 0)
         return;
@@ -360,15 +360,15 @@ _clamp_edge (gf_win_list_t *windows, gf_win_info_t *source, const gf_rect_t *ini
     if (!neighbors)
         return;
 
-    uint32_t nc = _find_segment_neighbors (windows, source->id, initial, dir, neighbors,
-                                           windows->count, source->workspace_id,
-                                           source->monitor_id);
+    uint32_t nc = find_segment_neighbors (windows, source->id, initial, dir, neighbors,
+                                          windows->count, source->workspace_id,
+                                          source->monitor_id);
 
-    int32_t target_line = _edge_target_line (dir, *clamp_x, *clamp_y, *clamp_w, *clamp_h);
+    int32_t target_line = edge_target_line (dir, *clamp_x, *clamp_y, *clamp_w, *clamp_h);
     for (uint32_t i = 0; i < nc; i++)
-        target_line = _clamp_line_to_neighbor (target_line, neighbors[i].win,
-                                               neighbors[i].align, min_size);
-    _edge_apply_line (dir, target_line, clamp_x, clamp_y, clamp_w, clamp_h);
+        target_line = clamp_line_to_neighbor (target_line, neighbors[i].win,
+                                              neighbors[i].align, min_size);
+    edge_apply_line (dir, target_line, clamp_x, clamp_y, clamp_w, clamp_h);
 
     gf_free (neighbors);
 }
@@ -376,9 +376,9 @@ _clamp_edge (gf_win_list_t *windows, gf_win_info_t *source, const gf_rect_t *ini
 // Move one neighbour's touching edge to `new_line` (the far edge stays fixed),
 // clamp it to min_size, and push the new geometry to the platform.
 static void
-_resize_neighbor_edge (gf_win_info_t *nb, gf_align_type_t align, int32_t new_line,
-                       uint32_t min_size, gf_platform_t *platform, gf_display_t display,
-                       gf_config_t *config)
+resize_neighbor_edge (gf_win_info_t *nb, gf_align_type_t align, int32_t new_line,
+                      uint32_t min_size, gf_platform_t *platform, gf_display_t display,
+                      gf_config_t *config)
 {
     int32_t old_x = nb->geometry.x, old_y = nb->geometry.y;
     int32_t old_w = (int32_t)nb->geometry.width, old_h = (int32_t)nb->geometry.height;
@@ -434,11 +434,11 @@ _resize_neighbor_edge (gf_win_info_t *nb, gf_align_type_t align, int32_t new_lin
 // flush; the opposite edge stays fixed, so the neighbour's size absorbs the
 // change. Enforce min_size, then push the new geometry to the platform.
 static void
-_propagate_edge_to_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
-                              const gf_rect_t *initial, const gf_rect_t *current,
-                              gf_resize_dir_t dir, uint32_t min_size,
-                              gf_platform_t *platform, gf_display_t display,
-                              gf_config_t *config)
+propagate_edge_to_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
+                             const gf_rect_t *initial, const gf_rect_t *current,
+                             gf_resize_dir_t dir, uint32_t min_size,
+                             gf_platform_t *platform, gf_display_t display,
+                             gf_config_t *config)
 {
     if (windows->count == 0)
         return;
@@ -447,17 +447,17 @@ _propagate_edge_to_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
     if (!neighbors)
         return;
 
-    uint32_t nc = _find_segment_neighbors (windows, source->id, initial, dir, neighbors,
-                                           windows->count, source->workspace_id,
-                                           source->monitor_id);
+    uint32_t nc = find_segment_neighbors (windows, source->id, initial, dir, neighbors,
+                                          windows->count, source->workspace_id,
+                                          source->monitor_id);
 
     // The source's edge in its new position -- the line neighbours follow.
-    int32_t new_line = _edge_target_line (
+    int32_t new_line = edge_target_line (
         dir, current->x, current->y, (int32_t)current->width, (int32_t)current->height);
 
     for (uint32_t i = 0; i < nc; i++)
-        _resize_neighbor_edge (neighbors[i].win, neighbors[i].align, new_line, min_size,
-                               platform, display, config);
+        resize_neighbor_edge (neighbors[i].win, neighbors[i].align, new_line, min_size,
+                              platform, display, config);
 
     gf_free (neighbors);
 }
@@ -465,8 +465,8 @@ _propagate_edge_to_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
 // For a corner drag the moving thing is a POINT (the dragged corner), not a
 // line. Returns its (cx, cy). False if `dir` is not a corner.
 static bool
-_corner_point_from_dir (const gf_rect_t *r, gf_resize_dir_t dir, int32_t *out_cx,
-                        int32_t *out_cy)
+corner_point_from_dir (const gf_rect_t *r, gf_resize_dir_t dir, int32_t *out_cx,
+                       int32_t *out_cy)
 {
     if ((dir & GF_RESIZE_RIGHT) && (dir & GF_RESIZE_BOTTOM))
     {
@@ -497,9 +497,9 @@ _corner_point_from_dir (const gf_rect_t *r, gf_resize_dir_t dir, int32_t *out_cx
 // (cx, cy) to any corner of any candidate window -- i.e. how close the nearest
 // neighbour corner is.
 static int32_t
-_find_min_corner_dist_sq (gf_win_list_t *windows, gf_handle_t source_id,
-                          gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id, int32_t cx,
-                          int32_t cy)
+find_min_corner_dist_sq (gf_win_list_t *windows, gf_handle_t source_id,
+                         gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id, int32_t cx,
+                         int32_t cy)
 {
     int32_t min_dist_sq = 1000000;
     for (uint32_t i = 0; i < windows->count; i++)
@@ -540,10 +540,10 @@ _find_min_corner_dist_sq (gf_win_list_t *windows, gf_handle_t source_id,
 // of the closest found, recording WHICH of their four corners is the toucher.
 // The chained checks pick the nearest of the window's four corners.
 static uint32_t
-_collect_close_corners (gf_win_list_t *windows, gf_handle_t source_id,
-                        gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id, int32_t cx,
-                        int32_t cy, int32_t min_dist_sq, gf_corner_neighbor_t *out,
-                        uint32_t max_out)
+collect_close_corners (gf_win_list_t *windows, gf_handle_t source_id,
+                       gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id, int32_t cx,
+                       int32_t cy, int32_t min_dist_sq, gf_corner_neighbor_t *out,
+                       uint32_t max_out)
 {
     uint32_t count = 0;
     for (uint32_t i = 0; i < windows->count && count < max_out; i++)
@@ -598,33 +598,33 @@ _collect_close_corners (gf_win_list_t *windows, gf_handle_t source_id,
 // Full corner-neighbour search: only proceeds if some corner is genuinely near
 // the dragged corner (within half the source's width); otherwise none.
 static uint32_t
-_find_all_corner_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
-                            const gf_rect_t *source_rect, gf_resize_dir_t dir,
-                            gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id,
-                            gf_corner_neighbor_t *out_neighbors, uint32_t max_out)
+find_all_corner_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
+                           const gf_rect_t *source_rect, gf_resize_dir_t dir,
+                           gf_ws_id_t workspace_id, gf_monitor_id_t monitor_id,
+                           gf_corner_neighbor_t *out_neighbors, uint32_t max_out)
 {
     int32_t cx = 0, cy = 0;
-    if (!_corner_point_from_dir (source_rect, dir, &cx, &cy))
+    if (!corner_point_from_dir (source_rect, dir, &cx, &cy))
         return 0;
 
     int32_t min_dist_sq
-        = _find_min_corner_dist_sq (windows, source_id, workspace_id, monitor_id, cx, cy);
+        = find_min_corner_dist_sq (windows, source_id, workspace_id, monitor_id, cx, cy);
     // Ignore everything if the nearest corner is more than half a window away.
     int32_t radius_sq
         = (int32_t)(source_rect->width / 2) * (int32_t)(source_rect->width / 2);
     if (min_dist_sq > radius_sq)
         return 0;
 
-    return _collect_close_corners (windows, source_id, workspace_id, monitor_id, cx, cy,
-                                   min_dist_sq, out_neighbors, max_out);
+    return collect_close_corners (windows, source_id, workspace_id, monitor_id, cx, cy,
+                                  min_dist_sq, out_neighbors, max_out);
 }
 
 // Pull the dragged corner (target_x, target_y) back so this one corner-neighbour
 // keeps at least min_size. `is_left`/`is_top` capture which corner of the
 // neighbour touches: a left corner is shrunk from the right, etc.
 static void
-_clamp_corner_to_neighbor (const gf_win_info_t *nb, gf_corner_type_t corner,
-                           uint32_t min_size, int32_t *target_x, int32_t *target_y)
+clamp_corner_to_neighbor (const gf_win_info_t *nb, gf_corner_type_t corner,
+                          uint32_t min_size, int32_t *target_x, int32_t *target_y)
 {
     int32_t n_left = nb->geometry.x;
     int32_t n_right = nb->geometry.x + (int32_t)nb->geometry.width;
@@ -654,11 +654,11 @@ _clamp_corner_to_neighbor (const gf_win_info_t *nb, gf_corner_type_t corner,
 // Corner version of clamp_edge: cap the target corner in BOTH x and y so no
 // diagonal neighbour shrinks below min_size, then write it back into x/y/w/h.
 static void
-_clamp_all_corner_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
-                             const gf_rect_t *initial, gf_resize_dir_t dir,
-                             uint32_t min_size, int32_t *clamp_x, int32_t *clamp_y,
-                             int32_t *clamp_w, int32_t *clamp_h, gf_ws_id_t workspace_id,
-                             gf_monitor_id_t monitor_id)
+clamp_all_corner_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
+                            const gf_rect_t *initial, gf_resize_dir_t dir,
+                            uint32_t min_size, int32_t *clamp_x, int32_t *clamp_y,
+                            int32_t *clamp_w, int32_t *clamp_h, gf_ws_id_t workspace_id,
+                            gf_monitor_id_t monitor_id)
 {
     if (windows->count == 0)
         return;
@@ -667,7 +667,7 @@ _clamp_all_corner_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
     if (!nbs)
         return;
 
-    uint32_t count = _find_all_corner_neighbors (
+    uint32_t count = find_all_corner_neighbors (
         windows, source_id, initial, dir, workspace_id, monitor_id, nbs, windows->count);
     if (!count)
     {
@@ -681,8 +681,8 @@ _clamp_all_corner_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
 
     // Each neighbour's touching corner limits how far target_x/y may go.
     for (uint32_t i = 0; i < count; i++)
-        _clamp_corner_to_neighbor (nbs[i].win, nbs[i].corner, min_size, &target_x,
-                                   &target_y);
+        clamp_corner_to_neighbor (nbs[i].win, nbs[i].corner, min_size, &target_x,
+                                  &target_y);
 
     // Write the clamped corner back into the source's x/w (and y/h).
     if (dir & GF_RESIZE_RIGHT)
@@ -711,9 +711,9 @@ _clamp_all_corner_neighbors (gf_win_list_t *windows, gf_handle_t source_id,
 // `is_left`/`is_top` capture which corner touches: a left corner moves the left
 // edge and keeps the right fixed, etc.
 static void
-_resize_neighbor_corner (gf_win_info_t *nb, gf_corner_type_t corner, int32_t target_cx,
-                         int32_t target_cy, uint32_t min_size, gf_platform_t *platform,
-                         gf_display_t display, gf_config_t *config)
+resize_neighbor_corner (gf_win_info_t *nb, gf_corner_type_t corner, int32_t target_cx,
+                        int32_t target_cy, uint32_t min_size, gf_platform_t *platform,
+                        gf_display_t display, gf_config_t *config)
 {
     int32_t old_x = nb->geometry.x, old_y = nb->geometry.y;
     int32_t old_right = old_x + (int32_t)nb->geometry.width;
@@ -768,12 +768,12 @@ _resize_neighbor_corner (gf_win_info_t *nb, gf_corner_type_t corner, int32_t tar
 // corner to the source's new dragged corner (both axes at once), enforce
 // min_size, and push the geometry.
 static void
-_propagate_all_corner_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
-                                 const gf_rect_t *initial, const gf_rect_t *current,
-                                 gf_resize_dir_t dir, uint32_t min_size,
-                                 gf_platform_t *platform, gf_display_t display,
-                                 gf_config_t *config, gf_ws_id_t workspace_id,
-                                 gf_monitor_id_t monitor_id)
+propagate_all_corner_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
+                                const gf_rect_t *initial, const gf_rect_t *current,
+                                gf_resize_dir_t dir, uint32_t min_size,
+                                gf_platform_t *platform, gf_display_t display,
+                                gf_config_t *config, gf_ws_id_t workspace_id,
+                                gf_monitor_id_t monitor_id)
 {
     if (windows->count == 0)
         return;
@@ -782,7 +782,7 @@ _propagate_all_corner_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
     if (!nbs)
         return;
 
-    uint32_t count = _find_all_corner_neighbors (
+    uint32_t count = find_all_corner_neighbors (
         windows, source->id, initial, dir, workspace_id, monitor_id, nbs, windows->count);
     if (!count)
     {
@@ -797,8 +797,8 @@ _propagate_all_corner_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
         = (dir & GF_RESIZE_BOTTOM) ? (current->y + (int32_t)current->height) : current->y;
 
     for (uint32_t i = 0; i < count; i++)
-        _resize_neighbor_corner (nbs[i].win, nbs[i].corner, target_cx, target_cy,
-                                 min_size, platform, display, config);
+        resize_neighbor_corner (nbs[i].win, nbs[i].corner, target_cx, target_cy, min_size,
+                                platform, display, config);
 
     gf_free (nbs);
 }
@@ -806,32 +806,31 @@ _propagate_all_corner_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
 // Clamp the source's proposed rect (cx,cy,cw,ch) against its neighbours: run the
 // edge clamp for each edge the drag touches, then the corner clamp.
 static void
-_clamp_source_edges (gf_win_list_t *windows, gf_win_info_t *source, gf_resize_event_t *ev,
-                     uint32_t min_size, int32_t *cx, int32_t *cy, int32_t *cw,
-                     int32_t *ch)
+clamp_source_edges (gf_win_list_t *windows, gf_win_info_t *source, gf_resize_event_t *ev,
+                    uint32_t min_size, int32_t *cx, int32_t *cy, int32_t *cw, int32_t *ch)
 {
     if (ev->direction & GF_RESIZE_RIGHT)
-        _clamp_edge (windows, source, &ev->initial_rect, GF_RESIZE_RIGHT, min_size, cx,
-                     cy, cw, ch);
+        clamp_edge (windows, source, &ev->initial_rect, GF_RESIZE_RIGHT, min_size, cx, cy,
+                    cw, ch);
     if (ev->direction & GF_RESIZE_LEFT)
-        _clamp_edge (windows, source, &ev->initial_rect, GF_RESIZE_LEFT, min_size, cx, cy,
-                     cw, ch);
+        clamp_edge (windows, source, &ev->initial_rect, GF_RESIZE_LEFT, min_size, cx, cy,
+                    cw, ch);
     if (ev->direction & GF_RESIZE_BOTTOM)
-        _clamp_edge (windows, source, &ev->initial_rect, GF_RESIZE_BOTTOM, min_size, cx,
-                     cy, cw, ch);
+        clamp_edge (windows, source, &ev->initial_rect, GF_RESIZE_BOTTOM, min_size, cx,
+                    cy, cw, ch);
     if (ev->direction & GF_RESIZE_TOP)
-        _clamp_edge (windows, source, &ev->initial_rect, GF_RESIZE_TOP, min_size, cx, cy,
-                     cw, ch);
+        clamp_edge (windows, source, &ev->initial_rect, GF_RESIZE_TOP, min_size, cx, cy,
+                    cw, ch);
 
-    _clamp_all_corner_neighbors (windows, source->id, &ev->initial_rect, ev->direction,
-                                 min_size, cx, cy, cw, ch, source->workspace_id,
-                                 source->monitor_id);
+    clamp_all_corner_neighbors (windows, source->id, &ev->initial_rect, ev->direction,
+                                min_size, cx, cy, cw, ch, source->workspace_id,
+                                source->monitor_id);
 }
 
 // Final guard: the dragged window itself never shrinks below min_size.
 static void
-_enforce_source_min_size (gf_resize_event_t *ev, int32_t *cw, int32_t *ch,
-                          uint32_t min_size)
+enforce_source_min_size (gf_resize_event_t *ev, int32_t *cw, int32_t *ch,
+                         uint32_t min_size)
 {
     if (*cw < (int32_t)min_size)
         *cw = (int32_t)min_size;
@@ -846,37 +845,37 @@ _enforce_source_min_size (gf_resize_event_t *ev, int32_t *cw, int32_t *ch,
 // then the neighbours of each edge the drag touches, so they stay flush with
 // the source's new edges.
 static void
-_apply_edges_to_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
-                           gf_resize_event_t *ev, uint32_t min_size,
-                           gf_platform_t *platform, gf_display_t display,
-                           gf_config_t *config)
+apply_edges_to_neighbors (gf_win_list_t *windows, gf_win_info_t *source,
+                          gf_resize_event_t *ev, uint32_t min_size,
+                          gf_platform_t *platform, gf_display_t display,
+                          gf_config_t *config)
 {
-    _propagate_all_corner_neighbors (
-        windows, source, &ev->initial_rect, &ev->current_rect, ev->direction, min_size,
-        platform, display, config, source->workspace_id, source->monitor_id);
+    propagate_all_corner_neighbors (windows, source, &ev->initial_rect, &ev->current_rect,
+                                    ev->direction, min_size, platform, display, config,
+                                    source->workspace_id, source->monitor_id);
 
     if (ev->direction & GF_RESIZE_RIGHT)
-        _propagate_edge_to_neighbors (windows, source, &ev->initial_rect,
-                                      &ev->current_rect, GF_RESIZE_RIGHT, min_size,
-                                      platform, display, config);
+        propagate_edge_to_neighbors (windows, source, &ev->initial_rect,
+                                     &ev->current_rect, GF_RESIZE_RIGHT, min_size,
+                                     platform, display, config);
     if (ev->direction & GF_RESIZE_LEFT)
-        _propagate_edge_to_neighbors (windows, source, &ev->initial_rect,
-                                      &ev->current_rect, GF_RESIZE_LEFT, min_size,
-                                      platform, display, config);
+        propagate_edge_to_neighbors (windows, source, &ev->initial_rect,
+                                     &ev->current_rect, GF_RESIZE_LEFT, min_size,
+                                     platform, display, config);
     if (ev->direction & GF_RESIZE_BOTTOM)
-        _propagate_edge_to_neighbors (windows, source, &ev->initial_rect,
-                                      &ev->current_rect, GF_RESIZE_BOTTOM, min_size,
-                                      platform, display, config);
+        propagate_edge_to_neighbors (windows, source, &ev->initial_rect,
+                                     &ev->current_rect, GF_RESIZE_BOTTOM, min_size,
+                                     platform, display, config);
     if (ev->direction & GF_RESIZE_TOP)
-        _propagate_edge_to_neighbors (windows, source, &ev->initial_rect,
-                                      &ev->current_rect, GF_RESIZE_TOP, min_size,
-                                      platform, display, config);
+        propagate_edge_to_neighbors (windows, source, &ev->initial_rect,
+                                     &ev->current_rect, GF_RESIZE_TOP, min_size, platform,
+                                     display, config);
 }
 
 // One resize tick: clamp the source against its neighbours, enforce its own
 // minimum, commit the source's geometry, then propagate the change outward.
 static void
-_propagate_resize (gf_wm_t *m, gf_resize_event_t *ev)
+propagate_resize (gf_wm_t *m, gf_resize_event_t *ev)
 {
     gf_win_list_t *windows = wm_windows (m);
     gf_platform_t *platform = wm_platform (m);
@@ -898,15 +897,15 @@ _propagate_resize (gf_wm_t *m, gf_resize_event_t *ev)
     int32_t cw = (int32_t)ev->current_rect.width;
     int32_t ch = (int32_t)ev->current_rect.height;
 
-    _clamp_source_edges (windows, source, ev, min_size, &cx, &cy, &cw, &ch);
-    _enforce_source_min_size (ev, &cw, &ch, min_size);
+    clamp_source_edges (windows, source, ev, min_size, &cx, &cy, &cw, &ch);
+    enforce_source_min_size (ev, &cw, &ch, min_size);
     ev->current_rect = (gf_rect_t){ cx, cy, (gf_dimension_t)cw, (gf_dimension_t)ch };
 
     platform->window_set_geometry (display, ev->window, &ev->current_rect,
                                    GF_GEOMETRY_CHANGE_ALL, m->config);
 
-    _apply_edges_to_neighbors (windows, source, ev, min_size, platform, display,
-                               m->config);
+    apply_edges_to_neighbors (windows, source, ev, min_size, platform, display,
+                              m->config);
     source->geometry = ev->current_rect;
 }
 
@@ -914,7 +913,7 @@ _propagate_resize (gf_wm_t *m, gf_resize_event_t *ev)
 // position, and mark the workspace as a custom layout so auto-arrange won't snap
 // it back to a grid.
 static void
-_commit_resize (gf_wm_t *m, gf_resize_event_t *ev)
+commit_resize (gf_wm_t *m, gf_resize_event_t *ev)
 {
     gf_win_list_t *windows = wm_windows (m);
     gf_platform_t *platform = wm_platform (m);
@@ -956,14 +955,13 @@ _commit_resize (gf_wm_t *m, gf_resize_event_t *ev)
 }
 
 static void
-wm_commit_monitor_transfer (gf_wm_t *m, gf_win_info_t *source,
-                            gf_monitor_id_t new_monitor)
+commit_monitor_transfer (gf_wm_t *m, gf_win_info_t *source, gf_monitor_id_t new_monitor)
 {
     wm_move_window_to_monitor (m, source, new_monitor);
 }
 
 static void
-wm_commit_move (gf_wm_t *m, gf_resize_event_t *ev)
+commit_move (gf_wm_t *m, gf_resize_event_t *ev)
 {
     gf_win_list_t *windows = wm_windows (m);
     gf_platform_t *platform = wm_platform (m);
@@ -986,7 +984,7 @@ wm_commit_move (gf_wm_t *m, gf_resize_event_t *ev)
         new_monitor = platform->monitor_from_window (platform, ev->window);
 
     if (new_monitor != old_monitor)
-        wm_commit_monitor_transfer (m, source, new_monitor);
+        commit_monitor_transfer (m, source, new_monitor);
 
     if (new_monitor != old_monitor)
         GF_LOG_INFO ("[RESIZE] Window %p moved from monitor %u to %u", (void *)ev->window,
@@ -1031,7 +1029,7 @@ gf_wm_resize_event (gf_wm_t *m)
         {
             GF_LOG_DEBUG ("[RESIZE] Propagating dir=%d dw=%d dh=%d", ev.direction, ev.dw,
                           ev.dh);
-            _propagate_resize (m, &ev);
+            propagate_resize (m, &ev);
         }
         break;
 
@@ -1040,12 +1038,12 @@ gf_wm_resize_event (gf_wm_t *m)
                      ev.direction);
         if (ev.direction != GF_RESIZE_NONE && m->config->enable_live_resize)
         {
-            _propagate_resize (m, &ev);
-            _commit_resize (m, &ev);
+            propagate_resize (m, &ev);
+            commit_resize (m, &ev);
         }
         else if (ev.direction == GF_RESIZE_NONE)
         {
-            wm_commit_move (m, &ev);
+            commit_move (m, &ev);
         }
         m->state.resize_active = false;
         break;

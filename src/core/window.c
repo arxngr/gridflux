@@ -42,7 +42,7 @@ remove_stale_windows (gf_wm_t *m, gf_win_list_t *windows)
                 gf_ws_info_t *ws
                     = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
                 if (ws && ws->has_maximized_state)
-                    cleanup_empty_maximized_ws (m, ws->id);
+                    wm_cleanup_empty_maximized_ws (m, ws->id);
             }
             platform->border_remove (platform, win_id);
             gf_window_list_remove (windows, win_id);
@@ -112,8 +112,8 @@ excluded_force_retile (gf_wm_t *m)
     gf_ws_list_t *ws_list = wm_workspaces (m);
 
     m->state.resize_active = false;
-    recount_workspace_windows (m, ws_list, wm_windows (m),
-                               m->config->max_windows_per_workspace);
+    wm_recount_workspace_windows (m, ws_list, wm_windows (m),
+                                  m->config->max_windows_per_workspace);
     gf_window_list_mark_all_needs_update (wm_windows (m), NULL);
     for (uint32_t i = 0; i < ws_list->count; i++)
         ws_list->items[i].is_custom_layout = false;
@@ -124,7 +124,7 @@ excluded_force_retile (gf_wm_t *m)
 // window list is synced; only acts on state transitions, so it is idle once
 // everything is reconciled.
 void
-reconcile_excluded_windows (gf_wm_t *m)
+wm_reconcile_excluded_windows (gf_wm_t *m)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -151,7 +151,7 @@ reconcile_excluded_windows (gf_wm_t *m)
         if (excluded && !parked)
         {
             platform->border_remove (platform, win->id);
-            move_window_to_workspace (
+            wm_move_window_to_workspace (
                 m, win, wm_lookup_or_create_excluded_ws (m, win->monitor_id));
             changed = true;
         }
@@ -173,7 +173,7 @@ reconcile_excluded_windows (gf_wm_t *m)
                        >= m->config->max_windows_per_workspace)
                 target = wm_lookup_or_create_ws_for_monitor (m, mon);
 
-            move_window_to_workspace (m, win, target);
+            wm_move_window_to_workspace (m, win, target);
             if (platform->window_unminimize)
                 platform->window_unminimize (display, win->id);
             win->is_minimized = false;
@@ -216,7 +216,7 @@ gf_wm_resolve_window_name (const gf_wm_t *m, gf_handle_t handle, const char *cac
 }
 
 gf_monitor_id_t
-find_active_monitor (gf_wm_t *m)
+wm_find_active_monitor (gf_wm_t *m)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -242,8 +242,8 @@ find_active_monitor (gf_wm_t *m)
 }
 
 void
-minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id,
-                            gf_monitor_id_t active_monitor)
+wm_minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id,
+                               gf_monitor_id_t active_monitor)
 {
     if (active_monitor >= GF_MAX_MONITORS)
         return;
@@ -278,7 +278,7 @@ minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id
         if (win->workspace_id != ws_id || win->monitor_id != active_monitor)
             continue;
 
-        gf_wm_request_visibility (m, win, true);
+        wm_request_visibility (m, win, true);
         if (platform->border_remove)
             platform->border_remove (platform, win->id);
     }
@@ -316,7 +316,7 @@ restore_non_active_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_win
         if (!win->monitor_suspended)
             continue;
 
-        if (gf_wm_request_visibility (m, win, false) != GF_SUCCESS)
+        if (wm_request_visibility (m, win, false) != GF_SUCCESS)
             continue;
         if (m->config->enable_borders && !win->is_maximized && platform->border_add
             && !platform->window_is_minimized (display, win->id)
@@ -348,7 +348,7 @@ restore_active_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
 
         if (!win->is_minimized && !win->monitor_suspended)
             break;
-        if (gf_wm_request_visibility (m, win, false) != GF_SUCCESS)
+        if (wm_request_visibility (m, win, false) != GF_SUCCESS)
             break;
         if (m->config->enable_borders && !win->is_maximized && platform->border_add
             && !platform->window_is_minimized (display, win->id)
@@ -379,15 +379,15 @@ restore_fallback_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_monitor_id_t active_mo
 
         if (!win->is_minimized && !win->monitor_suspended)
             break;
-        if (gf_wm_request_visibility (m, win, false) != GF_SUCCESS)
+        if (wm_request_visibility (m, win, false) != GF_SUCCESS)
             break;
         break;
     }
 }
 
 void
-restore_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
-                           gf_monitor_id_t active_monitor)
+wm_restore_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
+                              gf_monitor_id_t active_monitor)
 {
     gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
     if (!ws || ws->monitor_id != active_monitor)
@@ -600,15 +600,15 @@ gf_wm_window_move (gf_wm_t *m, gf_handle_t window_id, gf_ws_id_t target_workspac
 
     win->workspace_id = target_workspace;
 
-    recount_workspace_windows (m, workspaces, windows,
-                               m->config->max_windows_per_workspace);
-    sync_workspaces (m);
+    wm_recount_workspace_windows (m, workspaces, windows,
+                                  m->config->max_windows_per_workspace);
+    wm_sync_workspaces (m);
 
     return GF_SUCCESS;
 }
 
 uint32_t
-find_maximized_windows (gf_wm_t *m, gf_win_info_t **out_windows)
+wm_find_maximized_windows (gf_wm_t *m, gf_win_info_t **out_windows)
 {
     gf_win_list_t *windows = wm_windows (m);
     gf_ws_list_t *workspaces = wm_workspaces (m);
@@ -658,7 +658,7 @@ find_maximized_windows (gf_wm_t *m, gf_win_info_t **out_windows)
 }
 
 int
-find_maximized_ws_index (gf_win_info_t *windows, uint32_t count, gf_handle_t handle)
+wm_find_maximized_ws_index (gf_win_info_t *windows, uint32_t count, gf_handle_t handle)
 {
     for (uint32_t i = 0; i < count; i++)
     {

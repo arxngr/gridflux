@@ -51,7 +51,7 @@ handle_command_response (gpointer user_data)
 
     if (data->should_refresh)
     {
-        platform_run_refresh (data->app);
+        gf_gui_platform_run_refresh (data->app);
     }
 
     g_free (data);
@@ -110,8 +110,8 @@ run_refresh_thread (gpointer user_data)
 #endif
 
 void
-platform_run_command (gf_app_state_t *app, const char *command, gboolean refresh,
-                      gboolean dialog)
+gf_gui_platform_run_command (gf_app_state_t *app, const char *command, gboolean refresh,
+                             gboolean dialog)
 {
 #ifdef _WIN32
     if (app->operation_in_progress)
@@ -148,7 +148,7 @@ platform_run_command (gf_app_state_t *app, const char *command, gboolean refresh
 }
 
 void
-platform_run_refresh (gf_app_state_t *app)
+gf_gui_platform_run_refresh (gf_app_state_t *app)
 {
 #ifdef _WIN32
     gf_refresh_task_t *task = g_new0 (gf_refresh_task_t, 1);

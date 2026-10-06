@@ -65,7 +65,7 @@ static void
 on_refresh_clicked (GtkButton *btn, gpointer user_data)
 {
     (void)btn;
-    platform_run_refresh ((gf_app_state_t *)user_data);
+    gf_gui_platform_run_refresh ((gf_app_state_t *)user_data);
 }
 
 // A flat header button that runs a click handler (opens a dialog).
@@ -97,12 +97,13 @@ gf_gui_toolbar_new (gf_app_state_t *app)
     update_server_button (app);
     g_timeout_add (GF_SERVER_POLL_MS, poll_server_status, app);
 
-    GtkWidget *settings = build_action_button (
-        "emblem-system-symbolic", NULL, G_CALLBACK (on_config_button_clicked), app);
-    GtkWidget *rules
-        = build_action_button (NULL, "Rules", G_CALLBACK (on_rules_button_clicked), app);
+    GtkWidget *settings
+        = build_action_button ("emblem-system-symbolic", NULL,
+                               G_CALLBACK (gf_gui_on_config_button_clicked), app);
+    GtkWidget *rules = build_action_button (
+        NULL, "Rules", G_CALLBACK (gf_gui_on_rules_button_clicked), app);
     GtkWidget *exclude = build_action_button (
-        NULL, "Exclusions", G_CALLBACK (on_exclude_button_clicked), app);
+        NULL, "Exclusions", G_CALLBACK (gf_gui_on_exclude_button_clicked), app);
     GtkWidget *refresh = build_action_button ("view-refresh-symbolic", NULL,
                                               G_CALLBACK (on_refresh_clicked), app);
 

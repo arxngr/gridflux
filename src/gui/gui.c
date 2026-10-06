@@ -9,7 +9,7 @@ static gf_app_state_t *g_widgets = NULL;
 static gboolean g_start_minimized = FALSE;
 
 static void
-gf_gtk_activate (GtkApplication *app, gpointer user_data)
+gtk_activate (GtkApplication *app, gpointer user_data)
 {
     (void)user_data;
 
@@ -42,7 +42,7 @@ gf_gtk_activate (GtkApplication *app, gpointer user_data)
 }
 
 static void
-gf_gtk_shutdown (GtkApplication *app, gpointer user_data)
+gtk_shutdown (GtkApplication *app, gpointer user_data)
 {
     (void)app;
     (void)user_data;
@@ -76,8 +76,8 @@ main (int argc, char **argv)
                                    G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE,
                                    "Start in the system tray", NULL);
 
-    g_signal_connect (app, "activate", G_CALLBACK (gf_gtk_activate), NULL);
-    g_signal_connect (app, "shutdown", G_CALLBACK (gf_gtk_shutdown), NULL);
+    g_signal_connect (app, "activate", G_CALLBACK (gtk_activate), NULL);
+    g_signal_connect (app, "shutdown", G_CALLBACK (gtk_shutdown), NULL);
 
     int status = g_application_run (G_APPLICATION (app), argc, argv);
     g_object_unref (app);

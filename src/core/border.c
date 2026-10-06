@@ -4,7 +4,7 @@
 #include "wm.h"
 
 static bool
-_win_needs_border (gf_wm_t *m, const gf_win_info_t *win)
+win_needs_border (gf_wm_t *m, const gf_win_info_t *win)
 {
     if (!win->is_valid || win->is_minimized || win->is_maximized
         || wm_is_excluded (m, win->id))
@@ -16,7 +16,7 @@ _win_needs_border (gf_wm_t *m, const gf_win_info_t *win)
 }
 
 static void
-_border_add_to_win (gf_wm_t *m, const gf_win_info_t *win)
+border_add_to_win (gf_wm_t *m, const gf_win_info_t *win)
 {
     if (!m->platform->border_add)
         return;
@@ -26,7 +26,7 @@ _border_add_to_win (gf_wm_t *m, const gf_win_info_t *win)
 }
 
 static void
-_borders_apply_to_current_windows (gf_wm_t *m)
+borders_apply_to_current_windows (gf_wm_t *m)
 {
     gf_win_list_t *list = wm_windows (m);
 
@@ -36,8 +36,8 @@ _borders_apply_to_current_windows (gf_wm_t *m)
     {
         gf_win_info_t *win = &list->items[i];
 
-        if (_win_needs_border (m, win))
-            _border_add_to_win (m, win);
+        if (win_needs_border (m, win))
+            border_add_to_win (m, win);
     }
 }
 
@@ -49,7 +49,7 @@ gf_border_enable_all (gf_wm_t *m)
 
     // Platform enumeration returns native desktop/monitor defaults, not the
     // monitor-local identities tracked by the manager.
-    _borders_apply_to_current_windows (m);
+    borders_apply_to_current_windows (m);
 }
 
 void

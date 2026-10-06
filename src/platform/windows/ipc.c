@@ -28,7 +28,7 @@ static gf_pipe_t *pipe_instances = NULL;
 static int num_instances = 0;
 
 static SECURITY_ATTRIBUTES *
-gf_pipe_security_attributes (void)
+pipe_security_attributes (void)
 {
     SECURITY_ATTRIBUTES *sa = malloc (sizeof (*sa));
     if (!sa)
@@ -75,7 +75,7 @@ create_pipe_instance (BOOL first_instance)
 {
     const char *pipe_path = gf_ipc_get_socket_path ();
 
-    SECURITY_ATTRIBUTES *sa = gf_pipe_security_attributes ();
+    SECURITY_ATTRIBUTES *sa = pipe_security_attributes ();
 
     // FILE_FLAG_FIRST_PIPE_INSTANCE on the first instance ensures we are the
     // creator of the pipe (a squatter cannot pre-create it). PIPE_REJECT_REMOTE_
@@ -135,7 +135,7 @@ connect_to_client (gf_pipe_t *instance)
 // partially-initialised server). Closes each instance's pipe AND event handle.
 // NOTE: the previous CreateEvent-failure path closed only pipes, leaking events.
 static void
-_pipe_destroy_instances (int count)
+pipe_destroy_instances (int count)
 {
     for (int j = 0; j < count; j++)
     {
@@ -167,7 +167,7 @@ gf_ipc_server_create (void)
         if (pipe_instances[i].pipe == INVALID_HANDLE_VALUE)
         {
             fprintf (stderr, "CreateNamedPipe failed: %lu\n", GetLastError ());
-            _pipe_destroy_instances (i);
+            pipe_destroy_instances (i);
             return -1;
         }
 
@@ -175,7 +175,7 @@ gf_ipc_server_create (void)
         if (!pipe_instances[i].overlapped.hEvent)
         {
             fprintf (stderr, "CreateEvent failed: %lu\n", GetLastError ());
-            _pipe_destroy_instances (i + 1);
+            pipe_destroy_instances (i + 1);
             return -1;
         }
 
@@ -217,7 +217,7 @@ gf_ipc_server_destroy (gf_ipc_handle_t handle)
 // handle, so we drive the async write to completion via a temporary
 // manual-reset event and GetOverlappedResult. Returns TRUE on success.
 static BOOL
-_pipe_write_sync (HANDLE pipe, const void *data, DWORD len)
+pipe_write_sync (HANDLE pipe, const void *data, DWORD len)
 {
     OVERLAPPED ov = { 0 };
     ov.hEvent = CreateEvent (NULL, TRUE, FALSE, NULL);
@@ -240,7 +240,7 @@ _pipe_write_sync (HANDLE pipe, const void *data, DWORD len)
 // Program Files, writable only by administrators), so an unprivileged process
 // cannot plant a look-alike binary there.
 static bool
-_client_path_trusted (const wchar_t *client_path)
+client_path_trusted (const wchar_t *client_path)
 {
     wchar_t self[MAX_PATH];
     DWORD n = GetModuleFileNameW (NULL, self, MAX_PATH);
@@ -266,7 +266,7 @@ _client_path_trusted (const wchar_t *client_path)
 // pipe access via the Interactive-Users ACE cannot feed crafted bytes to the
 // (elevated) command parser. Only the trusted GridFlux front-ends are accepted.
 static bool
-_pipe_client_trusted (HANDLE pipe)
+pipe_client_trusted (HANDLE pipe)
 {
     DWORD pid = 0;
     if (!GetNamedPipeClientProcessId (pipe, &pid))
@@ -281,23 +281,23 @@ _pipe_client_trusted (HANDLE pipe)
     BOOL ok = QueryFullProcessImageNameW (proc, 0, path, &sz);
     CloseHandle (proc);
 
-    return ok && _client_path_trusted (path);
+    return ok && client_path_trusted (path);
 }
 
 static void
-_pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
+pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
 {
     inst->buffer[bytes] = '\0';
 
     gf_ipc_response_t response = { 0 };
     response.status = GF_IPC_SUCCESS;
 
-    if (!_pipe_client_trusted (inst->pipe))
+    if (!pipe_client_trusted (inst->pipe))
         response.status = GF_IPC_ERROR_PERMISSION; // reject untrusted callers
     else
         gf_handle_client_message (inst->buffer, &response, user_data);
 
-    if (!_pipe_write_sync (inst->pipe, &response, sizeof (response)))
+    if (!pipe_write_sync (inst->pipe, &response, sizeof (response)))
         fprintf (stderr, "Pipe reply write failed: %lu\n", GetLastError ());
 
     FlushFileBuffers (inst->pipe);
@@ -310,7 +310,7 @@ _pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
 // Advance one pipe instance: complete a pending connect, then service any
 // readable client message. Returns true if a message was processed.
 static bool
-_pipe_poll_instance (gf_pipe_t *inst, void *user_data)
+pipe_poll_instance (gf_pipe_t *inst, void *user_data)
 {
     DWORD bytes = 0;
 
@@ -335,7 +335,7 @@ _pipe_poll_instance (gf_pipe_t *inst, void *user_data)
     if (ReadFile (inst->pipe, inst->buffer, sizeof (inst->buffer) - 1, &bytes,
                   &inst->overlapped))
     {
-        _pipe_handle_message (inst, bytes, user_data);
+        pipe_handle_message (inst, bytes, user_data);
         return true;
     }
 
@@ -352,7 +352,7 @@ _pipe_poll_instance (gf_pipe_t *inst, void *user_data)
                 connect_to_client (inst);
                 return false;
             }
-            _pipe_handle_message (inst, bytes, user_data);
+            pipe_handle_message (inst, bytes, user_data);
             return true;
         }
         return false;
@@ -375,7 +375,7 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
 
     bool processed = false;
     for (int i = 0; i < num_instances; i++)
-        if (_pipe_poll_instance (&pipe_instances[i], user_data))
+        if (pipe_poll_instance (&pipe_instances[i], user_data))
             processed = true;
 
     return processed;

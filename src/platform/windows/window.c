@@ -1,15 +1,267 @@
+#include "window.h"
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "internal.h"
-#include "window_state.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <time.h>
 
+static const char *const gf_window_state_inset_props[4]
+    = { "GridFlux.MaximizedLeft", "GridFlux.MaximizedTop", "GridFlux.MaximizedRight",
+        "GridFlux.MaximizedBottom" };
+
+void
+gf_window_state_reset (HWND window)
+{
+    RemovePropA (window, GF_WINDOW_STATE_FILL_PROP);
+    RemovePropA (window, GF_WINDOW_STATE_DPI_PROP);
+    RemovePropA (window, GF_WINDOW_STATE_REGION_PROP);
+    for (int i = 0; i < 4; i++)
+    {
+        RemovePropA (window, gf_window_state_inset_props[i]);
+    }
+}
+
+static BOOL
+window_state_clip (HWND window, const MONITORINFO *monitor, const RECT *rect,
+                   const RECT *previous, BOOL fill_monitor)
+{
+    // Custom frames can keep clipping to rcWork after their HWND
+    // expands. Only replace that exact rectangular work-area mask; preserve
+    // application-defined shapes and windows without a custom region.
+    RECT current;
+    int kind = GetWindowRgnBox (window, &current);
+    BOOL owned = GetPropA (window, GF_WINDOW_STATE_REGION_PROP) != NULL;
+    RECT work = monitor->rcWork, full = monitor->rcMonitor;
+    RECT old_work = work, old_full = full;
+    OffsetRect (&work, -rect->left, -rect->top);
+    OffsetRect (&full, -rect->left, -rect->top);
+    OffsetRect (&old_work, -previous->left, -previous->top);
+    OffsetRect (&old_full, -previous->left, -previous->top);
+    // A procedure may leave its existing region unchanged during the resize.
+    // Its coordinates then still refer to the previous window origin.
+    if (kind != SIMPLEREGION
+        || (!EqualRect (&current, &work) && !EqualRect (&current, &old_work)
+            && !(owned
+                 && (EqualRect (&current, &full) || EqualRect (&current, &old_full)))))
+    {
+        RemovePropA (window, GF_WINDOW_STATE_REGION_PROP);
+        return TRUE;
+    }
+    if (!fill_monitor && !owned)
+        return TRUE;
+    const RECT *target = fill_monitor ? &full : &work;
+    if (EqualRect (&current, target))
+        return TRUE;
+    HRGN region = CreateRectRgnIndirect (target);
+    if (!region)
+        return FALSE;
+    if (fill_monitor
+        && !SetPropA (window, GF_WINDOW_STATE_REGION_PROP, (HANDLE)(INT_PTR)1))
+    {
+        DeleteObject (region);
+        return FALSE;
+    }
+    // SetWindowRgn owns the region on success, including across processes.
+    if (!SetWindowRgn (window, region, TRUE))
+    {
+        DeleteObject (region);
+        return FALSE;
+    }
+    return GetWindowRgnBox (window, &current) == SIMPLEREGION
+           && EqualRect (&current, target);
+}
+
+static BOOL
+window_state_frame (HWND window, const RECT *rect, const MONITORINFO *monitor,
+                    int *insets)
+{
+    UINT dpi = GetDpiForWindow (window);
+    if (!dpi)
+    {
+        dpi = 96;
+    }
+    UINT saved_dpi = (UINT)(UINT_PTR)GetPropA (window, GF_WINDOW_STATE_DPI_PROP);
+    if (saved_dpi)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            INT_PTR value = (INT_PTR)GetPropA (window, gf_window_state_inset_props[i]);
+            if (!value)
+            {
+                return FALSE;
+            }
+            insets[i] = MulDiv ((int)value - 1, (int)dpi, (int)saved_dpi);
+        }
+        return TRUE;
+    }
+
+    // Capture the invisible maximized frame once. DWM updates asynchronously;
+    // re-reading its old bounds after a resize would repeatedly enlarge the app.
+    RECT visible;
+    BOOL have_frame = SUCCEEDED (DwmGetWindowAttribute (
+        window, DWMWA_EXTENDED_FRAME_BOUNDS, &visible, sizeof (visible)));
+    int border_x = GetSystemMetricsForDpi (SM_CXSIZEFRAME, dpi)
+                   + GetSystemMetricsForDpi (SM_CXPADDEDBORDER, dpi);
+    int border_y = GetSystemMetricsForDpi (SM_CYSIZEFRAME, dpi)
+                   + GetSystemMetricsForDpi (SM_CXPADDEDBORDER, dpi);
+    int observed[4] = { have_frame ? visible.left - rect->left : border_x,
+                        have_frame ? visible.top - rect->top : border_y,
+                        have_frame ? rect->right - visible.right : border_x,
+                        have_frame ? rect->bottom - visible.bottom : border_y };
+    // A native maximized placement surrounds rcWork with its frame padding.
+    // This is more reliable than DWM bounds for custom non-client frames.
+    int work_insets[4]
+        = { monitor->rcWork.left - rect->left, monitor->rcWork.top - rect->top,
+            rect->right - monitor->rcWork.right, rect->bottom - monitor->rcWork.bottom };
+    BOOL native_placement = TRUE;
+    for (int i = 0; i < 4; i++)
+    {
+        int border = i % 2 ? border_y : border_x;
+        if (work_insets[i] < 0 || work_insets[i] > border + 1)
+            native_placement = FALSE;
+    }
+    for (int i = 0; i < 4; i++)
+    {
+        int fallback = i % 2 ? border_y : border_x;
+        insets[i] = native_placement                         ? work_insets[i]
+                    : observed[i] >= 0 && observed[i] <= 128 ? observed[i]
+                                                             : fallback;
+        if (!SetPropA (window, gf_window_state_inset_props[i],
+                       (HANDLE)(INT_PTR)(insets[i] + 1)))
+        {
+            gf_window_state_reset (window);
+            return FALSE;
+        }
+    }
+    if (!SetPropA (window, GF_WINDOW_STATE_DPI_PROP, (HANDLE)(UINT_PTR)dpi))
+    {
+        gf_window_state_reset (window);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL
+window_state_resize (HWND window, const RECT *target, RECT *previous)
+{
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING;
+    if (!SetWindowPos (window, NULL, target->left, target->top,
+                       target->right - target->left, target->bottom - target->top, flags))
+        return FALSE;
+    RECT actual;
+    if (!GetWindowRect (window, &actual))
+        return FALSE;
+    if (EqualRect (&actual, target))
+        return TRUE;
+    *previous = actual;
+
+    // Some window procedures re-clamp any maximized resize to rcWork. Resize
+    // with the maximize style temporarily cleared, then retain the native
+    // maximize state and repair its saved normal placement without activation.
+    if (IsIconic (window) || !IsZoomed (window))
+        return FALSE;
+    WINDOWPLACEMENT placement = { .length = sizeof (placement) };
+    if (!GetWindowPlacement (window, &placement))
+        return FALSE;
+    BOOL visible = IsWindowVisible (window);
+    LONG_PTR style = GetWindowLongPtr (window, GWL_STYLE);
+    if (!SetWindowLongPtr (window, GWL_STYLE, style & ~WS_MAXIMIZE))
+        return FALSE;
+    BOOL resized = SetWindowPos (window, NULL, target->left, target->top,
+                                 target->right - target->left,
+                                 target->bottom - target->top, flags);
+    BOOL maximized = SetWindowLongPtr (window, GWL_STYLE,
+                                       GetWindowLongPtr (window, GWL_STYLE) | WS_MAXIMIZE)
+                     != 0;
+    // SW_SHOWNA retains the current show state; SW_SHOWNOACTIVATE would restore
+    // a maximized app. Hidden windows must remain hidden during recovery.
+    placement.showCmd = visible ? SW_SHOWNA : SW_HIDE;
+    BOOL saved = SetWindowPlacement (window, &placement);
+    return resized && maximized && saved && IsZoomed (window)
+           && GetWindowRect (window, &actual) && EqualRect (&actual, target);
+}
+
+BOOL
+gf_window_state_apply (HWND window, BOOL fill_monitor)
+{
+    BOOL owned = GetPropA (window, GF_WINDOW_STATE_FILL_PROP) != NULL;
+    if (!fill_monitor && !owned)
+    {
+        return TRUE;
+    }
+    if (!IsWindow (window) || IsIconic (window) || !IsZoomed (window))
+    {
+        if (!fill_monitor)
+        {
+            gf_window_state_reset (window);
+        }
+        return TRUE;
+    }
+    MONITORINFO monitor = { .cbSize = sizeof (monitor) };
+    HMONITOR destination = MonitorFromWindow (window, MONITOR_DEFAULTTONEAREST);
+    RECT current;
+    if (!GetMonitorInfo (destination, &monitor) || !GetWindowRect (window, &current))
+    {
+        return FALSE;
+    }
+    const RECT *bounds = fill_monitor ? &monitor.rcMonitor : &monitor.rcWork;
+    if (fill_monitor && !owned && EqualRect (&monitor.rcMonitor, &monitor.rcWork))
+    {
+        return TRUE;
+    }
+    int insets[4];
+    if (!window_state_frame (window, &current, &monitor, insets))
+    {
+        return FALSE;
+    }
+    RECT target = { bounds->left - insets[0], bounds->top - insets[1],
+                    bounds->right + insets[2], bounds->bottom + insets[3] };
+    if (fill_monitor && !SetPropA (window, GF_WINDOW_STATE_FILL_PROP, (HANDLE)(INT_PTR)1))
+    {
+        gf_window_state_reset (window);
+        return FALSE;
+    }
+    if (!EqualRect (&current, &target))
+    {
+        if (!window_state_resize (window, &target, &current))
+        {
+            return FALSE;
+        }
+    }
+    if (!window_state_clip (window, &monitor, &target, &current, fill_monitor))
+        return FALSE;
+    RECT actual;
+    if (!GetWindowRect (window, &actual) || !EqualRect (&actual, &target))
+        return FALSE;
+    if (!fill_monitor)
+    {
+        gf_window_state_reset (window);
+    }
+    return TRUE;
+}
+
+static BOOL CALLBACK
+window_state_restore_callback (HWND window, LPARAM context)
+{
+    (void)context;
+    if (GetPropA (window, GF_WINDOW_STATE_FILL_PROP))
+    {
+        gf_window_state_apply (window, FALSE);
+    }
+    return TRUE;
+}
+
+void
+gf_window_state_restore (void)
+{
+    EnumWindows (window_state_restore_callback, 0);
+}
+
 #define MAX_WINDOWS 1024
 
 static const char *
-_strcasestr (const char *haystack, const char *needle)
+strcasestr (const char *haystack, const char *needle)
 {
     if (!haystack || !needle)
         return NULL;
@@ -38,7 +290,7 @@ _strcasestr (const char *haystack, const char *needle)
 // Resolve the executable file name (e.g. "code.exe") for a process id.
 // Writes an empty string on failure.
 static void
-_pid_get_exe_name (DWORD pid, char *out, size_t out_size)
+pid_get_exe_name (DWORD pid, char *out, size_t out_size)
 {
     out[0] = '\0';
 
@@ -60,17 +312,17 @@ _pid_get_exe_name (DWORD pid, char *out, size_t out_size)
 
 // True if any of the needles occurs (case-insensitively) in haystack.
 static bool
-_str_contains_any (const char *haystack, const char *const *needles, int count)
+str_contains_any (const char *haystack, const char *const *needles, int count)
 {
     for (int i = 0; i < count; i++)
-        if (_strcasestr (haystack, needles[i]) != NULL)
+        if (strcasestr (haystack, needles[i]) != NULL)
             return true;
     return false;
 }
 
 // Case-insensitive check that `s` ends with `suffix`.
 static bool
-_str_ends_with_ci (const char *s, const char *suffix)
+str_ends_with_ci (const char *s, const char *suffix)
 {
     size_t ls = strlen (s), lf = strlen (suffix);
     if (lf > ls)
@@ -84,7 +336,7 @@ _str_ends_with_ci (const char *s, const char *suffix)
 }
 
 static bool
-_window_class_is_installer (const char *class_name)
+window_class_is_installer (const char *class_name)
 {
     static const char *const exact[] = {
         "MsiDialogCloseClass", // Windows Installer / MSI / WiX
@@ -95,23 +347,23 @@ _window_class_is_installer (const char *class_name)
         if (strcmp (class_name, exact[i]) == 0)
             return true;
 
-    return _strcasestr (class_name, "InstallShield") != NULL // InstallShield
-           || _strcasestr (class_name, "Nullsoft") != NULL;  // NSIS
+    return strcasestr (class_name, "InstallShield") != NULL // InstallShield
+           || strcasestr (class_name, "Nullsoft") != NULL;  // NSIS
 }
 
 static bool
-_window_title_is_installer (const char *title)
+window_title_is_installer (const char *title)
 {
-    if (_str_ends_with_ci (title, " setup") || _str_ends_with_ci (title, " installer"))
+    if (str_ends_with_ci (title, " setup") || str_ends_with_ci (title, " installer"))
         return true;
 
     static const char *const phrases[]
         = { "setup wizard", "install wizard", "installshield", "uninstall" };
-    return _str_contains_any (title, phrases, 4);
+    return str_contains_any (title, phrases, 4);
 }
 
 bool
-window_is_installer (HWND window)
+gf_window_is_installer (HWND window)
 {
     char class_name[256] = { 0 };
     GetClassNameA (window, class_name, sizeof (class_name));
@@ -119,23 +371,23 @@ window_is_installer (HWND window)
     char title[256] = { 0 };
     GetWindowTextA (window, title, sizeof (title) - 1);
 
-    if (_window_class_is_installer (class_name))
+    if (window_class_is_installer (class_name))
         return true;
 
     DWORD pid = 0;
     GetWindowThreadProcessId (window, &pid);
     char exe_name[MAX_PATH] = { 0 };
-    _pid_get_exe_name (pid, exe_name, sizeof (exe_name));
+    pid_get_exe_name (pid, exe_name, sizeof (exe_name));
 
     static const char *const exe_kw[] = { "setup", "install", "uninst", "msiexec" };
-    if (exe_name[0] != '\0' && _str_contains_any (exe_name, exe_kw, 4))
+    if (exe_name[0] != '\0' && str_contains_any (exe_name, exe_kw, 4))
         return true;
 
-    return _window_title_is_installer (title);
+    return window_title_is_installer (title);
 }
 
 static bool
-_window_fill_info (HWND hwnd, gf_win_info_t *info)
+window_fill_info (HWND hwnd, gf_win_info_t *info)
 {
     RECT rect;
     if (FAILED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rect,
@@ -187,7 +439,7 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
     {
         // NOTE: always advance hwnd. The previous version did `continue` on a
         // geometry-lookup failure before advancing, which could spin forever.
-        if (window_is_app (hwnd) && _window_fill_info (hwnd, &window_list[found_count]))
+        if (gf_window_is_app (hwnd) && window_fill_info (hwnd, &window_list[found_count]))
             found_count++;
         hwnd = GetNextWindow (hwnd, GW_HWNDNEXT);
     }
@@ -203,7 +455,7 @@ gf_window_get_geometry (gf_display_t display, gf_handle_t window, gf_rect_t *geo
 {
     (void)display;
 
-    if (!window_validate (window) || !geometry)
+    if (!gf_window_validate (window) || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
     RECT rect;
@@ -230,7 +482,7 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
     (void)flags;
     (void)cfg;
 
-    if (!window_validate (window) || !geometry)
+    if (!gf_window_validate (window) || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
     // A maximize can occur between the core's state check and this write.
@@ -282,12 +534,12 @@ bool
 gf_window_is_valid (gf_display_t display, gf_handle_t window)
 {
     (void)display;
-    return window_validate (window);
+    return gf_window_validate (window);
 }
 
 // True if the window's title marks it as a system/utility window to ignore.
 static bool
-_window_title_excluded (HWND window)
+window_title_excluded (HWND window)
 {
     char title[MAX_TITLE_LENGTH];
     int len = GetWindowTextA (window, title, sizeof (title) - 1);
@@ -313,37 +565,37 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
 {
     (void)display;
 
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return true;
 
     if (GetWindow (window, GW_OWNER) != NULL)
         return true;
 
-    if (window_is_excluded_style (window))
+    if (gf_window_is_excluded_style (window))
         return true;
 
-    if (window_is_fullscreen (window))
+    if (gf_window_is_native_fullscreen (window))
         return true;
 
-    if (window_is_cloaked (window))
+    if (gf_window_is_cloaked (window))
         return true;
 
-    if (window_is_notification_center (window))
+    if (gf_window_is_notification_center (window))
         return true;
 
-    if (window_is_self (display, window))
+    if (gf_window_is_self (display, window))
         return true;
 
-    if (window_is_installer ((HWND)window))
+    if (gf_window_is_installer ((HWND)window))
         return true;
 
-    if (_window_title_excluded ((HWND)window))
+    if (window_title_excluded ((HWND)window))
         return true;
 
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (GetClassNameA (window, class_name, sizeof (class_name)))
     {
-        if (window_is_excluded_class (class_name))
+        if (gf_window_is_excluded_class (class_name))
             return true;
 
         char dbg_title[128] = { 0 };
@@ -359,13 +611,13 @@ gf_window_is_fullscreen (gf_display_t display, gf_handle_t window)
 {
     (void)display;
 
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return false;
 
     // Reuse the monitor-aware detection in internal.c, which compares the window
     // against its actual monitor (MonitorFromWindow + GetMonitorInfo) and checks
     // GetWindowRect's return, instead of the primary monitor's GetSystemMetrics.
-    return window_is_fullscreen ((HWND)window);
+    return gf_window_is_native_fullscreen ((HWND)window);
 }
 
 gf_handle_t
@@ -374,7 +626,7 @@ gf_window_get_focused (gf_display_t display)
     (void)display;
 
     HWND hwnd = GetForegroundWindow ();
-    if (window_validate (hwnd) && window_is_app (hwnd))
+    if (gf_window_validate (hwnd) && gf_window_is_app (hwnd))
         return hwnd;
 
     return 0;
@@ -385,7 +637,7 @@ gf_window_minimize (gf_display_t display, gf_handle_t window)
 {
     (void)display;
 
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return GF_ERROR_INVALID_PARAMETER;
 
     if (!IsIconic (window))
@@ -399,7 +651,7 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
 {
     (void)display;
 
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return GF_ERROR_INVALID_PARAMETER;
 
     if (!IsIconic (window))
@@ -420,7 +672,7 @@ gf_err_t
 gf_window_set_maximized (gf_display_t display, gf_handle_t window, bool maximized)
 {
     (void)display;
-    if (!window_validate (window) || IsIconic (window))
+    if (!gf_window_validate (window) || IsIconic (window))
         return GF_ERROR_INVALID_PARAMETER;
 
     // Restoring a transferred maximized window may use a saved rectangle on
@@ -461,7 +713,7 @@ gf_err_t
 gf_window_focus (gf_display_t display, gf_handle_t window)
 {
     (void)display;
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return GF_ERROR_INVALID_PARAMETER;
     return SetForegroundWindow (window) ? GF_SUCCESS : GF_ERROR_PLATFORM_ERROR;
 }
@@ -477,7 +729,7 @@ gf_window_fill_maximized (gf_display_t display, gf_handle_t window, bool fill_mo
 // Resolve the owning process id for a window. UWP host windows
 // (ApplicationFrameWindow) proxy a child process, so dig into the child.
 static DWORD
-_window_resolve_pid (HWND window, const char *class_name)
+window_resolve_pid (HWND window, const char *class_name)
 {
     DWORD pid = 0;
     GetWindowThreadProcessId (window, &pid);
@@ -514,7 +766,7 @@ gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
 
     buffer[0] = '\0';
 
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return;
 
     char class_name[128] = { 0 };
@@ -522,9 +774,9 @@ gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
         return;
 
     // Append the executable name so rules can match against the .exe
-    DWORD pid = _window_resolve_pid ((HWND)window, class_name);
+    DWORD pid = window_resolve_pid ((HWND)window, class_name);
     char exe_name[MAX_PATH] = { 0 };
-    _pid_get_exe_name (pid, exe_name, sizeof (exe_name));
+    pid_get_exe_name (pid, exe_name, sizeof (exe_name));
 
     if (exe_name[0] != '\0')
     {
@@ -542,7 +794,7 @@ gf_platform_window_minimized (gf_display_t display, gf_handle_t window)
 {
     (void)display;
 
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return false;
 
     return IsIconic ((HWND)window);
@@ -553,7 +805,7 @@ gf_platform_window_hidden (gf_display_t display, gf_handle_t window)
 {
     (void)display;
 
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return false;
 
     // Window is hidden if it's not visible AND not minimized to taskbar
@@ -565,7 +817,7 @@ bool
 gf_window_is_maximized (gf_display_t display, gf_handle_t window)
 {
     (void)display;
-    if (!window_validate ((HWND)window))
+    if (!gf_window_validate ((HWND)window))
         return false;
     if (IsZoomed (window))
         return true;

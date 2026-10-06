@@ -571,20 +571,20 @@ main (void)
     // it settles and repair the late iconify response without changing identity.
     gf_win_info_t pending = { .id = handle (4), .monitor_id = 1 };
     delay_visibility[4] = true;
-    assert (gf_wm_request_visibility (&m, &pending, true) == GF_SUCCESS);
-    assert (gf_wm_request_visibility (&m, &pending, false) == GF_SUCCESS);
+    assert (wm_request_visibility (&m, &pending, true) == GF_SUCCESS);
+    assert (wm_request_visibility (&m, &pending, false) == GF_SUCCESS);
     for (unsigned i = 0; i < 3; i++)
     {
         bool observed_min = false, observed_max = false;
-        gf_wm_observe_window_state (&m, &pending, &observed_min, &observed_max);
-        gf_wm_request_visibility (&m, &pending, false);
+        wm_observe_window_state (&m, &pending, &observed_min, &observed_max);
+        wm_request_visibility (&m, &pending, false);
     }
     assert (pending.visibility_request == 2);
     minimized[4] = true;
     bool observed_min = true, observed_max = false;
-    gf_wm_observe_window_state (&m, &pending, &observed_min, &observed_max);
+    wm_observe_window_state (&m, &pending, &observed_min, &observed_max);
     delay_visibility[4] = false;
-    gf_wm_request_visibility (&m, &pending, false);
+    wm_request_visibility (&m, &pending, false);
     assert (!minimized[4] && pending.monitor_id == 1 && !pending.visibility_request);
 
     // Native minimize failures also have bounded retries.
@@ -593,8 +593,8 @@ main (void)
     for (unsigned i = 0; i < 30; i++)
     {
         observed_min = false;
-        gf_wm_observe_window_state (&m, &pending, &observed_min, &observed_max);
-        gf_wm_request_visibility (&m, &pending, true);
+        wm_observe_window_state (&m, &pending, &observed_min, &observed_max);
+        wm_request_visibility (&m, &pending, true);
     }
     assert (minimizes[4] == previous_failures + 3);
 
@@ -606,13 +606,13 @@ main (void)
     pending.is_maximized = maximized[4] = true;
     physical[4] = 1;
     platform.window_maximize_async = true;
-    gf_wm_request_maximized (&m, &pending);
+    wm_request_maximized (&m, &pending);
     assert (pending.mode_wait == 6);
     for (unsigned i = 0; i < 6; i++)
     {
         observed_min = false;
         observed_max = i != 2;
-        gf_wm_observe_window_state (&m, &pending, &observed_min, &observed_max);
+        wm_observe_window_state (&m, &pending, &observed_min, &observed_max);
         assert (observed_max && pending.mode_wait == 5 - i);
     }
     gf_window_list_cleanup (&m.state.windows);

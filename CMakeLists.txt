@@ -136,6 +136,12 @@ if(UNIX AND NOT APPLE)
 elseif(WIN32)
     file(GLOB PLATFORM_SOURCES "src/platform/windows/*.c")
 
+    set(WINDOWS_WINDOW_SUPPORT_SOURCES
+        src/platform/windows/internal.c
+        src/utils/memory.c
+        src/utils/logger.c
+    )
+
     set(PLATFORM_LIBRARIES
         user32
         gdi32
@@ -190,9 +196,11 @@ if(WIN32)
     add_executable(gridflux-launcher WIN32
         src/launcher/win32.c
         src/platform/windows/taskbar.c
-        src/platform/windows/window_state.c
+        src/platform/windows/window.c
+        ${WINDOWS_WINDOW_SUPPORT_SOURCES}
         src/launcher/gridflux-launcher.rc
     )
+    target_include_directories(gridflux-launcher PRIVATE ${PLATFORM_INCLUDES})
     target_link_libraries(gridflux-launcher PRIVATE kernel32 user32 gdi32 shell32 advapi32 dwmapi)
     if(NOT GF_DEV_MODE)
         install(TARGETS gridflux-launcher DESTINATION bin)
@@ -413,7 +421,8 @@ if(BUILD_TESTING)
             target_compile_options(gridflux-windows-border-test PRIVATE -UNDEBUG)
         endif()
         add_test(NAME windows-border COMMAND gridflux-windows-border-test)
-        add_executable(gridflux-windows-dock-test tests/test_windows_dock.c)
+        add_executable(gridflux-windows-dock-test
+            tests/test_windows_dock.c ${WINDOWS_WINDOW_SUPPORT_SOURCES})
         target_include_directories(gridflux-windows-dock-test PRIVATE ${PLATFORM_INCLUDES})
         target_link_libraries(gridflux-windows-dock-test PRIVATE user32 gdi32 dwmapi)
         if(MSVC)
@@ -425,6 +434,7 @@ if(BUILD_TESTING)
         foreach(test_name IN ITEMS windows-maximized windows-maximized-native)
             string(REPLACE "-" "_" test_source "${test_name}")
             add_executable(gridflux-${test_name}-test tests/test_${test_source}.c)
+            target_sources(gridflux-${test_name}-test PRIVATE ${WINDOWS_WINDOW_SUPPORT_SOURCES})
             target_include_directories(gridflux-${test_name}-test PRIVATE ${PLATFORM_INCLUDES})
             target_link_libraries(gridflux-${test_name}-test PRIVATE user32 gdi32 dwmapi)
             if(MSVC)
@@ -433,7 +443,7 @@ if(BUILD_TESTING)
                 target_compile_options(gridflux-${test_name}-test PRIVATE -UNDEBUG)
             endif()
             if(test_name STREQUAL "windows-maximized-native")
-                target_sources(gridflux-${test_name}-test PRIVATE src/platform/windows/window_state.c)
+                target_sources(gridflux-${test_name}-test PRIVATE src/platform/windows/window.c)
                 add_dependencies(gridflux-${test_name}-test gridflux-launcher)
                 add_test(NAME ${test_name} COMMAND gridflux-${test_name}-test
                     $<TARGET_FILE:gridflux-launcher>)

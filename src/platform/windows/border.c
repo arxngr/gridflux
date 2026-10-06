@@ -5,17 +5,17 @@
 #include "platform/windows/internal.h"
 #include <stdlib.h>
 
-static LRESULT CALLBACK _border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam,
-                                          LPARAM lparam);
-static void _border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count);
+static LRESULT CALLBACK border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam,
+                                         LPARAM lparam);
+static void border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count);
 
 HWND
-create_border_overlay (HWND target)
+gf_border_create_overlay (HWND target)
 {
     HINSTANCE hInst = GetModuleHandle (NULL);
 
     WNDCLASSEXA wc = { .cbSize = sizeof (WNDCLASSEXA),
-                       .lpfnWndProc = _border_wnd_proc,
+                       .lpfnWndProc = border_wnd_proc,
                        .hInstance = hInst,
                        .lpszClassName = "GridFluxBorder" };
 
@@ -47,7 +47,7 @@ typedef struct
 // True if the target should currently show a border (visible, not cloaked,
 // minimized, or maximized).
 static bool
-_border_target_visible (gf_border_t *b)
+border_target_visible (gf_border_t *b)
 {
     if (!IsWindow (b->target) || !IsWindow (b->overlay))
         return false;
@@ -69,7 +69,7 @@ _border_target_visible (gf_border_t *b)
 // On monitors whose DPI differs from the system DPI this still needs per-monitor
 // DPI conversion.
 static bool
-_border_compute_layout (gf_border_t *b, border_layout_t *out)
+border_compute_layout (gf_border_t *b, border_layout_t *out)
 {
     RECT d_rect, w_rect;
     if (!SUCCEEDED (DwmGetWindowAttribute (b->target, DWMWA_EXTENDED_FRAME_BOUNDS,
@@ -90,8 +90,8 @@ _border_compute_layout (gf_border_t *b, border_layout_t *out)
 
 // Collect intersections of the border rect with the GUI windows, capped at max.
 static int
-_border_find_intersections (const RECT *border_rect, const RECT *gui_rects, int gui_count,
-                            RECT *out, int max)
+border_find_intersections (const RECT *border_rect, const RECT *gui_rects, int gui_count,
+                           RECT *out, int max)
 {
     int n = 0;
     for (int i = 0; i < gui_count && n < max; i++)
@@ -105,8 +105,8 @@ _border_find_intersections (const RECT *border_rect, const RECT *gui_rects, int 
 
 // True if the border geometry or its GUI intersections differ from the cache.
 static bool
-_border_shape_changed (gf_border_t *b, const RECT *visible, const RECT *intersections,
-                       int count)
+border_shape_changed (gf_border_t *b, const RECT *visible, const RECT *intersections,
+                      int count)
 {
     if (memcmp (visible, &b->last_rect, sizeof (RECT)) != 0)
         return true;
@@ -120,8 +120,8 @@ _border_shape_changed (gf_border_t *b, const RECT *visible, const RECT *intersec
 
 // Build the hollow ring region (minus GUI intersections) and cache the layout.
 static void
-_border_apply_region (gf_border_t *b, const border_layout_t *lay,
-                      const RECT *intersections, int count)
+border_apply_region (gf_border_t *b, const border_layout_t *lay,
+                     const RECT *intersections, int count)
 {
     int t = b->thickness;
     HRGN full_rgn = CreateRectRgn (0, 0, lay->w, lay->h);
@@ -148,12 +148,12 @@ _border_apply_region (gf_border_t *b, const border_layout_t *lay,
 }
 
 static void
-_border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
+border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
 {
     if (!b || !b->target || !b->overlay)
         return;
 
-    if (!_border_target_visible (b))
+    if (!border_target_visible (b))
     {
         if (IsWindow (b->overlay))
             ShowWindow (b->overlay, SW_HIDE);
@@ -165,14 +165,14 @@ _border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
     bool was_hidden = !IsWindowVisible (b->overlay);
 
     border_layout_t lay;
-    if (!_border_compute_layout (b, &lay))
+    if (!border_compute_layout (b, &lay))
         return;
 
     RECT intersections[16];
     int count
-        = _border_find_intersections (&lay.rect, gui_rects, gui_count, intersections, 16);
+        = border_find_intersections (&lay.rect, gui_rects, gui_count, intersections, 16);
 
-    bool shape_changed = _border_shape_changed (b, &lay.visible, intersections, count);
+    bool shape_changed = border_shape_changed (b, &lay.visible, intersections, count);
 
     // Always re-assert HWND_TOPMOST to fix async Z-order inconsistency.
     // When a window is re-tiled (e.g. after another app closes), or gains focus,
@@ -184,7 +184,7 @@ _border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
     SetWindowPos (b->overlay, HWND_TOPMOST, lay.x, lay.y, lay.w, lay.h, swp_flags);
 
     if (shape_changed || was_hidden)
-        _border_apply_region (b, &lay, intersections, count);
+        border_apply_region (b, &lay, intersections, count);
 
     // Force a full repaint after re-showing to ensure the border color is drawn —
     // the cached DC content may be stale after being hidden.
@@ -199,7 +199,7 @@ _border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
 
 // Paint the four border edges of the overlay using its cached props.
 static void
-_border_paint (HWND hwnd)
+border_paint (HWND hwnd)
 {
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint (hwnd, &ps);
@@ -234,13 +234,13 @@ _border_paint (HWND hwnd)
 }
 
 static LRESULT CALLBACK
-_border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     if (msg == WM_ERASEBKGND)
         return 1;
     if (msg == WM_PAINT)
     {
-        _border_paint (hwnd);
+        border_paint (hwnd);
         return 0;
     }
     return DefWindowProc (hwnd, msg, wparam, lparam);
@@ -248,7 +248,7 @@ _border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 
 // True if a border is already tracked for this target window.
 static bool
-_border_exists (gf_windows_platform_data_t *data, gf_handle_t window)
+border_exists (gf_windows_platform_data_t *data, gf_handle_t window)
 {
     for (int i = 0; i < data->border_count; i++)
         if (data->borders[i] && data->borders[i]->target == window)
@@ -268,7 +268,7 @@ _border_exists (gf_windows_platform_data_t *data, gf_handle_t window)
 
 // Allocate and initialise a border, stashing its props on the overlay window.
 static gf_border_t *
-gf_border_alloc (HWND overlay, gf_handle_t window, gf_color_t color, int thickness)
+border_alloc (HWND overlay, gf_handle_t window, gf_color_t color, int thickness)
 {
     gf_border_t *b = malloc (sizeof (gf_border_t));
     if (!b)
@@ -299,7 +299,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    if (_border_exists (data, window))
+    if (border_exists (data, window))
     {
         GF_LOG_DEBUG ("Border already exists for window %p", window);
         return;
@@ -313,7 +313,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
         return;
     }
 
-    HWND overlay = create_border_overlay (window);
+    HWND overlay = gf_border_create_overlay (window);
     if (!overlay)
     {
         GF_LOG_WARN ("Failed to create border overlay");
@@ -329,7 +329,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
         return;
     }
 
-    gf_border_t *b = gf_border_alloc (overlay, window, color, thickness);
+    gf_border_t *b = border_alloc (overlay, window, color, thickness);
     if (!b)
     {
         DestroyWindow (overlay);
@@ -348,7 +348,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     GF_LOG_INFO ("Added border for window %p (color=0x%08X, thickness=%d, count=%d)",
                  window, color, thickness, data->border_count);
 
-    _border_update_overlay (b, NULL, 0);
+    border_update_overlay (b, NULL, 0);
 }
 
 // Resolving class+exe walks a process handle per window; cache it per HWND
@@ -359,7 +359,7 @@ static class_cache_entry_t g_class_cache[GF_CLASS_CACHE_SIZE];
 static int g_class_cache_next;
 
 static const char *
-_cached_window_class (HWND hwnd, char *scratch, size_t scratch_size)
+cached_window_class (HWND hwnd, char *scratch, size_t scratch_size)
 {
     DWORD now = GetTickCount ();
     for (int i = 0; i < GF_CLASS_CACHE_SIZE; i++)
@@ -383,13 +383,13 @@ _cached_window_class (HWND hwnd, char *scratch, size_t scratch_size)
 // True if the window's app is on the user's exclude list. Resolved lazily so
 // the class/exe lookup only runs when exclusions actually exist.
 static bool
-_window_user_excluded (const gf_config_t *config, HWND hwnd)
+window_user_excluded (const gf_config_t *config, HWND hwnd)
 {
     if (config->excluded_apps.count == 0)
         return false;
 
     char scratch[256] = { 0 };
-    const char *class_name = _cached_window_class (hwnd, scratch, sizeof (scratch));
+    const char *class_name = cached_window_class (hwnd, scratch, sizeof (scratch));
     if (class_name[0] == '\0')
         return false;
 
@@ -400,14 +400,15 @@ _window_user_excluded (const gf_config_t *config, HWND hwnd)
 // around: the GUI/system windows plus any user-excluded app. Returns the number
 // gathered (up to max).
 static int
-_border_collect_gui_rects (const gf_config_t *config, RECT *out, int max)
+border_collect_gui_rects (const gf_config_t *config, RECT *out, int max)
 {
     int count = 0;
     HWND hwnd = GetTopWindow (NULL);
     while (hwnd && count < max)
     {
         if (IsWindowVisible (hwnd)
-            && (window_is_border_excluded (hwnd) || _window_user_excluded (config, hwnd))
+            && (gf_window_is_border_excluded (hwnd)
+                || window_user_excluded (config, hwnd))
             && (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
                                                   &out[count], sizeof (RECT)))
                 || GetWindowRect (hwnd, &out[count])))
@@ -429,7 +430,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     // 16-slot buffer could be exhausted by excluded apps and drop the GUI's own
     // clip rect, painting the border across it.
     RECT gui_rects[GF_BORDER_MAX_CLIP];
-    int gui_count = _border_collect_gui_rects (config, gui_rects, GF_BORDER_MAX_CLIP);
+    int gui_count = border_collect_gui_rects (config, gui_rects, GF_BORDER_MAX_CLIP);
 
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
@@ -450,7 +451,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
                 InvalidateRect (b->overlay, NULL, FALSE);
             }
         }
-        _border_update_overlay (b, gui_rects, gui_count);
+        border_update_overlay (b, gui_rects, gui_count);
     }
 
     // Process messages for border windows (they are created on this thread)

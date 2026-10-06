@@ -1,5 +1,5 @@
-#ifndef GF_WINDOWS_WINDOW_STATE_H
-#define GF_WINDOWS_WINDOW_STATE_H
+#ifndef GF_WINDOWS_WINDOW_H
+#define GF_WINDOWS_WINDOW_H
 
 #include <windows.h>
 

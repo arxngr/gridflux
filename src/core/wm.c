@@ -24,8 +24,8 @@ handle_max_windows_change (gf_wm_t *m, const gf_config_t *old, const gf_config_t
     GF_LOG_INFO ("max_windows_per_workspace changed from %u to %u",
                  old->max_windows_per_workspace, new->max_windows_per_workspace);
 
-    recount_workspace_windows (m, wm_workspaces (m), wm_windows (m),
-                               new->max_windows_per_workspace);
+    wm_recount_workspace_windows (m, wm_workspaces (m), wm_windows (m),
+                                  new->max_windows_per_workspace);
     gf_window_list_mark_all_needs_update (wm_windows (m), NULL);
 
     gf_ws_list_t *ws_list = wm_workspaces (m);
@@ -34,7 +34,7 @@ handle_max_windows_change (gf_wm_t *m, const gf_config_t *old, const gf_config_t
 }
 
 static void
-wm_reset_monitor_state (gf_wm_t *m)
+reset_monitor_state (gf_wm_t *m)
 {
     m->state.monitor_count = 0;
     for (int i = 0; i < GF_MAX_MONITORS; i++)
@@ -48,7 +48,7 @@ wm_reset_monitor_state (gf_wm_t *m)
 }
 
 static void
-wm_tick (gf_wm_t *m)
+tick (gf_wm_t *m)
 {
     gf_wm_load_cfg (m);
     gf_wm_watch (m);
@@ -171,7 +171,7 @@ gf_wm_cleanup (gf_wm_t *m)
     windows->count = 0;
     workspaces->count = 0;
 
-    wm_reset_monitor_state (m);
+    reset_monitor_state (m);
 
     if (m->state.keymap_initialized && platform->keymap_cleanup)
     {
@@ -224,7 +224,7 @@ gf_wm_load_cfg (gf_wm_t *m)
     if (st.st_mtime <= m->config->last_modified)
         return;
 
-    gf_config_t new_cfg = load_or_create_config (path);
+    gf_config_t new_cfg = gf_config_load_or_create (path);
 
     if (!gf_config_changed (m->config, &new_cfg))
     {
@@ -252,7 +252,7 @@ gf_wm_load_cfg (gf_wm_t *m)
         handle_max_windows_change (m, &old_cfg, &new_cfg);
         gf_config_release (&old_cfg);
     }
-    sync_workspaces (m);
+    wm_sync_workspaces (m);
     gf_wm_debug_stats (m);
 }
 
@@ -266,7 +266,7 @@ gf_wm_run (gf_wm_t *m)
     {
         m->state.loop_counter++;
 
-        wm_tick (m);
+        tick (m);
 
         if (time (NULL) - m->state.last_cleanup_time >= 1)
         {

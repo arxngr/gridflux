@@ -46,7 +46,7 @@ typedef struct
 } _enum_mon_ctx_t;
 
 static BOOL CALLBACK
-_monitor_enum_proc (HMONITOR hmon, HDC hdc, LPRECT lprc, LPARAM lparam)
+monitor_enum_proc (HMONITOR hmon, HDC hdc, LPRECT lprc, LPARAM lparam)
 {
     (void)hdc;
     (void)lprc;
@@ -95,7 +95,7 @@ gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors, uint32_t 
                             .count = 0,
                             .max = *count < GF_MAX_MONITORS ? *count : GF_MAX_MONITORS };
 
-    EnumDisplayMonitors (NULL, NULL, _monitor_enum_proc, (LPARAM)&ctx);
+    EnumDisplayMonitors (NULL, NULL, monitor_enum_proc, (LPARAM)&ctx);
 
     *count = ctx.count;
 
@@ -157,7 +157,7 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
     uint32_t count = GF_MAX_MONITORS;
     _enum_mon_ctx_t ctx = { .monitors = monitors, .count = 0, .max = count };
 
-    EnumDisplayMonitors (NULL, NULL, _monitor_enum_proc, (LPARAM)&ctx);
+    EnumDisplayMonitors (NULL, NULL, monitor_enum_proc, (LPARAM)&ctx);
 
     for (uint32_t i = 0; i < ctx.count; i++)
     {

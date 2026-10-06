@@ -1,5 +1,5 @@
 #include "taskbar.h"
-#include "window_state.h"
+#include "window.h"
 
 void
 gf_taskbar_restore_window (HWND window)

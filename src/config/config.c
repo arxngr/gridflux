@@ -284,7 +284,7 @@ set_if_missing_int (struct json_object *json, const char *key, uint32_t *target,
 }
 
 gf_config_t
-load_or_create_config (const char *filename)
+gf_config_load_or_create (const char *filename)
 {
     gf_config_t cfg = DEFAULT_CONFIG;
     bool changed = false;

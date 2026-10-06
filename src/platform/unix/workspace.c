@@ -7,8 +7,8 @@
 
 // Merge a strut array {left, right, top, bottom} into the running maximums.
 static void
-_strut_apply_max (const long *strut, int *panel_left, int *panel_right, int *panel_top,
-                  int *panel_bottom)
+strut_apply_max (const long *strut, int *panel_left, int *panel_right, int *panel_top,
+                 int *panel_bottom)
 {
     if (strut[0] > *panel_left)
         *panel_left = strut[0];
@@ -23,9 +23,9 @@ _strut_apply_max (const long *strut, int *panel_left, int *panel_right, int *pan
 // Merge one client's reserved-space struts into the running maximums, trying
 // _NET_WM_STRUT_PARTIAL first and falling back to legacy _NET_WM_STRUT.
 static void
-_accumulate_client_strut (Display *dpy, Window client, gf_platform_atoms_t *atoms,
-                          int *panel_left, int *panel_right, int *panel_top,
-                          int *panel_bottom)
+accumulate_client_strut (Display *dpy, Window client, gf_platform_atoms_t *atoms,
+                         int *panel_left, int *panel_right, int *panel_top,
+                         int *panel_bottom)
 {
     long *strut = NULL;
     unsigned long nitems_strut = 0;
@@ -36,7 +36,7 @@ _accumulate_client_strut (Display *dpy, Window client, gf_platform_atoms_t *atom
             == GF_SUCCESS
         && strut && nitems_strut >= 12)
     {
-        _strut_apply_max (strut, panel_left, panel_right, panel_top, panel_bottom);
+        strut_apply_max (strut, panel_left, panel_right, panel_top, panel_bottom);
         XFree (strut);
         return;
     }
@@ -53,7 +53,7 @@ _accumulate_client_strut (Display *dpy, Window client, gf_platform_atoms_t *atom
             == GF_SUCCESS
         && strut && nitems_strut >= 4)
     {
-        _strut_apply_max (strut, panel_left, panel_right, panel_top, panel_bottom);
+        strut_apply_max (strut, panel_left, panel_right, panel_top, panel_bottom);
         XFree (strut);
     }
     else if (strut)
@@ -63,8 +63,8 @@ _accumulate_client_strut (Display *dpy, Window client, gf_platform_atoms_t *atom
 }
 
 static void
-_get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms,
-                    int *panel_left, int *panel_right, int *panel_top, int *panel_bottom)
+get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms, int *panel_left,
+                   int *panel_right, int *panel_top, int *panel_bottom)
 {
     unsigned char *clients_data = NULL;
     unsigned long clients_count = 0;
@@ -83,8 +83,8 @@ _get_global_struts (Display *dpy, Window root, gf_platform_atoms_t *atoms,
 
     Window *clients = (Window *)clients_data;
     for (unsigned long i = 0; i < clients_count; i++)
-        _accumulate_client_strut (dpy, clients[i], atoms, panel_left, panel_right,
-                                  panel_top, panel_bottom);
+        accumulate_client_strut (dpy, clients[i], atoms, panel_left, panel_right,
+                                 panel_top, panel_bottom);
 
     XFree (clients_data);
 }
@@ -142,8 +142,8 @@ gf_workspace_get_count (gf_display_t display)
 // Fill bounds from _NET_WORKAREA for the current workspace. Returns true if a
 // sane (non-zero, sub-screen) work area was found.
 static bool
-_workarea_get_bounds (gf_display_t dpy, Window root, gf_platform_atoms_t *atoms, int sw,
-                      int sh, gf_rect_t *bounds)
+workarea_get_bounds (gf_display_t dpy, Window root, gf_platform_atoms_t *atoms, int sw,
+                     int sh, gf_rect_t *bounds)
 {
     unsigned char *data = NULL;
     unsigned long nitems = 0;
@@ -184,12 +184,12 @@ _workarea_get_bounds (gf_display_t dpy, Window root, gf_platform_atoms_t *atoms,
 
 // Shrink bounds by the panel struts, keeping the most restrictive edge.
 static void
-_struts_clip_bounds (gf_display_t dpy, Window root, gf_platform_atoms_t *atoms, int sw,
-                     int sh, gf_rect_t *bounds)
+struts_clip_bounds (gf_display_t dpy, Window root, gf_platform_atoms_t *atoms, int sw,
+                    int sh, gf_rect_t *bounds)
 {
     int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
-    _get_global_struts (dpy, root, atoms, &panel_left, &panel_right, &panel_top,
-                        &panel_bottom);
+    get_global_struts (dpy, root, atoms, &panel_left, &panel_right, &panel_top,
+                       &panel_bottom);
 
     if (!(panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0))
         return;
@@ -231,14 +231,14 @@ gf_screen_get_bounds (gf_display_t dpy, gf_rect_t *bounds)
     bounds->width = sw;
     bounds->height = sh;
 
-    bool workarea_valid = _workarea_get_bounds (dpy, root, atoms, sw, sh, bounds);
+    bool workarea_valid = workarea_get_bounds (dpy, root, atoms, sw, sh, bounds);
 
     // If Workarea gave full screen (or failed), try Struts to be safe
     if (!workarea_valid
         || (bounds->x == 0 && bounds->y == 0 && bounds->width == sw
             && bounds->height == sh))
     {
-        _struts_clip_bounds (dpy, root, atoms, sw, sh, bounds);
+        struts_clip_bounds (dpy, root, atoms, sw, sh, bounds);
     }
 
     return GF_SUCCESS;
@@ -376,8 +376,8 @@ gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window)
 // Fill bounds with the physical geometry of the given Xinerama monitor.
 // Returns false if that monitor id was not found.
 static bool
-_xinerama_monitor_bounds (gf_display_t display, gf_monitor_id_t monitor_id,
-                          gf_rect_t *bounds)
+xinerama_monitor_bounds (gf_display_t display, gf_monitor_id_t monitor_id,
+                         gf_rect_t *bounds)
 {
     int screen_count = 0;
     XineramaScreenInfo *screens = XineramaQueryScreens (display, &screen_count);
@@ -404,8 +404,8 @@ _xinerama_monitor_bounds (gf_display_t display, gf_monitor_id_t monitor_id,
 // Determine the global "safe zone" (work area) for the current workspace,
 // defaulting to the whole display when the property is unavailable.
 static void
-_workarea_safe_zone (gf_display_t display, Window root, gf_platform_atoms_t *atoms,
-                     int *safe_x, int *safe_y, int *safe_w, int *safe_h)
+workarea_safe_zone (gf_display_t display, Window root, gf_platform_atoms_t *atoms,
+                    int *safe_x, int *safe_y, int *safe_w, int *safe_h)
 {
     *safe_x = 0;
     *safe_y = 0;
@@ -440,12 +440,12 @@ _workarea_safe_zone (gf_display_t display, Window root, gf_platform_atoms_t *ato
 
 // Intersect the safe zone with the panel struts, clamping dimensions to >= 0.
 static void
-_struts_shrink_safe_zone (gf_display_t display, Window root, gf_platform_atoms_t *atoms,
-                          int *safe_x, int *safe_y, int *safe_w, int *safe_h)
+struts_shrink_safe_zone (gf_display_t display, Window root, gf_platform_atoms_t *atoms,
+                         int *safe_x, int *safe_y, int *safe_w, int *safe_h)
 {
     int panel_left = 0, panel_right = 0, panel_top = 0, panel_bottom = 0;
-    _get_global_struts (display, root, atoms, &panel_left, &panel_right, &panel_top,
-                        &panel_bottom);
+    get_global_struts (display, root, atoms, &panel_left, &panel_right, &panel_top,
+                       &panel_bottom);
 
     if (!(panel_top > 0 || panel_bottom > 0 || panel_left > 0 || panel_right > 0))
         return;
@@ -483,7 +483,7 @@ _struts_shrink_safe_zone (gf_display_t display, Window root, gf_platform_atoms_t
 
 // Clip bounds to its overlap with the safe zone, zeroing size on no overlap.
 static void
-_clip_bounds_to_safe (gf_rect_t *bounds, int safe_x, int safe_y, int safe_w, int safe_h)
+clip_bounds_to_safe (gf_rect_t *bounds, int safe_x, int safe_y, int safe_w, int safe_h)
 {
     int monitor_right = bounds->x + bounds->width;
     int monitor_bottom = bounds->y + bounds->height;
@@ -514,7 +514,7 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
     XSync (display, False);
 
     // Get physical geometry from Xinerama; fall back to single-screen bounds.
-    if (!_xinerama_monitor_bounds (display, monitor_id, bounds))
+    if (!xinerama_monitor_bounds (display, monitor_id, bounds))
         return gf_screen_get_bounds (display, bounds);
 
     Window root = DefaultRootWindow (display);
@@ -582,23 +582,23 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
                     bottom = sh - strut[3] > py ? sh - (int)strut[3] : py;
             }
             XFree (clients);
-            _clip_bounds_to_safe (bounds, left, top, right > left ? right - left : 0,
-                                  bottom > top ? bottom - top : 0);
+            clip_bounds_to_safe (bounds, left, top, right > left ? right - left : 0,
+                                 bottom > top ? bottom - top : 0);
         }
         return GF_SUCCESS;
     }
 
     int safe_x, safe_y, safe_w, safe_h;
-    _workarea_safe_zone (display, root, atoms, &safe_x, &safe_y, &safe_w, &safe_h);
+    workarea_safe_zone (display, root, atoms, &safe_x, &safe_y, &safe_w, &safe_h);
 
     // Always check Struts to be safe, because GNOME's _NET_WORKAREA can be unreliable
     // especially during or after workspace transitions or dynamic dock visibility
     // changes.
-    _struts_shrink_safe_zone (display, root, atoms, &safe_x, &safe_y, &safe_w, &safe_h);
+    struts_shrink_safe_zone (display, root, atoms, &safe_x, &safe_y, &safe_w, &safe_h);
 
     // Clip the physical monitor against the global safe zone.
     // This is the logic that supports multiple monitors of different sizes.
-    _clip_bounds_to_safe (bounds, safe_x, safe_y, safe_w, safe_h);
+    clip_bounds_to_safe (bounds, safe_x, safe_y, safe_w, safe_h);
 
     return GF_SUCCESS;
 }

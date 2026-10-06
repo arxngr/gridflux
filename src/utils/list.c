@@ -19,7 +19,7 @@ gf_window_list_cleanup (gf_win_list_t *list)
 }
 
 static gf_err_t
-gf_window_list_ensure_capacity (gf_win_list_t *list, uint32_t required_capacity)
+window_list_ensure_capacity (gf_win_list_t *list, uint32_t required_capacity)
 {
     if (list->capacity >= required_capacity)
         return GF_SUCCESS;
@@ -71,7 +71,7 @@ gf_window_list_add (gf_win_list_t *list, const gf_win_info_t *window)
         return gf_window_list_update (list, window);
     }
 
-    gf_err_t result = gf_window_list_ensure_capacity (list, list->count + 1);
+    gf_err_t result = window_list_ensure_capacity (list, list->count + 1);
     if (result != GF_SUCCESS)
         return result;
 

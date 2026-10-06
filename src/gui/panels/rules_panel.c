@@ -135,7 +135,7 @@ refresh_rules_list (rules_ctx_t *ctx)
     if (!path)
         return;
 
-    gf_config_t config = load_or_create_config (path);
+    gf_config_t config = gf_config_load_or_create (path);
     uint32_t n = config.window_rules_count;
     if (n == 0)
     {
@@ -184,7 +184,7 @@ build_add_form (rules_ctx_t *ctx)
 }
 
 void
-on_rules_button_clicked (GtkButton *btn, gpointer data)
+gf_gui_on_rules_button_clicked (GtkButton *btn, gpointer data)
 {
     (void)btn;
     gf_app_state_t *app = (gf_app_state_t *)data;

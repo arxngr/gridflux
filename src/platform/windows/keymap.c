@@ -9,7 +9,7 @@ static gf_key_action_t g_pending_action = GF_KEY_NONE;
 static HWND g_pending_window = NULL;
 
 static LRESULT CALLBACK
-LowLevelKeyboardProc (int nCode, WPARAM wParam, LPARAM lParam)
+low_level_keyboard_proc (int nCode, WPARAM wParam, LPARAM lParam)
 {
     if (nCode == HC_ACTION)
     {
@@ -62,7 +62,7 @@ gf_keymap_init (gf_platform_t *platform, gf_display_t display)
 
     // Use a Low-Level Keyboard Hook instead of RegisterHotKey to bypass
     // the native Windows 10/11 reserved Ctrl+Win+Left/Right behavior.
-    g_keymap_hook = SetWindowsHookEx (WH_KEYBOARD_LL, LowLevelKeyboardProc,
+    g_keymap_hook = SetWindowsHookEx (WH_KEYBOARD_LL, low_level_keyboard_proc,
                                       GetModuleHandle (NULL), 0);
 
     if (!g_keymap_hook)

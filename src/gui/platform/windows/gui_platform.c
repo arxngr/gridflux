@@ -249,7 +249,7 @@ lookup_friendly_name_fuzzy (GHashTable *friendly_names, const char *clean_key)
 }
 
 static GdkPaintable *
-gf_hicon_to_paintable (HICON hicon)
+hicon_to_paintable (HICON hicon)
 {
     if (!hicon)
         return NULL;
@@ -300,7 +300,7 @@ gf_hicon_to_paintable (HICON hicon)
 }
 
 static GdkPaintable *
-gf_get_hwnd_icon (HWND hwnd)
+get_hwnd_icon (HWND hwnd)
 {
     if (!hwnd || !IsWindow (hwnd))
         return NULL;
@@ -329,7 +329,7 @@ gf_get_hwnd_icon (HWND hwnd)
         hicon = (HICON)GetClassLongPtr (hwnd, GCLP_HICON);
 
     if (hicon)
-        return gf_hicon_to_paintable (hicon);
+        return hicon_to_paintable (hicon);
 
     // 2. Fallback: Get the associated process executable and extract its icon
     DWORD pid = 0;
@@ -348,7 +348,7 @@ gf_get_hwnd_icon (HWND hwnd)
                 if (SHGetFileInfoA (exe_path, 0, &sfi, sizeof (sfi),
                                     SHGFI_ICON | SHGFI_LARGEICON))
                 {
-                    GdkPaintable *paintable = gf_hicon_to_paintable (sfi.hIcon);
+                    GdkPaintable *paintable = hicon_to_paintable (sfi.hIcon);
                     DestroyIcon (sfi.hIcon);
                     CloseHandle (hProcess);
                     if (paintable)
@@ -1000,7 +1000,7 @@ win32_get_app_icon (gf_gui_platform_t *platform, const char *wm_class)
             if (SHGetFileInfoA (full_path, 0, &sfi, sizeof (sfi),
                                 SHGFI_ICON | SHGFI_LARGEICON))
             {
-                GdkPaintable *paintable = gf_hicon_to_paintable (sfi.hIcon);
+                GdkPaintable *paintable = hicon_to_paintable (sfi.hIcon);
                 DestroyIcon (sfi.hIcon);
                 return paintable;
             }
@@ -1084,7 +1084,7 @@ static GdkPaintable *
 win32_get_window_icon (gf_gui_platform_t *platform, gf_handle_t window)
 {
     (void)platform;
-    return gf_get_hwnd_icon ((HWND)window);
+    return get_hwnd_icon ((HWND)window);
 }
 
 gf_gui_platform_t *

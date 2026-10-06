@@ -44,7 +44,7 @@ on_settings_save (GtkButton *btn, gpointer user_data)
     if (!path)
         return;
 
-    gf_config_t config = load_or_create_config (path);
+    gf_config_t config = gf_config_load_or_create (path);
     GtkWidget *max_win = g_object_get_data (G_OBJECT (win), K_MAX_WINDOWS);
     GtkWidget *max_ws = g_object_get_data (G_OBJECT (win), K_MAX_WORKSPACES);
     GtkWidget *borders = g_object_get_data (G_OBJECT (win), K_ENABLE_BORDERS);
@@ -116,12 +116,12 @@ build_button_bar (GtkWidget *window)
 }
 
 void
-on_config_button_clicked (GtkButton *btn, gpointer data)
+gf_gui_on_config_button_clicked (GtkButton *btn, gpointer data)
 {
     (void)btn;
     gf_app_state_t *app = (gf_app_state_t *)data;
     const char *path = gf_config_get_path ();
-    gf_config_t config = path ? load_or_create_config (path)
+    gf_config_t config = path ? gf_config_load_or_create (path)
                               : (gf_config_t){ .max_windows_per_workspace = 4,
                                                .max_workspaces = 10,
                                                .min_window_size = 10,

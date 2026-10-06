@@ -336,7 +336,7 @@ static const char tray_xml[]
       "</interface></node>";
 
 static GVariant *
-gf_gui_menu_properties (int id)
+menu_properties (int id)
 {
     static const char *labels[] = { "", "Show GridFlux", "Start", "Stop", "Quit" };
     GVariantBuilder props;
@@ -355,21 +355,21 @@ gf_gui_menu_properties (int id)
 }
 
 static GVariant *
-gf_gui_menu_layout (int id, int depth)
+menu_layout (int id, int depth)
 {
     GVariantBuilder children;
     g_variant_builder_init (&children, G_VARIANT_TYPE ("av"));
     if (id == 0 && depth != 0)
         for (int i = 1; i <= 4; i++)
-            g_variant_builder_add (&children, "v", gf_gui_menu_layout (i, 0));
-    return g_variant_new ("(i@a{sv}@av)", id, gf_gui_menu_properties (id),
+            g_variant_builder_add (&children, "v", menu_layout (i, 0));
+    return g_variant_new ("(i@a{sv}@av)", id, menu_properties (id),
                           g_variant_builder_end (&children));
 }
 
 static void
-gf_gui_menu_method (GDBusConnection *bus, const gchar *sender, const gchar *path,
-                    const gchar *interface, const gchar *method, GVariant *parameters,
-                    GDBusMethodInvocation *invocation, gpointer user_data)
+menu_method (GDBusConnection *bus, const gchar *sender, const gchar *path,
+             const gchar *interface, const gchar *method, GVariant *parameters,
+             GDBusMethodInvocation *invocation, gpointer user_data)
 {
     (void)bus;
     (void)sender;
@@ -382,7 +382,7 @@ gf_gui_menu_method (GDBusConnection *bus, const gchar *sender, const gchar *path
         int id, depth;
         g_variant_get_child (parameters, 0, "i", &id);
         g_variant_get_child (parameters, 1, "i", &depth);
-        reply = g_variant_new ("(u@(ia{sv}av))", 1u, gf_gui_menu_layout (id, depth));
+        reply = g_variant_new ("(u@(ia{sv}av))", 1u, menu_layout (id, depth));
     }
     else if (strcmp (method, "GetGroupProperties") == 0)
     {
@@ -392,8 +392,7 @@ gf_gui_menu_method (GDBusConnection *bus, const gchar *sender, const gchar *path
         if (g_variant_n_children (ids) == 0)
         {
             for (int i = 0; i <= 4; i++)
-                g_variant_builder_add (&groups, "(i@a{sv})", i,
-                                       gf_gui_menu_properties (i));
+                g_variant_builder_add (&groups, "(i@a{sv})", i, menu_properties (i));
         }
         else
         {
@@ -403,7 +402,7 @@ gf_gui_menu_method (GDBusConnection *bus, const gchar *sender, const gchar *path
             while (g_variant_iter_next (&iter, "i", &id))
                 if (id >= 0 && id <= 4)
                     g_variant_builder_add (&groups, "(i@a{sv})", id,
-                                           gf_gui_menu_properties (id));
+                                           menu_properties (id));
         }
         g_variant_unref (ids);
         reply = g_variant_new ("(@a(ia{sv}))", g_variant_builder_end (&groups));
@@ -413,7 +412,7 @@ gf_gui_menu_method (GDBusConnection *bus, const gchar *sender, const gchar *path
         int id;
         const char *name;
         g_variant_get (parameters, "(i&s)", &id, &name);
-        GVariant *props = g_variant_ref_sink (gf_gui_menu_properties (id));
+        GVariant *props = g_variant_ref_sink (menu_properties (id));
         GVariant *value = g_variant_lookup_value (props, name, NULL);
         if (!value)
         {
@@ -455,9 +454,9 @@ gf_gui_menu_method (GDBusConnection *bus, const gchar *sender, const gchar *path
 }
 
 static GVariant *
-gf_gui_menu_property (GDBusConnection *bus, const gchar *sender, const gchar *path,
-                      const gchar *interface, const gchar *property, GError **error,
-                      gpointer user_data)
+menu_property (GDBusConnection *bus, const gchar *sender, const gchar *path,
+               const gchar *interface, const gchar *property, GError **error,
+               gpointer user_data)
 {
     (void)bus;
     (void)sender;
@@ -471,9 +470,9 @@ gf_gui_menu_property (GDBusConnection *bus, const gchar *sender, const gchar *pa
 }
 
 static void
-gf_gui_tray_method (GDBusConnection *bus, const gchar *sender, const gchar *path,
-                    const gchar *interface, const gchar *method, GVariant *parameters,
-                    GDBusMethodInvocation *invocation, gpointer user_data)
+tray_method (GDBusConnection *bus, const gchar *sender, const gchar *path,
+             const gchar *interface, const gchar *method, GVariant *parameters,
+             GDBusMethodInvocation *invocation, gpointer user_data)
 {
     (void)bus;
     (void)sender;
@@ -487,9 +486,9 @@ gf_gui_tray_method (GDBusConnection *bus, const gchar *sender, const gchar *path
 }
 
 static GVariant *
-gf_gui_tray_property (GDBusConnection *bus, const gchar *sender, const gchar *path,
-                      const gchar *interface, const gchar *property, GError **error,
-                      gpointer user_data)
+tray_property (GDBusConnection *bus, const gchar *sender, const gchar *path,
+               const gchar *interface, const gchar *property, GError **error,
+               gpointer user_data)
 {
     (void)bus;
     (void)sender;
@@ -521,8 +520,8 @@ gf_gui_tray_property (GDBusConnection *bus, const gchar *sender, const gchar *pa
 }
 
 static void
-gf_gui_tray_watcher_appeared (GDBusConnection *bus, const gchar *name, const gchar *owner,
-                              gpointer user_data)
+tray_watcher_appeared (GDBusConnection *bus, const gchar *name, const gchar *owner,
+                       gpointer user_data)
 {
     (void)name;
     (void)owner;
@@ -550,14 +549,14 @@ gf_gui_tray_init (gf_app_state_t *app)
     }
     tray->info = g_dbus_node_info_new_for_xml (tray_xml, NULL);
     static const GDBusInterfaceVTable vtable
-        = { .method_call = gf_gui_tray_method, .get_property = gf_gui_tray_property };
+        = { .method_call = tray_method, .get_property = tray_property };
     tray->object_id = g_dbus_connection_register_object (tray->bus, "/StatusNotifierItem",
                                                          tray->info->interfaces[0],
                                                          &vtable, tray, NULL, &error);
     if (tray->object_id)
     {
         static const GDBusInterfaceVTable menu_vtable
-            = { .method_call = gf_gui_menu_method, .get_property = gf_gui_menu_property };
+            = { .method_call = menu_method, .get_property = menu_property };
         tray->menu_id = g_dbus_connection_register_object (
             tray->bus, "/StatusNotifierItem", tray->info->interfaces[1], &menu_vtable,
             tray, NULL, &error);
@@ -575,7 +574,7 @@ gf_gui_tray_init (gf_app_state_t *app)
     }
     tray->watcher_id = g_bus_watch_name_on_connection (
         tray->bus, "org.kde.StatusNotifierWatcher", G_BUS_NAME_WATCHER_FLAGS_NONE,
-        gf_gui_tray_watcher_appeared, NULL, tray, NULL);
+        tray_watcher_appeared, NULL, tray, NULL);
     app->tray_data = tray;
 }
 

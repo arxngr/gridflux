@@ -12,7 +12,7 @@
 
 // Shrink the over-allocated window list to its final size, or free it if empty.
 static gf_err_t
-_finalize_window_list (gf_win_info_t *list, uint32_t count, gf_win_info_t **out)
+finalize_window_list (gf_win_info_t *list, uint32_t count, gf_win_info_t **out)
 {
     if (count == 0)
     {
@@ -65,7 +65,8 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
     for (unsigned long i = 0; i < nitems; i++)
     {
         gf_win_info_t info;
-        if (query_window_info (display, window_list[i], atoms, workspace_id, &info))
+        if (gf_window_query_window_info (display, window_list[i], atoms, workspace_id,
+                                         &info))
         {
             filtered_windows[filtered_count++] = info;
         }
@@ -73,7 +74,7 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
 
     XFree (data);
 
-    gf_err_t fin = _finalize_window_list (filtered_windows, filtered_count, windows);
+    gf_err_t fin = finalize_window_list (filtered_windows, filtered_count, windows);
     if (fin != GF_SUCCESS)
         return fin;
 
@@ -120,26 +121,26 @@ gf_window_is_valid (gf_display_t display, gf_handle_t window)
 }
 
 bool
-window_is_border_excluded (gf_display_t display, gf_handle_t window)
+gf_window_is_border_excluded (gf_display_t display, gf_handle_t window)
 {
-    // The GUI and its dialogs/popups share the app's WM_CLASS, so window_is_self
+    // The GUI and its dialogs/popups share the app's WM_CLASS, so gf_window_is_self
     // already excludes them — the border is clipped around them, not drawn over.
-    if (window_is_self (display, window))
+    if (gf_window_is_self (display, window))
         return true;
 
-    if (window_is_app_exception (display, window))
+    if (gf_window_is_app_exception (display, window))
         return true;
 
-    if (window_has_excluded_state (display, window))
+    if (gf_window_has_excluded_state (display, window))
         return true;
-    if (window_has_excluded_type (display, window))
+    if (gf_window_has_excluded_type (display, window))
         return true;
 
     return false;
 }
 
 bool
-window_is_self (gf_display_t display, gf_handle_t window)
+gf_window_is_self (gf_display_t display, gf_handle_t window)
 {
     if (!display || window == None)
         return false;
@@ -170,10 +171,10 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (!display || window == None)
         return true;
 
-    if (window_is_self (display, window))
+    if (gf_window_is_self (display, window))
         return true;
 
-    if (window_is_app_exception (display, window))
+    if (gf_window_is_app_exception (display, window))
         return true;
 
     // Exclude fullscreen OR maximized NORMAL windows
@@ -181,16 +182,16 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     bool is_fullscreen
         = gf_platform_window_has_state (display, window, atoms->net_wm_state_fullscreen);
 
-    if (window_has_type (display, window, atoms->net_wm_window_type_normal)
+    if (gf_window_has_type (display, window, atoms->net_wm_window_type_normal)
         && (is_fullscreen))
     {
         return true;
     }
 
-    if (window_has_excluded_state (display, window))
+    if (gf_window_has_excluded_state (display, window))
         return true;
 
-    if (window_has_excluded_type (display, window))
+    if (gf_window_has_excluded_type (display, window))
         return true;
 
     return false;
@@ -208,7 +209,7 @@ gf_window_is_fullscreen (gf_display_t display, gf_handle_t window)
 // the grid cell: CSD windows expand (shadows hang outside), SSD windows shrink
 // (client fits inside the WM frame).
 static void
-_adjust_rect_for_frame (gf_display_t dpy, gf_handle_t win, gf_rect_t *rect)
+adjust_rect_for_frame (gf_display_t dpy, gf_handle_t win, gf_rect_t *rect)
 {
     int left = 0, right = 0, top = 0, bottom = 0;
     bool is_csd = false;
@@ -242,7 +243,7 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
     if (!dpy || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (remove_size_constraints (dpy, win) != GF_SUCCESS)
+    if (gf_window_remove_size_constraints (dpy, win) != GF_SUCCESS)
     {
         GF_LOG_WARN ("Failed to remove size constraints, continuing anyway");
     }
@@ -252,7 +253,7 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
     if (flags & GF_GEOMETRY_APPLY_PADDING)
         gf_rect_apply_padding (&rect, GF_DEFAULT_PADDING);
 
-    _adjust_rect_for_frame (dpy, win, &rect);
+    adjust_rect_for_frame (dpy, win, &rect);
 
     // Use StaticGravity (10) to force the WM to place the client at exactly x, y
     // This removes ambiguity about how NorthWestGravity is interpreted relative to

@@ -15,7 +15,7 @@
 // `header_bytes`. Used to cap every list we marshal into response->message so a
 // large window/workspace count can never overrun the fixed buffer.
 static uint32_t
-gf_ipc_max_records (size_t header_bytes, size_t record_size)
+ipc_max_records (size_t header_bytes, size_t record_size)
 {
     if (record_size == 0 || GF_IPC_MSG_SIZE <= header_bytes)
         return 0;
@@ -23,7 +23,7 @@ gf_ipc_max_records (size_t header_bytes, size_t record_size)
 }
 
 static void
-gf_parse_command (const char *input, char *command, char *args, size_t args_size)
+parse_command (const char *input, char *command, char *args, size_t args_size)
 {
     while (isspace (*input))
         input++;
@@ -43,7 +43,7 @@ gf_parse_command (const char *input, char *command, char *args, size_t args_size
 }
 
 static void
-gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
     gf_win_list_t *windows = wm_windows (m);
@@ -60,8 +60,7 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
         }
     }
 
-    uint32_t max_items
-        = gf_ipc_max_records (2 * sizeof (uint32_t), sizeof (gf_win_info_t));
+    uint32_t max_items = ipc_max_records (2 * sizeof (uint32_t), sizeof (gf_win_info_t));
     uint32_t send_count = (windows->count < max_items) ? windows->count : max_items;
     if (send_count < windows->count)
         GF_LOG_WARN ("query windows: truncating %u -> %u to fit IPC buffer",
@@ -77,7 +76,7 @@ gf_cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_
 }
 
 static void
-gf_cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
     gf_ws_list_t *workspaces = wm_workspaces (m);
@@ -91,7 +90,7 @@ gf_cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *us
     }
 
     size_t header = 2 * sizeof (uint32_t) + sizeof (workspaces->active_workspace);
-    uint32_t max_items = gf_ipc_max_records (header, sizeof (gf_ws_info_t));
+    uint32_t max_items = ipc_max_records (header, sizeof (gf_ws_info_t));
     uint32_t send_count = (workspaces->count < max_items) ? workspaces->count : max_items;
 
     size_t offset = 0;
@@ -107,7 +106,7 @@ gf_cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *us
 }
 
 static void
-gf_cmd_query_count (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_query_count (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
     gf_win_list_t *windows = wm_windows (m);
@@ -132,7 +131,7 @@ gf_cmd_query_count (const char *args, gf_ipc_response_t *response, void *user_da
 }
 
 static void
-gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
 
@@ -187,7 +186,7 @@ gf_cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_da
 }
 
 static void
-gf_cmd_lock_workspace (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_lock_workspace (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
 
@@ -236,7 +235,7 @@ gf_cmd_lock_workspace (const char *args, gf_ipc_response_t *response, void *user
 }
 
 static void
-gf_cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
 
@@ -285,7 +284,7 @@ gf_cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *us
 }
 
 static void
-gf_cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
     gf_command_response_t resp;
@@ -352,7 +351,7 @@ gf_cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
 }
 
 static void
-gf_cmd_rule_remove (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_rule_remove (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
     gf_command_response_t resp;
@@ -380,7 +379,7 @@ gf_cmd_rule_remove (const char *args, gf_ipc_response_t *response, void *user_da
 }
 
 static void
-gf_cmd_rule_list (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_rule_list (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     (void)args;
     gf_wm_t *m = (gf_wm_t *)user_data;
@@ -417,7 +416,7 @@ gf_cmd_rule_list (const char *args, gf_ipc_response_t *response, void *user_data
 // contain spaces (window title fragments, "class|exe"), so first-token parsing
 // would truncate them. Trims surrounding whitespace; false if empty.
 static bool
-gf_copy_class_arg (const char *args, char *out, size_t out_size)
+copy_class_arg (const char *args, char *out, size_t out_size)
 {
     if (!args)
         return false;
@@ -433,13 +432,13 @@ gf_copy_class_arg (const char *args, char *out, size_t out_size)
 }
 
 static void
-gf_cmd_exclude_add (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_exclude_add (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
     gf_command_response_t resp;
 
     char wm_class[GF_RULE_CLASS_MAX] = { 0 };
-    if (!gf_copy_class_arg (args, wm_class, sizeof (wm_class)))
+    if (!copy_class_arg (args, wm_class, sizeof (wm_class)))
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
@@ -461,13 +460,13 @@ gf_cmd_exclude_add (const char *args, gf_ipc_response_t *response, void *user_da
 }
 
 static void
-gf_cmd_exclude_remove (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_exclude_remove (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
     gf_command_response_t resp;
 
     char wm_class[GF_RULE_CLASS_MAX] = { 0 };
-    if (!gf_copy_class_arg (args, wm_class, sizeof (wm_class)))
+    if (!copy_class_arg (args, wm_class, sizeof (wm_class)))
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
@@ -489,7 +488,7 @@ gf_cmd_exclude_remove (const char *args, gf_ipc_response_t *response, void *user
 }
 
 static void
-gf_cmd_exclude_list (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_exclude_list (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     (void)args;
     gf_wm_t *m = (gf_wm_t *)user_data;
@@ -515,7 +514,7 @@ gf_cmd_exclude_list (const char *args, gf_ipc_response_t *response, void *user_d
 }
 
 static void
-gf_cmd_query_apps (const char *args, gf_ipc_response_t *response, void *user_data)
+cmd_query_apps (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     (void)args;
     gf_wm_t *m = (gf_wm_t *)user_data;
@@ -578,29 +577,29 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     char command[64] = { 0 };
     char args[256] = { 0 };
 
-    gf_parse_command (message, command, args, sizeof (args));
+    parse_command (message, command, args, sizeof (args));
 
     if (strcmp (command, "query") == 0)
     {
         char subcommand[64] = { 0 };
         char subargs[256] = { 0 };
-        gf_parse_command (args, subcommand, subargs, sizeof (subargs));
+        parse_command (args, subcommand, subargs, sizeof (subargs));
 
         if (strcmp (subcommand, "windows") == 0 || strcmp (subcommand, "W") == 0)
         {
-            gf_cmd_query_windows (subargs, response, user_data);
+            cmd_query_windows (subargs, response, user_data);
         }
         else if (strcmp (subcommand, "workspaces") == 0 || strcmp (subcommand, "D") == 0)
         {
-            gf_cmd_query_workspaces (subargs, response, user_data);
+            cmd_query_workspaces (subargs, response, user_data);
         }
         else if (strcmp (subcommand, "count") == 0 || strcmp (subcommand, "T") == 0)
         {
-            gf_cmd_query_count (subargs, response, user_data);
+            cmd_query_count (subargs, response, user_data);
         }
         else if (strcmp (subcommand, "apps") == 0)
         {
-            gf_cmd_query_apps (subargs, response, user_data);
+            cmd_query_apps (subargs, response, user_data);
         }
         else
         {
@@ -614,15 +613,15 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     }
     else if (strcmp (command, "move") == 0)
     {
-        gf_cmd_move_window (args, response, user_data);
+        cmd_move_window (args, response, user_data);
     }
     else if (strcmp (command, "lock") == 0)
     {
-        gf_cmd_lock_workspace (args, response, user_data);
+        cmd_lock_workspace (args, response, user_data);
     }
     else if (strcmp (command, "unlock") == 0)
     {
-        gf_cmd_unlock_workspace (args, response, user_data);
+        cmd_unlock_workspace (args, response, user_data);
     }
     else if (strcmp (command, "toggle-borders") == 0)
     {
@@ -654,19 +653,19 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     {
         char subcommand[64] = { 0 };
         char subargs[256] = { 0 };
-        gf_parse_command (args, subcommand, subargs, sizeof (subargs));
+        parse_command (args, subcommand, subargs, sizeof (subargs));
 
         if (strcmp (subcommand, "add") == 0)
         {
-            gf_cmd_rule_add (subargs, response, user_data);
+            cmd_rule_add (subargs, response, user_data);
         }
         else if (strcmp (subcommand, "remove") == 0)
         {
-            gf_cmd_rule_remove (subargs, response, user_data);
+            cmd_rule_remove (subargs, response, user_data);
         }
         else if (strcmp (subcommand, "list") == 0)
         {
-            gf_cmd_rule_list (subargs, response, user_data);
+            cmd_rule_list (subargs, response, user_data);
         }
         else
         {
@@ -682,19 +681,19 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     {
         char subcommand[64] = { 0 };
         char subargs[256] = { 0 };
-        gf_parse_command (args, subcommand, subargs, sizeof (subargs));
+        parse_command (args, subcommand, subargs, sizeof (subargs));
 
         if (strcmp (subcommand, "add") == 0)
         {
-            gf_cmd_exclude_add (subargs, response, user_data);
+            cmd_exclude_add (subargs, response, user_data);
         }
         else if (strcmp (subcommand, "remove") == 0)
         {
-            gf_cmd_exclude_remove (subargs, response, user_data);
+            cmd_exclude_remove (subargs, response, user_data);
         }
         else if (strcmp (subcommand, "list") == 0)
         {
-            gf_cmd_exclude_list (subargs, response, user_data);
+            cmd_exclude_list (subargs, response, user_data);
         }
         else
         {
@@ -736,7 +735,7 @@ gf_parse_workspace_list (const char *buffer)
 
     // Never trust the peer-supplied count: clamp it to what the fixed reply
     // buffer can actually hold before allocating/copying.
-    uint32_t max_items = gf_ipc_max_records (offset, sizeof (gf_ws_info_t));
+    uint32_t max_items = ipc_max_records (offset, sizeof (gf_ws_info_t));
     if (list->count > max_items)
         list->count = max_items;
     if (list->count == 0)
@@ -775,7 +774,7 @@ gf_parse_window_list (const char *buffer)
 
     // Never trust the peer-supplied count: clamp it to what the fixed reply
     // buffer can actually hold before allocating/copying.
-    uint32_t max_items = gf_ipc_max_records (offset, sizeof (gf_win_info_t));
+    uint32_t max_items = ipc_max_records (offset, sizeof (gf_win_info_t));
     if (list->count > max_items)
         list->count = max_items;
     if (list->count == 0)

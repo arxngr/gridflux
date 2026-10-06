@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 bool
-window_name_matches (const char *name, const char *list[], size_t count)
+gf_window_name_matches (const char *name, const char *list[], size_t count)
 {
     for (size_t i = 0; i < count; i++)
     {
@@ -24,7 +24,7 @@ window_name_matches (const char *name, const char *list[], size_t count)
 }
 
 bool
-window_is_app_exception (gf_display_t display, gf_handle_t window)
+gf_window_is_app_exception (gf_display_t display, gf_handle_t window)
 {
     const char *screenshot_classes[]
         = { "flameshot",       "Gnome-screenshot", "Spectacle",
@@ -36,14 +36,15 @@ window_is_app_exception (gf_display_t display, gf_handle_t window)
     XClassHint hint;
     if (XGetClassHint (display, window, &hint))
     {
-        bool match = (hint.res_class
-                      && window_name_matches (hint.res_class, screenshot_classes,
-                                              sizeof (screenshot_classes)
-                                                  / sizeof (screenshot_classes[0])))
-                     || (hint.res_name
-                         && window_name_matches (hint.res_name, screenshot_classes,
-                                                 sizeof (screenshot_classes)
-                                                     / sizeof (screenshot_classes[0])));
+        bool match
+            = (hint.res_class
+               && gf_window_name_matches (hint.res_class, screenshot_classes,
+                                          sizeof (screenshot_classes)
+                                              / sizeof (screenshot_classes[0])))
+              || (hint.res_name
+                  && gf_window_name_matches (hint.res_name, screenshot_classes,
+                                             sizeof (screenshot_classes)
+                                                 / sizeof (screenshot_classes[0])));
 
         if (hint.res_name)
             XFree (hint.res_name);
@@ -56,7 +57,7 @@ window_is_app_exception (gf_display_t display, gf_handle_t window)
 }
 
 bool
-window_has_type (gf_display_t display, gf_handle_t window, Atom type)
+gf_window_has_type (gf_display_t display, gf_handle_t window, Atom type)
 {
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     unsigned char *data = NULL;
@@ -83,7 +84,7 @@ window_has_type (gf_display_t display, gf_handle_t window, Atom type)
 }
 
 bool
-window_has_excluded_state (gf_display_t display, gf_handle_t window)
+gf_window_has_excluded_state (gf_display_t display, gf_handle_t window)
 {
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     Atom excluded_states[] = { atoms->net_wm_state_skip_taskbar,
@@ -98,7 +99,7 @@ window_has_excluded_state (gf_display_t display, gf_handle_t window)
 }
 
 bool
-window_has_excluded_type (gf_display_t display, gf_handle_t window)
+gf_window_has_excluded_type (gf_display_t display, gf_handle_t window)
 {
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
     Atom excluded_types[] = {
@@ -112,14 +113,14 @@ window_has_excluded_type (gf_display_t display, gf_handle_t window)
 
     for (size_t i = 0; i < sizeof (excluded_types) / sizeof (excluded_types[0]); i++)
     {
-        if (window_has_type (display, window, excluded_types[i]))
+        if (gf_window_has_type (display, window, excluded_types[i]))
             return true;
     }
     return false;
 }
 
 gf_err_t
-remove_size_constraints (Display *dpy, Window win)
+gf_window_remove_size_constraints (Display *dpy, Window win)
 {
     XSizeHints *hints = XAllocSizeHints ();
     if (!hints)
@@ -140,7 +141,7 @@ remove_size_constraints (Display *dpy, Window win)
 }
 
 void
-run_cmd_sync (const char *cmd, char *const argv[])
+gf_platform_run_cmd_sync (const char *cmd, char *const argv[])
 {
     pid_t pid;
     posix_spawnattr_t attr;
@@ -157,7 +158,7 @@ run_cmd_sync (const char *cmd, char *const argv[])
 }
 
 bool
-get_frame_geometry (Display *dpy, Window target, gf_rect_t *frame_rect)
+gf_window_get_frame_geometry (Display *dpy, Window target, gf_rect_t *frame_rect)
 {
     XWindowAttributes attrs;
     if (!XGetWindowAttributes (dpy, target, &attrs))
@@ -192,8 +193,8 @@ get_frame_geometry (Display *dpy, Window target, gf_rect_t *frame_rect)
 }
 
 bool
-query_window_info (Display *display, Window window, gf_platform_atoms_t *atoms,
-                   gf_ws_id_t *workspace_id, gf_win_info_t *info)
+gf_window_query_window_info (Display *display, Window window, gf_platform_atoms_t *atoms,
+                             gf_ws_id_t *workspace_id, gf_win_info_t *info)
 {
     if (!gf_window_is_valid (display, window))
         return false;

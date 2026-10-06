@@ -20,7 +20,7 @@ gf_exclude_list_contains (const gf_exclude_list_t *list, const char *name)
     return false;
 }
 BOOL
-window_is_border_excluded (HWND hwnd)
+gf_window_is_border_excluded (HWND hwnd)
 {
     (void)hwnd;
     return FALSE;

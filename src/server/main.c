@@ -55,7 +55,7 @@ main ()
         return 1;
     }
 
-    *config = load_or_create_config (cfg_path);
+    *config = gf_config_load_or_create (cfg_path);
     GF_LOG_INFO ("Configuration loaded:");
     GF_LOG_INFO ("  max_windows_per_workspace: %u", config->max_windows_per_workspace);
     GF_LOG_INFO ("  max_workspaces: %u", config->max_workspaces);

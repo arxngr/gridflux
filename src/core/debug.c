@@ -14,8 +14,8 @@
 #include <time.h>
 
 void
-_print_workspace_header (gf_ws_id_t id, bool is_locked, uint32_t count,
-                         uint32_t max_windows, int32_t available)
+wm_print_workspace_header (gf_ws_id_t id, bool is_locked, uint32_t count,
+                           uint32_t max_windows, int32_t available)
 {
     const char *lock_str = is_locked ? "LOCKED" : "unlocked";
     GF_LOG_INFO ("Workspace %u (%s): %u/%u windows, %d available", id, lock_str, count,
@@ -23,7 +23,7 @@ _print_workspace_header (gf_ws_id_t id, bool is_locked, uint32_t count,
 }
 
 void
-_print_window_info (uint32_t window_id, const char *name)
+wm_print_window_info (uint32_t window_id, const char *name)
 {
     GF_LOG_INFO ("  - [%u] %s", window_id, name);
 }

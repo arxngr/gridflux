@@ -27,7 +27,7 @@ static gboolean
 run_deferred (gpointer user_data)
 {
     deferred_cmd_t *d = user_data;
-    platform_run_command (d->app, d->command, TRUE, d->dialog);
+    gf_gui_platform_run_command (d->app, d->command, TRUE, d->dialog);
     g_free (d);
     return G_SOURCE_REMOVE;
 }
@@ -201,7 +201,7 @@ build_chip (gf_app_state_t *app, const gf_win_info_t *win, bool draggable)
 }
 
 static gboolean
-gf_gui_window_in_workspace (const gf_win_info_t *win, const gf_ws_info_t *ws)
+window_in_workspace (const gf_win_info_t *win, const gf_ws_info_t *ws)
 {
     return win->is_valid && win->workspace_id == ws->id
            && win->monitor_id == ws->monitor_id && win->name[0] != '\0';
@@ -219,7 +219,7 @@ build_chips (gf_app_state_t *app, const gf_ws_info_t *ws, const gf_win_list_t *w
     uint32_t shown = 0, hidden = 0;
     for (uint32_t i = 0; windows && i < windows->count; i++)
     {
-        if (!gf_gui_window_in_workspace (&windows->items[i], ws))
+        if (!window_in_workspace (&windows->items[i], ws))
             continue;
         GtkWidget *chip = build_chip (app, &windows->items[i], !ws->has_rule);
         gtk_flow_box_append (GTK_FLOW_BOX (fb), chip);
@@ -265,7 +265,7 @@ compose_status (const gf_ws_info_t *ws, char *buf, size_t n)
 }
 
 static GtkWidget *
-gf_gui_build_number (const gf_ws_info_t *ws)
+build_number (const gf_ws_info_t *ws)
 {
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_valign (box, GTK_ALIGN_CENTER);
@@ -373,7 +373,7 @@ gf_gui_workspace_card_new (const gf_ws_info_t *ws, const gf_win_list_t *windows,
     GtkWidget *card = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 14);
     gtk_widget_add_css_class (card, "gf-wscard");
     g_object_set_data_full (G_OBJECT (card), "ctx", ctx, g_free);
-    gtk_box_append (GTK_BOX (card), gf_gui_build_number (ws));
+    gtk_box_append (GTK_BOX (card), build_number (ws));
     char tooltip[96];
     snprintf (tooltip, sizeof (tooltip), "Monitor %u, local workspace %d (ID %d)",
               ws->monitor_id, ws->local_id, ws->id);

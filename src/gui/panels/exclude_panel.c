@@ -92,7 +92,7 @@ refresh_exclude_list (exclude_ctx_t *ctx)
     if (!path)
         return;
 
-    gf_config_t config = load_or_create_config (path);
+    gf_config_t config = gf_config_load_or_create (path);
     const gf_exclude_list_t *list = &config.excluded_apps;
 
     if (list->count == 0)
@@ -126,7 +126,7 @@ build_add_form (exclude_ctx_t *ctx)
 }
 
 void
-on_exclude_button_clicked (GtkButton *btn, gpointer data)
+gf_gui_on_exclude_button_clicked (GtkButton *btn, gpointer data)
 {
     (void)btn;
     gf_app_state_t *app = (gf_app_state_t *)data;

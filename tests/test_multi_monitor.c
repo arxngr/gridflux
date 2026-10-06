@@ -66,12 +66,12 @@ gf_log (gf_log_level_t level, const char *format, ...)
 
 // Workspace assignment is independent of these layout and gesture regressions.
 void
-assign_windows_to_workspaces (gf_wm_t *m)
+wm_assign_windows_to_workspaces (gf_wm_t *m)
 {
     (void)m;
 }
 gf_monitor_id_t
-find_active_monitor (gf_wm_t *m)
+wm_find_active_monitor (gf_wm_t *m)
 {
     (void)m;
     return 0;
@@ -346,25 +346,25 @@ main (void)
     m.state.workspaces.active_workspace[0] = 65;
     m.state.workspaces.active_workspace[1] = 33;
 
-    gf_wm_sync_monitor_activity (&m, 1);
+    wm_sync_monitor_activity (&m, 1);
     assert (!fake_minimized[1] && !main_max->monitor_suspended);
     assert (!fake_bordered[1] && !fake_bordered[2] && fake_bordered[3]);
 
-    gf_wm_sync_monitor_activity (&m, 0);
+    wm_sync_monitor_activity (&m, 0);
     assert (!fake_minimized[1] && !main_max->monitor_suspended);
     assert (fake_bordered[3]);
 
     // A normal workspace on the same monitor also hides its maximized workspace.
     m.state.workspaces.active_workspace[0] = 1;
-    gf_wm_sync_monitor_activity (&m, 0);
+    wm_sync_monitor_activity (&m, 0);
     assert (fake_minimized[1] && main_max->monitor_suspended);
 
     m.state.workspaces.active_workspace[0] = 65;
-    gf_wm_sync_monitor_activity (&m, 0);
+    wm_sync_monitor_activity (&m, 0);
     assert (!fake_minimized[1] && !main_max->monitor_suspended);
     fake_minimized[1] = true;
     main_max->is_minimized = true;
-    gf_wm_sync_monitor_activity (&m, 0);
+    wm_sync_monitor_activity (&m, 0);
     assert (fake_minimized[1] && !main_max->monitor_suspended);
 
     gf_window_list_cleanup (&m.state.windows);

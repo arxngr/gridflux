@@ -13,7 +13,7 @@ extern bool gf_resize_poll (gf_platform_t *platform, gf_resize_event_t *event);
 
 // Bind the window enumeration, info, geometry and state operations.
 static bool
-gf_window_is_interacting (gf_display_t display)
+window_is_interacting (gf_display_t display)
 {
     (void)display;
     GUITHREADINFO info = { .cbSize = sizeof (info) };
@@ -21,9 +21,9 @@ gf_window_is_interacting (gf_display_t display)
 }
 
 static void
-_platform_bind_window_ops (gf_platform_t *p)
+platform_bind_window_ops (gf_platform_t *p)
 {
-    p->window_is_interacting = gf_window_is_interacting;
+    p->window_is_interacting = window_is_interacting;
     // --- Window Enumeration & Info ---
     p->window_enumerate = gf_platform_get_windows;
     p->window_get_focused = gf_window_get_focused;
@@ -47,7 +47,7 @@ _platform_bind_window_ops (gf_platform_t *p)
 
 // Bind lifecycle, screen, border, dock, monitor, keymap and resize operations.
 static void
-_platform_bind_system_ops (gf_platform_t *p)
+platform_bind_system_ops (gf_platform_t *p)
 {
     // --- Lifecycle & Core ---
     p->init = gf_platform_init;
@@ -103,8 +103,8 @@ gf_platform_create (void)
     memset (platform, 0, sizeof (gf_platform_t));
     memset (data, 0, sizeof (gf_windows_platform_data_t));
 
-    _platform_bind_window_ops (platform);
-    _platform_bind_system_ops (platform);
+    platform_bind_window_ops (platform);
+    platform_bind_system_ops (platform);
 
     platform->platform_data = data;
 
@@ -121,7 +121,7 @@ gf_platform_create (void)
 // setups. The app manifest declares the same awareness; this covers hosts where
 // the embedded manifest is not honoured. Falls back to system DPI on older OSes.
 static void
-_ensure_dpi_awareness (void)
+ensure_dpi_awareness (void)
 {
     HMODULE user32 = GetModuleHandleW (L"user32.dll");
     BOOL (WINAPI * set_ctx) (DPI_AWARENESS_CONTEXT) = NULL;
@@ -142,7 +142,7 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
 
     *display = NULL;
 
-    _ensure_dpi_awareness ();
+    ensure_dpi_awareness ();
 
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;

@@ -22,7 +22,7 @@ main (void)
     assert (g_dbus_node_info_lookup_interface (info, "com.canonical.dbusmenu"));
     g_dbus_node_info_unref (info);
 
-    GVariant *layout = g_variant_ref_sink (gf_gui_menu_layout (0, -1));
+    GVariant *layout = g_variant_ref_sink (menu_layout (0, -1));
     assert (g_variant_is_of_type (layout, G_VARIANT_TYPE ("(ia{sv}av)")));
     GVariant *children = g_variant_get_child_value (layout, 2);
     assert (g_variant_n_children (children) == 4);
@@ -43,11 +43,11 @@ main (void)
     g_variant_unref (layout);
 
     GVariant *tooltip = g_variant_ref_sink (
-        gf_gui_tray_property (NULL, NULL, NULL, NULL, "ToolTip", NULL, NULL));
+        tray_property (NULL, NULL, NULL, NULL, "ToolTip", NULL, NULL));
     assert (g_variant_is_of_type (tooltip, G_VARIANT_TYPE ("(sa(iiay)ss)")));
     g_variant_unref (tooltip);
-    GVariant *path = g_variant_ref_sink (
-        gf_gui_tray_property (NULL, NULL, NULL, NULL, "Menu", NULL, NULL));
+    GVariant *path
+        = g_variant_ref_sink (tray_property (NULL, NULL, NULL, NULL, "Menu", NULL, NULL));
     assert (g_variant_is_object_path (g_variant_get_string (path, NULL)));
     g_variant_unref (path);
     g_print ("Tray protocol regressions passed\n");

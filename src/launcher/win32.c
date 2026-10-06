@@ -61,7 +61,7 @@ get_self_dir (wchar_t *buf, DWORD buf_len)
 }
 
 static void
-gf_launcher_launch_tray (const wchar_t *dir)
+launcher_launch_tray (const wchar_t *dir)
 {
     if (is_process_running (L"gridflux-gui.exe"))
         return;
@@ -421,7 +421,7 @@ WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd
     get_self_dir (dir, MAX_PATH);
     _snwprintf (exe_path, MAX_PATH, L"%s" EXE_NAME, dir);
 
-    gf_launcher_launch_tray (dir);
+    launcher_launch_tray (dir);
 
     // If gridflux.exe is already running, nothing to do
     if (is_process_running (EXE_NAME))
