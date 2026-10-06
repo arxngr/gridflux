@@ -1,7 +1,7 @@
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "internal.h"
-#include "maximized_bounds.h"
+#include "window_state.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <time.h>
@@ -431,7 +431,7 @@ gf_window_set_maximized (gf_display_t display, gf_handle_t window, bool maximize
         return GF_ERROR_PLATFORM_ERROR;
     // A monitor transfer can change DPI and the native frame. Capture fresh
     // insets after the native restore/maximize sequence on the destination.
-    gf_maximized_forget_window (window);
+    gf_window_state_reset (window);
     if (IsZoomed (window))
         ShowWindow (window, SW_SHOWNOACTIVATE);
 
@@ -470,8 +470,8 @@ gf_err_t
 gf_window_fill_maximized (gf_display_t display, gf_handle_t window, bool fill_monitor)
 {
     (void)display;
-    return gf_maximized_apply_bounds (window, fill_monitor) ? GF_SUCCESS
-                                                            : GF_ERROR_PLATFORM_ERROR;
+    return gf_window_state_apply (window, fill_monitor) ? GF_SUCCESS
+                                                        : GF_ERROR_PLATFORM_ERROR;
 }
 
 // Resolve the owning process id for a window. UWP host windows

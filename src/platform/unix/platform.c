@@ -29,7 +29,7 @@ platform_io_error_handler (Display *dpy)
 
 // Bind the window enumeration, info, geometry and state operations.
 static bool
-window_is_interacting (gf_display_t display)
+gf_window_is_interacting (gf_display_t display)
 {
     Window root, child;
     int root_x, root_y, win_x, win_y;
@@ -42,7 +42,7 @@ window_is_interacting (gf_display_t display)
 static void
 _platform_bind_window_ops (gf_platform_t *p)
 {
-    p->window_is_interacting = window_is_interacting;
+    p->window_is_interacting = gf_window_is_interacting;
     // --- Window Enumeration & Info ---
     p->window_enumerate = gf_platform_get_windows;
     p->window_get_focused = gf_window_get_focused;

@@ -278,7 +278,8 @@ gf_wm_layout_apply (gf_wm_t *m)
 }
 
 static bool
-workspace_can_receive_monitor (gf_wm_t *m, gf_ws_info_t *ws, gf_monitor_id_t monitor_id)
+wm_workspace_can_receive_monitor (gf_wm_t *m, gf_ws_info_t *ws,
+                                  gf_monitor_id_t monitor_id)
 {
     return ws && ws->monitor_id == monitor_id && !ws->is_locked
            && !ws->has_maximized_state && !ws->is_excluded_ws && !ws->has_rule
@@ -288,7 +289,7 @@ workspace_can_receive_monitor (gf_wm_t *m, gf_ws_info_t *ws, gf_monitor_id_t mon
 }
 
 static gf_ws_id_t
-find_overflow_target (gf_wm_t *m, gf_ws_id_t source_id, gf_monitor_id_t monitor_id)
+wm_find_overflow_target (gf_wm_t *m, gf_ws_id_t source_id, gf_monitor_id_t monitor_id)
 {
     gf_ws_list_t *workspaces = wm_workspaces (m);
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
@@ -297,13 +298,13 @@ find_overflow_target (gf_wm_t *m, gf_ws_id_t source_id, gf_monitor_id_t monitor_
         = monitor_id < GF_MAX_MONITORS ? workspaces->active_workspace[monitor_id] : -1;
     gf_ws_info_t *active_ws = gf_workspace_list_find_by_id (workspaces, active_id);
     if (active_id != source_id
-        && workspace_can_receive_monitor (m, active_ws, monitor_id))
+        && wm_workspace_can_receive_monitor (m, active_ws, monitor_id))
         return active_id;
 
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_ws_info_t *ws = &workspaces->items[i];
-        if (ws->id != source_id && workspace_can_receive_monitor (m, ws, monitor_id))
+        if (ws->id != source_id && wm_workspace_can_receive_monitor (m, ws, monitor_id))
             return ws->id;
     }
 
@@ -311,8 +312,8 @@ find_overflow_target (gf_wm_t *m, gf_ws_id_t source_id, gf_monitor_id_t monitor_
 }
 
 static bool
-relocate_overflow_window (gf_wm_t *m, gf_ws_id_t source_id, gf_ws_id_t target_id,
-                          gf_monitor_id_t monitor_id)
+wm_relocate_overflow_window (gf_wm_t *m, gf_ws_id_t source_id, gf_ws_id_t target_id,
+                             gf_monitor_id_t monitor_id)
 {
     gf_win_list_t *windows = wm_windows (m);
     gf_ws_list_t *workspaces = wm_workspaces (m);
@@ -348,7 +349,7 @@ relocate_overflow_window (gf_wm_t *m, gf_ws_id_t source_id, gf_ws_id_t target_id
 }
 
 static gf_err_t
-rebalance_workspace (gf_wm_t *m, gf_ws_id_t source_id, gf_monitor_id_t monitor_id)
+wm_rebalance_workspace (gf_wm_t *m, gf_ws_id_t source_id, gf_monitor_id_t monitor_id)
 {
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
 
@@ -356,14 +357,14 @@ rebalance_workspace (gf_wm_t *m, gf_ws_id_t source_id, gf_monitor_id_t monitor_i
         gf_window_list_count_by_workspace_monitor (wm_windows (m), source_id, monitor_id)
         > max_per_ws)
     {
-        gf_ws_id_t target_id = find_overflow_target (m, source_id, monitor_id);
+        gf_ws_id_t target_id = wm_find_overflow_target (m, source_id, monitor_id);
         if (target_id < 0 || target_id == source_id)
         {
             GF_LOG_ERROR ("Failed to find free workspace for overflow");
             return GF_ERROR_INVALID_PARAMETER;
         }
 
-        if (!relocate_overflow_window (m, source_id, target_id, monitor_id))
+        if (!wm_relocate_overflow_window (m, source_id, target_id, monitor_id))
             break;
     }
 
@@ -396,7 +397,7 @@ gf_wm_layout_rebalance (gf_wm_t *m)
             if (gf_window_list_count_by_workspace_monitor (wm_windows (m), source_id,
                                                            monitor)
                 > max_per_ws)
-                rebalance_workspace (m, source_id, monitor);
+                wm_rebalance_workspace (m, source_id, monitor);
         }
     }
 

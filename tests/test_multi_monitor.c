@@ -80,7 +80,7 @@ find_active_monitor (gf_wm_t *m)
 // This target exercises layout and resize behavior without linking the
 // workspace manager. The production transfer path owns workspace reassignment.
 void
-move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t monitor_id)
+wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t monitor_id)
 {
     gf_ws_id_t old_workspace = win->workspace_id;
     gf_ws_info_t *old_ws

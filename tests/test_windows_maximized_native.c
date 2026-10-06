@@ -1,4 +1,4 @@
-#include "platform/windows/maximized_bounds.h"
+#include "platform/windows/window_state.h"
 #include <assert.h>
 #include <stdio.h>
 
@@ -125,7 +125,7 @@ main (int argc, char **argv)
     MONITORINFO monitor = { .cbSize = sizeof (monitor) };
     assert (
         GetMonitorInfo (MonitorFromWindow (window, MONITOR_DEFAULTTONEAREST), &monitor));
-    assert (gf_maximized_apply_bounds (window, TRUE));
+    assert (gf_window_state_apply (window, TRUE));
     assert (IsZoomed (window) && !IsWindowVisible (window));
     assert (GetForegroundWindow () == foreground);
     WINDOWPLACEMENT expanded = { .length = sizeof (expanded) };
@@ -140,14 +140,14 @@ main (int argc, char **argv)
     if (argc > 1)
         restore_with_launcher (argv[1], desktop_name);
     else
-        assert (gf_maximized_apply_bounds (window, FALSE));
+        assert (gf_window_state_apply (window, FALSE));
     assert (GetWindowRect (window, &rect));
     assert (rect.left - filled.left == monitor.rcWork.left - monitor.rcMonitor.left);
     assert (rect.top - filled.top == monitor.rcWork.top - monitor.rcMonitor.top);
     assert (filled.right - rect.right == monitor.rcMonitor.right - monitor.rcWork.right);
     assert (filled.bottom - rect.bottom
             == monitor.rcMonitor.bottom - monitor.rcWork.bottom);
-    assert (!GetPropA (window, GF_MAXIMIZED_FILL_PROP));
+    assert (!GetPropA (window, GF_WINDOW_STATE_FILL_PROP));
     assert (IsZoomed (window) && !IsWindowVisible (window));
     WINDOWPLACEMENT restored = { .length = sizeof (restored) };
     assert (GetWindowPlacement (window, &restored));
@@ -158,22 +158,22 @@ main (int argc, char **argv)
     // Force a real size message, which installs the work-area clipping region.
     SendMessage (window, WM_SIZE, SIZE_MAXIMIZED, 0);
     expect_visible_region (window, &monitor.rcWork);
-    assert (gf_maximized_apply_bounds (window, TRUE));
+    assert (gf_window_state_apply (window, TRUE));
     expect_visible_region (window, &monitor.rcMonitor);
     for (int i = 0; i < 30; i++)
-        assert (gf_maximized_apply_bounds (window, TRUE));
+        assert (gf_window_state_apply (window, TRUE));
     expect_visible_region (window, &monitor.rcMonitor);
     if (argc > 1)
         restore_with_launcher (argv[1], desktop_name);
     else
-        assert (gf_maximized_apply_bounds (window, FALSE));
+        assert (gf_window_state_apply (window, FALSE));
     expect_visible_region (window, &monitor.rcWork);
     assert (IsZoomed (window) && GetForegroundWindow () == foreground);
 
     // A window procedure that clamps maximized resizes must still fill, retain
     // its saved normal position, and remain hidden throughout recovery.
     clamp_maximized = TRUE;
-    assert (gf_maximized_apply_bounds (window, TRUE));
+    assert (gf_window_state_apply (window, TRUE));
     expect_visible_region (window, &monitor.rcMonitor);
     assert (IsZoomed (window) && !IsWindowVisible (window));
     assert (GetWindowPlacement (window, &expanded));
@@ -181,7 +181,7 @@ main (int argc, char **argv)
     if (argc > 1)
         restore_with_launcher (argv[1], desktop_name);
     else
-        assert (gf_maximized_apply_bounds (window, FALSE));
+        assert (gf_window_state_apply (window, FALSE));
     expect_visible_region (window, &monitor.rcWork);
     assert (GetWindowPlacement (window, &restored));
     assert (EqualRect (&original.rcNormalPosition, &restored.rcNormalPosition));

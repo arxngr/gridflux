@@ -63,7 +63,7 @@ wm_tick (gf_wm_t *m)
      */
     gf_wm_keymap_event (m);
     // Poll edge reveal even while the foreground window belongs to the shell.
-    sync_dock_visibility (m);
+    wm_sync_dock_visibility (m);
     gf_wm_layout_rebalance (m);
     gf_wm_layout_apply (m);
 

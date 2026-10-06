@@ -3,7 +3,7 @@
 #include "types.h"
 
 static bool
-window_is_minimized (gf_wm_t *m, gf_win_info_t *win)
+wm_window_is_minimized (gf_wm_t *m, gf_win_info_t *win)
 {
     gf_platform_t *platform = wm_platform (m);
     if (platform->window_is_minimized)
@@ -16,7 +16,7 @@ gf_wm_request_visibility (gf_wm_t *m, gf_win_info_t *win, bool minimized)
 {
     gf_platform_t *platform = wm_platform (m);
     uint8_t request = minimized ? 1 : 2;
-    bool actual = window_is_minimized (m, win);
+    bool actual = wm_window_is_minimized (m, win);
     bool reversing = win->visibility_request && win->visibility_request != request;
     if (actual == minimized && !reversing && !win->visibility_settle)
     {
@@ -56,7 +56,7 @@ gf_wm_request_visibility (gf_wm_t *m, gf_win_info_t *win, bool minimized)
         gf_window_list_mark_all_needs_update (wm_windows (m), &win->workspace_id);
     win->is_minimized = minimized;
     win->monitor_suspended = true;
-    if (window_is_minimized (m, win) == minimized && !win->visibility_settle)
+    if (wm_window_is_minimized (m, win) == minimized && !win->visibility_settle)
     {
         win->visibility_request = win->visibility_wait = win->visibility_attempts = 0;
         win->monitor_suspended = minimized;
@@ -159,7 +159,7 @@ gf_wm_sync_monitor_activity (gf_wm_t *m, gf_monitor_id_t active_monitor)
             gf_wm_request_visibility (m, win, false);
         bool show_border = m->config && m->config->enable_borders && in_live_workspace
                            && !maximized && !win->is_minimized
-                           && !window_is_minimized (m, win);
+                           && !wm_window_is_minimized (m, win);
         if (show_border && platform->border_add)
             platform->border_add (platform, win->id, m->config->border_color,
                                   GF_BORDER_WIDTH);

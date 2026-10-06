@@ -956,13 +956,14 @@ _commit_resize (gf_wm_t *m, gf_resize_event_t *ev)
 }
 
 static void
-_commit_monitor_transfer (gf_wm_t *m, gf_win_info_t *source, gf_monitor_id_t new_monitor)
+wm_commit_monitor_transfer (gf_wm_t *m, gf_win_info_t *source,
+                            gf_monitor_id_t new_monitor)
 {
-    move_window_to_monitor (m, source, new_monitor);
+    wm_move_window_to_monitor (m, source, new_monitor);
 }
 
 static void
-_commit_move (gf_wm_t *m, gf_resize_event_t *ev)
+wm_commit_move (gf_wm_t *m, gf_resize_event_t *ev)
 {
     gf_win_list_t *windows = wm_windows (m);
     gf_platform_t *platform = wm_platform (m);
@@ -985,7 +986,7 @@ _commit_move (gf_wm_t *m, gf_resize_event_t *ev)
         new_monitor = platform->monitor_from_window (platform, ev->window);
 
     if (new_monitor != old_monitor)
-        _commit_monitor_transfer (m, source, new_monitor);
+        wm_commit_monitor_transfer (m, source, new_monitor);
 
     if (new_monitor != old_monitor)
         GF_LOG_INFO ("[RESIZE] Window %p moved from monitor %u to %u", (void *)ev->window,
@@ -1044,7 +1045,7 @@ gf_wm_resize_event (gf_wm_t *m)
         }
         else if (ev.direction == GF_RESIZE_NONE)
         {
-            _commit_move (m, &ev);
+            wm_commit_move (m, &ev);
         }
         m->state.resize_active = false;
         break;

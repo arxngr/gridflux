@@ -180,7 +180,7 @@ fake_enum_windows (WNDENUMPROC callback, LPARAM context)
 #define EnumWindows fake_enum_windows
 #define GetWindowRgnBox fake_region_box
 #define SetWindowRgn fake_set_region
-#include "../src/platform/windows/maximized_bounds.h"
+#include "../src/platform/windows/window_state.c"
 
 static void
 expect_rect (unsigned i, LONG left, LONG top, LONG right, LONG bottom)
@@ -198,55 +198,55 @@ main (void)
                                  .rcMonitor = { -1280, -160, 0, 864 },
                                  .rcWork = { -1280, -160, 0, 824 } };
     HWND main = (HWND)(uintptr_t)1, external = (HWND)(uintptr_t)2;
-    assert (gf_maximized_apply_bounds (main, TRUE));
+    assert (gf_window_state_apply (main, TRUE));
     expect_rect (1, -8, -8, 1928, 1088);
     expect_rect (2, -1292, -172, 12, 836);
     for (unsigned i = 0; i < 30; i++)
     {
         // DWM deliberately retains its pre-resize frame: polling must remain stable.
-        assert (gf_maximized_apply_bounds (main, TRUE));
+        assert (gf_window_state_apply (main, TRUE));
     }
     assert (writes[1] == 1 && maximized[1] && !minimized[1]);
-    assert (gf_maximized_apply_bounds (external, TRUE));
+    assert (gf_window_state_apply (external, TRUE));
     expect_rect (2, -1292, -172, 12, 876);
     dpi[2] = 192;
-    assert (gf_maximized_apply_bounds (external, TRUE));
+    assert (gf_window_state_apply (external, TRUE));
     expect_rect (2, -1296, -176, 16, 880);
-    assert (gf_maximized_apply_bounds ((HWND)(uintptr_t)3, TRUE));
+    assert (gf_window_state_apply ((HWND)(uintptr_t)3, TRUE));
     assert (writes[3] == 0 && !maximized[3]);
 
-    assert (gf_maximized_apply_bounds (main, FALSE));
+    assert (gf_window_state_apply (main, FALSE));
     expect_rect (1, -8, -8, 1928, 1048);
     expect_rect (2, -1296, -176, 16, 880);
-    assert (!fake_get_prop (main, GF_MAXIMIZED_FILL_PROP));
-    gf_maximized_restore_all ();
+    assert (!fake_get_prop (main, GF_WINDOW_STATE_FILL_PROP));
+    gf_window_state_restore ();
     expect_rect (2, -1296, -176, 16, 840);
-    assert (!fake_get_prop (external, GF_MAXIMIZED_FILL_PROP));
+    assert (!fake_get_prop (external, GF_WINDOW_STATE_FILL_PROP));
 
     // A failed/clamped write must be observable and remain recoverable on Stop.
     reject_write = true;
-    assert (!gf_maximized_apply_bounds (main, TRUE));
+    assert (!gf_window_state_apply (main, TRUE));
     reject_write = false;
     ignore_write = true;
-    assert (!gf_maximized_apply_bounds (main, TRUE));
+    assert (!gf_window_state_apply (main, TRUE));
     ignore_write = false;
-    gf_maximized_restore_all ();
+    gf_window_state_restore ();
     expect_rect (1, -8, -8, 1928, 1048);
-    assert (!fake_get_prop (main, GF_MAXIMIZED_FILL_PROP));
+    assert (!fake_get_prop (main, GF_WINDOW_STATE_FILL_PROP));
 
     // Cleanup never revives iconified apps or resizes a user's restored normal app.
-    assert (gf_maximized_apply_bounds (main, TRUE));
+    assert (gf_window_state_apply (main, TRUE));
     minimized[1] = true;
     uint32_t previous_writes = writes[1];
-    gf_maximized_restore_all ();
+    gf_window_state_restore ();
     assert (writes[1] == previous_writes && minimized[1]);
-    assert (!fake_get_prop (main, GF_MAXIMIZED_FILL_PROP));
+    assert (!fake_get_prop (main, GF_WINDOW_STATE_FILL_PROP));
     minimized[1] = false;
-    assert (gf_maximized_apply_bounds (main, TRUE));
+    assert (gf_window_state_apply (main, TRUE));
     maximized[1] = false;
     actual[1] = (RECT){ 100, 100, 600, 500 };
     previous_writes = writes[1];
-    gf_maximized_restore_all ();
+    gf_window_state_restore ();
     expect_rect (1, 100, 100, 600, 500);
     assert (writes[1] == previous_writes);
 
@@ -256,32 +256,32 @@ main (void)
     actual[1] = (RECT){ -8, -8, 1928, 1048 };
     frame[1] = (RECT){ 0, 0, 1920, 1040 };
     browser_clip = true;
-    assert (gf_maximized_apply_bounds (main, TRUE));
+    assert (gf_window_state_apply (main, TRUE));
     RECT full_clip = { 8, 8, 1928, 1088 };
     RECT work_clip = { 8, 8, 1928, 1048 };
     assert (EqualRect (&clips[1], &full_clip));
     uint32_t geometry_writes = writes[1], region_writes = clip_writes[1];
     for (unsigned i = 0; i < 30; i++)
-        assert (gf_maximized_apply_bounds (main, TRUE));
+        assert (gf_window_state_apply (main, TRUE));
     assert (writes[1] == geometry_writes && clip_writes[1] == region_writes);
     clips[1] = work_clip;
-    assert (gf_maximized_apply_bounds (main, TRUE));
+    assert (gf_window_state_apply (main, TRUE));
     assert (writes[1] == geometry_writes && EqualRect (&clips[1], &full_clip));
-    gf_maximized_restore_all ();
+    gf_window_state_restore ();
     assert (EqualRect (&clips[1], &work_clip));
-    assert (!fake_get_prop (main, GF_MAXIMIZED_REGION_PROP));
+    assert (!fake_get_prop (main, GF_WINDOW_STATE_REGION_PROP));
 
     // Custom shapes and unrelated rectangular masks belong to the app.
     browser_clip = false;
     clip_kind[1] = COMPLEXREGION;
     region_writes = clip_writes[1];
-    assert (gf_maximized_apply_bounds (main, TRUE));
+    assert (gf_window_state_apply (main, TRUE));
     assert (clip_writes[1] == region_writes);
     clip_kind[1] = SIMPLEREGION;
     clips[1] = (RECT){ 1, 2, 300, 400 };
-    assert (gf_maximized_apply_bounds (main, TRUE));
+    assert (gf_window_state_apply (main, TRUE));
     assert (clip_writes[1] == region_writes);
-    gf_maximized_restore_all ();
+    gf_window_state_restore ();
     puts ("Maximized gap fill, DPI, monitor isolation, and Stop recovery passed");
     return 0;
 }

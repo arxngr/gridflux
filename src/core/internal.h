@@ -72,26 +72,26 @@ gf_ws_id_t assign_window_workspace (gf_wm_t *m, gf_win_info_t *win,
 void assign_windows_to_workspaces (gf_wm_t *m);
 void cleanup_empty_maximized_ws (gf_wm_t *m, gf_ws_id_t ws_id);
 void cleanup_unused_workspace (gf_wm_t *m, gf_ws_list_t *list, uint32_t index);
-gf_ws_id_t lookup_or_create_maximized_ws (gf_wm_t *m, gf_monitor_id_t monitor_id);
+gf_ws_id_t wm_lookup_or_create_maximized_ws (gf_wm_t *m, gf_monitor_id_t monitor_id);
 gf_ws_id_t lookup_or_create_ws (gf_wm_t *m);
-gf_ws_id_t lookup_or_create_ws_for_monitor (gf_wm_t *m, gf_monitor_id_t monitor_id);
-uint32_t workspace_monitor_window_count (gf_wm_t *m, gf_ws_id_t workspace_id,
-                                         gf_monitor_id_t monitor_id);
+gf_ws_id_t wm_lookup_or_create_ws_for_monitor (gf_wm_t *m, gf_monitor_id_t monitor_id);
+uint32_t wm_workspace_monitor_window_count (gf_wm_t *m, gf_ws_id_t workspace_id,
+                                            gf_monitor_id_t monitor_id);
 gf_ws_info_t *find_workspace (gf_ws_list_t *workspaces, gf_ws_id_t id);
-void switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace,
-                       gf_monitor_id_t monitor_id);
-void sync_dock_visibility (gf_wm_t *m);
+void wm_switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace,
+                          gf_monitor_id_t monitor_id);
+void wm_sync_dock_visibility (gf_wm_t *m);
 void recount_workspace_windows (gf_wm_t *m, gf_ws_list_t *workspaces,
                                 gf_win_list_t *windows, uint32_t max_per_ws);
 void sync_workspaces (gf_wm_t *m);
 bool ws_has_capacity (gf_ws_info_t *ws, uint32_t max_per_ws);
 bool ws_is_valid (gf_ws_list_t *workspaces, gf_ws_id_t id);
-gf_ws_id_t lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id);
+gf_ws_id_t wm_lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id);
 void reconcile_excluded_windows (gf_wm_t *m);
 
 /* --- Window Management --- */
-void detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace,
-                              gf_monitor_id_t monitor_id);
+void wm_detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace,
+                                 gf_monitor_id_t monitor_id);
 int find_maximized_ws_index (gf_win_info_t *windows, uint32_t count, gf_handle_t handle);
 uint32_t find_maximized_windows (gf_wm_t *m, gf_win_info_t **out_windows);
 gf_monitor_id_t find_active_monitor (gf_wm_t *m);
@@ -105,7 +105,8 @@ void register_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_
 void minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id,
                                  gf_monitor_id_t active_monitor);
 void move_window_to_workspace (gf_wm_t *m, gf_win_info_t *win, gf_ws_id_t new_ws_id);
-void move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_monitor);
+void wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win,
+                                gf_monitor_id_t new_monitor);
 void restore_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
                                 gf_monitor_id_t active_monitor);
 bool win_has_assigned_workspace (gf_win_info_t *win, gf_ws_list_t *workspaces);

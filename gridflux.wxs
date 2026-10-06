@@ -3,10 +3,6 @@
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
-  <?ifndef PackageRoot ?>
-    <?define PackageRoot="build" ?>
-  <?endif?>
-
   <Package Name="GridFlux Window Manager" Manufacturer="Ardi Nugraha"
            Version="$(var.Version)" Language="1033"
            UpgradeCode="f47ac10b-58cc-4372-a567-0e02b2c3d479"
@@ -108,19 +104,19 @@
   <Fragment>
     <DirectoryRef Id="INSTALLDIR">
       <Component Id="GridFluxExe" Guid="{12222222-2222-2222-2222-222222222222}" Bitness="always64" KeyPath="yes">
-        <File Source="$(var.PackageRoot)\gridflux.exe" />
+        <File Source="build\gridflux.exe" />
       </Component>
 
       <Component Id="GridFluxGui" Guid="{22222222-2222-2222-2222-222222222222}" Bitness="always64">
-        <File Source="$(var.PackageRoot)\gridflux-gui.exe" />
+        <File Source="build\gridflux-gui.exe" />
       </Component>
 
       <Component Id="GridFluxCli" Guid="{33333333-3333-3333-3333-333333333333}" Bitness="always64">
-        <File Source="$(var.PackageRoot)\gridflux-cli.exe" />
+        <File Source="build\gridflux-cli.exe" />
       </Component>
 
       <Component Id="LauncherExe" Guid="{44444444-4444-4444-4444-444444444444}" Bitness="always64">
-        <File Source="$(var.PackageRoot)\gridflux-launcher.exe" />
+        <File Source="build\gridflux-launcher.exe" />
       </Component>
 
       <Component Id="Registry" Guid="{88888888-8888-8888-8888-888888888888}" Bitness="always64">
@@ -147,7 +143,7 @@
 
     <DirectoryRef Id="SchemasDir">
       <Component Id="GSchemaCompiled" Guid="{99999999-9999-9999-9999-999999999999}" Bitness="always64">
-        <File Source="$(var.PackageRoot)\share\glib-2.0\schemas\gschemas.compiled" KeyPath="yes" />
+        <File Source="build\share\glib-2.0\schemas\gschemas.compiled" KeyPath="yes" />
       </Component>
     </DirectoryRef>
 

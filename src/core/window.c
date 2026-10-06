@@ -151,8 +151,8 @@ reconcile_excluded_windows (gf_wm_t *m)
         if (excluded && !parked)
         {
             platform->border_remove (platform, win->id);
-            move_window_to_workspace (m, win,
-                                      lookup_or_create_excluded_ws (m, win->monitor_id));
+            move_window_to_workspace (
+                m, win, wm_lookup_or_create_excluded_ws (m, win->monitor_id));
             changed = true;
         }
         else if (excluded && parked)
@@ -169,9 +169,9 @@ reconcile_excluded_windows (gf_wm_t *m)
             gf_ws_info_t *tws = gf_workspace_list_find_by_id (workspaces, target);
             if (!tws || tws->monitor_id != mon || tws->is_locked
                 || tws->has_maximized_state || tws->is_excluded_ws
-                || workspace_monitor_window_count (m, target, mon)
+                || wm_workspace_monitor_window_count (m, target, mon)
                        >= m->config->max_windows_per_workspace)
-                target = lookup_or_create_ws_for_monitor (m, mon);
+                target = wm_lookup_or_create_ws_for_monitor (m, mon);
 
             move_window_to_workspace (m, win, target);
             if (platform->window_unminimize)
@@ -272,7 +272,7 @@ minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id
             gf_monitor_id_t actual_monitor
                 = platform->monitor_from_window (platform, win->id);
             if (actual_monitor < GF_MAX_MONITORS && actual_monitor != win->monitor_id)
-                move_window_to_monitor (m, win, actual_monitor);
+                wm_move_window_to_monitor (m, win, actual_monitor);
         }
 
         if (win->workspace_id != ws_id || win->monitor_id != active_monitor)
@@ -411,8 +411,8 @@ restore_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_wind
 }
 
 void
-detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace,
-                         gf_monitor_id_t monitor_id)
+wm_detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace,
+                            gf_monitor_id_t monitor_id)
 {
     if (monitor_id >= GF_MAX_MONITORS)
         return;
@@ -594,7 +594,7 @@ gf_wm_window_move (gf_wm_t *m, gf_handle_t window_id, gf_ws_id_t target_workspac
         return GF_ERROR_WORKSPACE_LOCKED;
     if (target_ws->has_maximized_state && !win->is_maximized)
         return GF_ERROR_WORKSPACE_MAXIMIZED;
-    if (workspace_monitor_window_count (m, target_workspace, win->monitor_id)
+    if (wm_workspace_monitor_window_count (m, target_workspace, win->monitor_id)
         >= m->config->max_windows_per_workspace)
         return GF_ERROR_WORKSPACE_FULL;
 

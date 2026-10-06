@@ -182,17 +182,15 @@ The first configure downloads and builds GTK4 and json-c using the repository's
 vcpkg manifest. Use a separate build directory when switching from MinGW.
 For Professional or Enterprise, replace `Community` in the path.
 
-To package an existing Visual Studio Release build as an MSI, install WiX 4
-locally and run the PowerShell packager:
+Build the MSI with the existing batch builder from a Windows terminal with
+MSYS2 MinGW, CMake, and WiX on PATH:
 
 ```powershell
-dotnet tool install wix --tool-path build/tools/wix4 --version 4.0.6
-.\scripts\build_msi.ps1 -Version 1.4.1
+.\scripts\binary_builder.bat
 ```
 
-The installer is written to `build/installer/`. It includes GTK, compiled GLib
-schemas, and the Visual C++ runtime, and checks that all native DLL imports are
-resolved. The staging process preserves the CMake build directory.
+The builder creates `GridFlux-<version>.msi` in the project root. It rebuilds
+the MinGW binaries and bundles their GTK/GLib runtime dependencies.
 
 ---
 

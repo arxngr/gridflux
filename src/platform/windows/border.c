@@ -268,7 +268,7 @@ _border_exists (gf_windows_platform_data_t *data, gf_handle_t window)
 
 // Allocate and initialise a border, stashing its props on the overlay window.
 static gf_border_t *
-_border_alloc (HWND overlay, gf_handle_t window, gf_color_t color, int thickness)
+gf_border_alloc (HWND overlay, gf_handle_t window, gf_color_t color, int thickness)
 {
     gf_border_t *b = malloc (sizeof (gf_border_t));
     if (!b)
@@ -329,7 +329,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
         return;
     }
 
-    gf_border_t *b = _border_alloc (overlay, window, color, thickness);
+    gf_border_t *b = gf_border_alloc (overlay, window, color, thickness);
     if (!b)
     {
         DestroyWindow (overlay);

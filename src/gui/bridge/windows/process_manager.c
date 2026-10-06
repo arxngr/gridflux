@@ -9,7 +9,7 @@
 #include <shellapi.h>
 #include <tlhelp32.h>
 // clang-format on
-#include "../../../platform/windows/taskbar_recovery.h"
+#include "../../../platform/windows/taskbar.h"
 
 #define GF_SERVER_EXE_W L"gridflux.exe"
 #define GF_LAUNCHER_EXE_W L"gridflux-launcher.exe"

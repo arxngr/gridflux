@@ -1,40 +1,33 @@
-#ifndef GF_WINDOWS_MAXIMIZED_BOUNDS_H
-#define GF_WINDOWS_MAXIMIZED_BOUNDS_H
-
-#include <windows.h>
+#include "window_state.h"
 
 #include <dwmapi.h>
 
-#define GF_MAXIMIZED_FILL_PROP "GridFlux.ExpandedMaximized"
-#define GF_MAXIMIZED_DPI_PROP "GridFlux.MaximizedDpi"
-#define GF_MAXIMIZED_REGION_PROP "GridFlux.MaximizedRegion"
-
-static const char *const gf_maximized_inset_props[4]
+static const char *const gf_window_state_inset_props[4]
     = { "GridFlux.MaximizedLeft", "GridFlux.MaximizedTop", "GridFlux.MaximizedRight",
         "GridFlux.MaximizedBottom" };
 
-static inline void
-gf_maximized_forget_window (HWND window)
+void
+gf_window_state_reset (HWND window)
 {
-    RemovePropA (window, GF_MAXIMIZED_FILL_PROP);
-    RemovePropA (window, GF_MAXIMIZED_DPI_PROP);
-    RemovePropA (window, GF_MAXIMIZED_REGION_PROP);
+    RemovePropA (window, GF_WINDOW_STATE_FILL_PROP);
+    RemovePropA (window, GF_WINDOW_STATE_DPI_PROP);
+    RemovePropA (window, GF_WINDOW_STATE_REGION_PROP);
     for (int i = 0; i < 4; i++)
     {
-        RemovePropA (window, gf_maximized_inset_props[i]);
+        RemovePropA (window, gf_window_state_inset_props[i]);
     }
 }
 
-static inline BOOL
-gf_maximized_clip (HWND window, const MONITORINFO *monitor, const RECT *rect,
-                   const RECT *previous, BOOL fill_monitor)
+static BOOL
+gf_window_state_clip (HWND window, const MONITORINFO *monitor, const RECT *rect,
+                      const RECT *previous, BOOL fill_monitor)
 {
     // Custom frames can keep clipping to rcWork after their HWND
     // expands. Only replace that exact rectangular work-area mask; preserve
     // application-defined shapes and windows without a custom region.
     RECT current;
     int kind = GetWindowRgnBox (window, &current);
-    BOOL owned = GetPropA (window, GF_MAXIMIZED_REGION_PROP) != NULL;
+    BOOL owned = GetPropA (window, GF_WINDOW_STATE_REGION_PROP) != NULL;
     RECT work = monitor->rcWork, full = monitor->rcMonitor;
     RECT old_work = work, old_full = full;
     OffsetRect (&work, -rect->left, -rect->top);
@@ -48,7 +41,7 @@ gf_maximized_clip (HWND window, const MONITORINFO *monitor, const RECT *rect,
             && !(owned
                  && (EqualRect (&current, &full) || EqualRect (&current, &old_full)))))
     {
-        RemovePropA (window, GF_MAXIMIZED_REGION_PROP);
+        RemovePropA (window, GF_WINDOW_STATE_REGION_PROP);
         return TRUE;
     }
     if (!fill_monitor && !owned)
@@ -59,7 +52,8 @@ gf_maximized_clip (HWND window, const MONITORINFO *monitor, const RECT *rect,
     HRGN region = CreateRectRgnIndirect (target);
     if (!region)
         return FALSE;
-    if (fill_monitor && !SetPropA (window, GF_MAXIMIZED_REGION_PROP, (HANDLE)(INT_PTR)1))
+    if (fill_monitor
+        && !SetPropA (window, GF_WINDOW_STATE_REGION_PROP, (HANDLE)(INT_PTR)1))
     {
         DeleteObject (region);
         return FALSE;
@@ -74,21 +68,21 @@ gf_maximized_clip (HWND window, const MONITORINFO *monitor, const RECT *rect,
            && EqualRect (&current, target);
 }
 
-static inline BOOL
-gf_maximized_frame (HWND window, const RECT *rect, const MONITORINFO *monitor,
-                    int *insets)
+static BOOL
+gf_window_state_frame (HWND window, const RECT *rect, const MONITORINFO *monitor,
+                       int *insets)
 {
     UINT dpi = GetDpiForWindow (window);
     if (!dpi)
     {
         dpi = 96;
     }
-    UINT saved_dpi = (UINT)(UINT_PTR)GetPropA (window, GF_MAXIMIZED_DPI_PROP);
+    UINT saved_dpi = (UINT)(UINT_PTR)GetPropA (window, GF_WINDOW_STATE_DPI_PROP);
     if (saved_dpi)
     {
         for (int i = 0; i < 4; i++)
         {
-            INT_PTR value = (INT_PTR)GetPropA (window, gf_maximized_inset_props[i]);
+            INT_PTR value = (INT_PTR)GetPropA (window, gf_window_state_inset_props[i]);
             if (!value)
             {
                 return FALSE;
@@ -129,23 +123,23 @@ gf_maximized_frame (HWND window, const RECT *rect, const MONITORINFO *monitor,
         insets[i] = native_placement                         ? work_insets[i]
                     : observed[i] >= 0 && observed[i] <= 128 ? observed[i]
                                                              : fallback;
-        if (!SetPropA (window, gf_maximized_inset_props[i],
+        if (!SetPropA (window, gf_window_state_inset_props[i],
                        (HANDLE)(INT_PTR)(insets[i] + 1)))
         {
-            gf_maximized_forget_window (window);
+            gf_window_state_reset (window);
             return FALSE;
         }
     }
-    if (!SetPropA (window, GF_MAXIMIZED_DPI_PROP, (HANDLE)(UINT_PTR)dpi))
+    if (!SetPropA (window, GF_WINDOW_STATE_DPI_PROP, (HANDLE)(UINT_PTR)dpi))
     {
-        gf_maximized_forget_window (window);
+        gf_window_state_reset (window);
         return FALSE;
     }
     return TRUE;
 }
 
-static inline BOOL
-gf_maximized_resize (HWND window, const RECT *target, RECT *previous)
+static BOOL
+gf_window_state_resize (HWND window, const RECT *target, RECT *previous)
 {
     UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING;
     if (!SetWindowPos (window, NULL, target->left, target->top,
@@ -184,10 +178,10 @@ gf_maximized_resize (HWND window, const RECT *target, RECT *previous)
            && GetWindowRect (window, &actual) && EqualRect (&actual, target);
 }
 
-static inline BOOL
-gf_maximized_apply_bounds (HWND window, BOOL fill_monitor)
+BOOL
+gf_window_state_apply (HWND window, BOOL fill_monitor)
 {
-    BOOL owned = GetPropA (window, GF_MAXIMIZED_FILL_PROP) != NULL;
+    BOOL owned = GetPropA (window, GF_WINDOW_STATE_FILL_PROP) != NULL;
     if (!fill_monitor && !owned)
     {
         return TRUE;
@@ -196,7 +190,7 @@ gf_maximized_apply_bounds (HWND window, BOOL fill_monitor)
     {
         if (!fill_monitor)
         {
-            gf_maximized_forget_window (window);
+            gf_window_state_reset (window);
         }
         return TRUE;
     }
@@ -213,51 +207,49 @@ gf_maximized_apply_bounds (HWND window, BOOL fill_monitor)
         return TRUE;
     }
     int insets[4];
-    if (!gf_maximized_frame (window, &current, &monitor, insets))
+    if (!gf_window_state_frame (window, &current, &monitor, insets))
     {
         return FALSE;
     }
     RECT target = { bounds->left - insets[0], bounds->top - insets[1],
                     bounds->right + insets[2], bounds->bottom + insets[3] };
-    if (fill_monitor && !SetPropA (window, GF_MAXIMIZED_FILL_PROP, (HANDLE)(INT_PTR)1))
+    if (fill_monitor && !SetPropA (window, GF_WINDOW_STATE_FILL_PROP, (HANDLE)(INT_PTR)1))
     {
-        gf_maximized_forget_window (window);
+        gf_window_state_reset (window);
         return FALSE;
     }
     if (!EqualRect (&current, &target))
     {
-        if (!gf_maximized_resize (window, &target, &current))
+        if (!gf_window_state_resize (window, &target, &current))
         {
             return FALSE;
         }
     }
-    if (!gf_maximized_clip (window, &monitor, &target, &current, fill_monitor))
+    if (!gf_window_state_clip (window, &monitor, &target, &current, fill_monitor))
         return FALSE;
     RECT actual;
     if (!GetWindowRect (window, &actual) || !EqualRect (&actual, &target))
         return FALSE;
     if (!fill_monitor)
     {
-        gf_maximized_forget_window (window);
+        gf_window_state_reset (window);
     }
     return TRUE;
 }
 
 static BOOL CALLBACK
-gf_maximized_restore_callback (HWND window, LPARAM context)
+gf_window_state_restore_callback (HWND window, LPARAM context)
 {
     (void)context;
-    if (GetPropA (window, GF_MAXIMIZED_FILL_PROP))
+    if (GetPropA (window, GF_WINDOW_STATE_FILL_PROP))
     {
-        gf_maximized_apply_bounds (window, FALSE);
+        gf_window_state_apply (window, FALSE);
     }
     return TRUE;
 }
 
-static inline void
-gf_maximized_restore_all (void)
+void
+gf_window_state_restore (void)
 {
-    EnumWindows (gf_maximized_restore_callback, 0);
+    EnumWindows (gf_window_state_restore_callback, 0);
 }
-
-#endif

@@ -15,7 +15,7 @@
 #include <time.h>
 
 static bool
-workspace_is_rule_target (const gf_config_t *cfg, const gf_ws_info_t *ws)
+wm_workspace_is_rule_target (const gf_config_t *cfg, const gf_ws_info_t *ws)
 {
     if (!cfg || !ws)
         return false;
@@ -37,7 +37,7 @@ window_has_rule (const gf_config_t *cfg, const char *wm_class)
 
 /* Evict a non-rule window from a workspace to make room for a rule-bound window */
 static void
-evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_monitor_id_t monitor_id)
+wm_evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_monitor_id_t monitor_id)
 {
     gf_win_list_t *windows = wm_windows (m);
     gf_ws_list_t *workspaces = wm_workspaces (m);
@@ -59,7 +59,7 @@ evict_non_rule_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_monitor_id_t monitor_id)
             if (dst->monitor_id != monitor_id || dst->id == ws_id || dst->is_locked
                 || dst->has_maximized_state || dst->is_excluded_ws || dst->has_rule)
                 continue;
-            if (workspace_monitor_window_count (m, dst->id, monitor_id) < max_per_ws)
+            if (wm_workspace_monitor_window_count (m, dst->id, monitor_id) < max_per_ws)
             {
                 dst_id = dst->id;
                 break;
@@ -97,7 +97,7 @@ cleanup_unused_workspace (gf_wm_t *m, gf_ws_list_t *list, uint32_t index)
 
     gf_ws_info_t *workspace = &list->items[index];
     gf_ws_id_t ws_id = workspace->id;
-    if (workspace_is_rule_target (m->config, workspace))
+    if (wm_workspace_is_rule_target (m->config, workspace))
         return;
 
     memmove (&list->items[index], &list->items[index + 1],
@@ -180,7 +180,7 @@ win_has_assigned_workspace (gf_win_info_t *win, gf_ws_list_t *workspaces)
 }
 
 void
-sync_dock_visibility (gf_wm_t *m)
+wm_sync_dock_visibility (gf_wm_t *m)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -265,8 +265,8 @@ sync_dock_visibility (gf_wm_t *m)
 }
 
 void
-switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace,
-                  gf_monitor_id_t active_monitor)
+wm_switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace,
+                     gf_monitor_id_t active_monitor)
 {
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
@@ -301,7 +301,7 @@ switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace,
 
     restore_workspace_windows (m, current_workspace, active_window, active_monitor);
 
-    sync_dock_visibility (m);
+    wm_sync_dock_visibility (m);
 }
 
 /* Ensure every rule's target workspace exists and is flagged has_rule=true
@@ -431,11 +431,11 @@ preserve_existing_assignments (gf_wm_t *m)
                                       rule->workspace_id);
         }
         else if (old_ws && old_ws->has_maximized_state)
-            target = lookup_or_create_maximized_ws (m, win->monitor_id);
+            target = wm_lookup_or_create_maximized_ws (m, win->monitor_id);
         else if (old_ws && old_ws->is_excluded_ws)
-            target = lookup_or_create_excluded_ws (m, win->monitor_id);
+            target = wm_lookup_or_create_excluded_ws (m, win->monitor_id);
         else
-            target = lookup_or_create_ws_for_monitor (m, win->monitor_id);
+            target = wm_lookup_or_create_ws_for_monitor (m, win->monitor_id);
         if (target > 0)
             win->workspace_id = target;
         else
@@ -447,7 +447,7 @@ preserve_existing_assignments (gf_wm_t *m)
 }
 
 static void
-assign_unassigned_windows (gf_wm_t *m)
+wm_assign_unassigned_windows (gf_wm_t *m)
 {
     gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_win_list_t *windows = wm_windows (m);
@@ -469,7 +469,7 @@ assign_unassigned_windows (gf_wm_t *m)
             win->workspace_id = target_id;
             continue;
         }
-        win->workspace_id = lookup_or_create_ws_for_monitor (m, win->monitor_id);
+        win->workspace_id = wm_lookup_or_create_ws_for_monitor (m, win->monitor_id);
     }
 }
 
@@ -482,7 +482,7 @@ assign_windows_to_workspaces (gf_wm_t *m)
 
     create_rule_workspaces (m);
     preserve_existing_assignments (m);
-    assign_unassigned_windows (m);
+    wm_assign_unassigned_windows (m);
 
     recount_workspace_windows (m, workspaces, windows, max_per_ws);
 
@@ -505,7 +505,7 @@ assign_windows_to_workspaces (gf_wm_t *m)
 }
 
 gf_ws_id_t
-lookup_or_create_maximized_ws (gf_wm_t *m, gf_monitor_id_t monitor_id)
+wm_lookup_or_create_maximized_ws (gf_wm_t *m, gf_monitor_id_t monitor_id)
 {
     if (monitor_id >= GF_MAX_MONITORS)
         monitor_id = 0;
@@ -549,12 +549,12 @@ cleanup_empty_maximized_ws (gf_wm_t *m, gf_ws_id_t ws_id)
 gf_ws_id_t
 lookup_or_create_ws (gf_wm_t *m)
 {
-    return lookup_or_create_ws_for_monitor (m, find_active_monitor (m));
+    return wm_lookup_or_create_ws_for_monitor (m, find_active_monitor (m));
 }
 
 uint32_t
-workspace_monitor_window_count (gf_wm_t *m, gf_ws_id_t workspace_id,
-                                gf_monitor_id_t monitor_id)
+wm_workspace_monitor_window_count (gf_wm_t *m, gf_ws_id_t workspace_id,
+                                   gf_monitor_id_t monitor_id)
 {
     gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), workspace_id);
     if (!ws || ws->monitor_id != monitor_id)
@@ -575,7 +575,7 @@ workspace_monitor_window_count (gf_wm_t *m, gf_ws_id_t workspace_id,
 }
 
 gf_ws_id_t
-lookup_or_create_ws_for_monitor (gf_wm_t *m, gf_monitor_id_t monitor_id)
+wm_lookup_or_create_ws_for_monitor (gf_wm_t *m, gf_monitor_id_t monitor_id)
 {
     gf_ws_list_t *workspaces = wm_workspaces (m);
     uint32_t max_per_ws = m->config->max_windows_per_workspace;
@@ -585,7 +585,7 @@ lookup_or_create_ws_for_monitor (gf_wm_t *m, gf_monitor_id_t monitor_id)
     gf_ws_info_t *active = gf_workspace_list_find_by_id (workspaces, active_id);
     if (active && active->monitor_id == monitor_id && !active->is_locked
         && !active->has_maximized_state && !active->is_excluded_ws && !active->has_rule
-        && workspace_monitor_window_count (m, active_id, monitor_id) < max_per_ws)
+        && wm_workspace_monitor_window_count (m, active_id, monitor_id) < max_per_ws)
         return active_id;
 
     for (uint32_t i = 0; i < workspaces->count; i++)
@@ -593,7 +593,7 @@ lookup_or_create_ws_for_monitor (gf_wm_t *m, gf_monitor_id_t monitor_id)
         gf_ws_info_t *ws = &workspaces->items[i];
         if (ws->monitor_id == monitor_id && !ws->is_locked && !ws->has_maximized_state
             && !ws->is_excluded_ws && !ws->has_rule
-            && workspace_monitor_window_count (m, ws->id, monitor_id) < max_per_ws)
+            && wm_workspace_monitor_window_count (m, ws->id, monitor_id) < max_per_ws)
             return ws->id;
     }
 
@@ -601,7 +601,7 @@ lookup_or_create_ws_for_monitor (gf_wm_t *m, gf_monitor_id_t monitor_id)
 }
 
 void
-move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_monitor)
+wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_monitor)
 {
     if (!m || !win || win->monitor_id == new_monitor)
         return;
@@ -628,7 +628,7 @@ move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_moni
 
     if (win->is_maximized || (old_ws && old_ws->has_maximized_state))
     {
-        target_workspace = lookup_or_create_maximized_ws (m, new_monitor);
+        target_workspace = wm_lookup_or_create_maximized_ws (m, new_monitor);
         const gf_window_rule_t *rule = gf_rules_find (m->config, win->name);
         if (rule)
         {
@@ -647,11 +647,11 @@ move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_moni
                 win->restore_workspace_id = old_restore;
             else
                 win->restore_workspace_id
-                    = lookup_or_create_ws_for_monitor (m, new_monitor);
+                    = wm_lookup_or_create_ws_for_monitor (m, new_monitor);
         }
     }
     else if (old_ws && old_ws->is_excluded_ws)
-        target_workspace = lookup_or_create_excluded_ws (m, new_monitor);
+        target_workspace = wm_lookup_or_create_excluded_ws (m, new_monitor);
     else if (old_ws && old_ws->rule_target_id > 0)
     {
         target_workspace
@@ -661,7 +661,7 @@ move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_moni
                                   old_ws->rule_target_id);
     }
     else
-        target_workspace = lookup_or_create_ws_for_monitor (m, new_monitor);
+        target_workspace = wm_lookup_or_create_ws_for_monitor (m, new_monitor);
 
     if (target_workspace != old_workspace)
         move_window_to_workspace (m, win, target_workspace);
@@ -678,7 +678,7 @@ move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_moni
         gf_ws_id_t previous_active = workspaces->active_workspace[new_monitor];
         if (previous_active != target_workspace)
         {
-            switch_workspace (m, target_workspace, new_monitor);
+            wm_switch_workspace (m, target_workspace, new_monitor);
         }
         workspaces->active_workspace[new_monitor] = target_workspace;
         m->state.last_active_workspace[new_monitor] = target_workspace;
@@ -707,15 +707,15 @@ move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_moni
     if (old_monitor < GF_MAX_MONITORS
         && workspaces->active_workspace[old_monitor] == old_workspace && old_ws
         && old_ws->has_maximized_state
-        && workspace_monitor_window_count (m, old_workspace, old_monitor) == 0)
+        && wm_workspace_monitor_window_count (m, old_workspace, old_monitor) == 0)
     {
         gf_ws_info_t *restore = gf_workspace_list_find_by_id (workspaces, old_restore);
-        gf_ws_id_t source_target = restore && restore->monitor_id == old_monitor
-                                           && !restore->has_maximized_state
-                                           && !restore->is_excluded_ws
-                                       ? restore->id
-                                       : lookup_or_create_ws_for_monitor (m, old_monitor);
-        switch_workspace (m, source_target, old_monitor);
+        gf_ws_id_t source_target
+            = restore && restore->monitor_id == old_monitor
+                      && !restore->has_maximized_state && !restore->is_excluded_ws
+                  ? restore->id
+                  : wm_lookup_or_create_ws_for_monitor (m, old_monitor);
+        wm_switch_workspace (m, source_target, old_monitor);
         m->state.last_active_window[old_monitor] = 0;
     }
     cleanup_empty_maximized_ws (m, old_workspace);
@@ -734,7 +734,7 @@ move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_moni
 // The single workspace that parks user-excluded windows. Created locked so
 // assignment never places normal windows on it.
 gf_ws_id_t
-lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id)
+wm_lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id)
 {
     if (monitor_id >= GF_MAX_MONITORS)
         monitor_id = 0;
@@ -762,17 +762,17 @@ assign_window_workspace (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_w
     if (platform->window_is_maximized && platform->window_is_maximized (display, win->id))
     {
         win->is_maximized = true;
-        return lookup_or_create_maximized_ws (m, win->monitor_id);
+        return wm_lookup_or_create_maximized_ws (m, win->monitor_id);
     }
 
     if (current_ws && current_ws->monitor_id == win->monitor_id && !current_ws->is_locked
         && !current_ws->has_rule && !current_ws->has_maximized_state
         && !current_ws->is_excluded_ws
-        && workspace_monitor_window_count (m, current_ws->id, win->monitor_id)
+        && wm_workspace_monitor_window_count (m, current_ws->id, win->monitor_id)
                < m->config->max_windows_per_workspace)
         return current_ws->id;
 
-    return lookup_or_create_ws_for_monitor (m, win->monitor_id);
+    return wm_lookup_or_create_ws_for_monitor (m, win->monitor_id);
 }
 
 static void
@@ -788,7 +788,7 @@ assign_maximized_window (gf_wm_t *m, gf_win_info_t *win)
         if (!win->restore_workspace_id && origin_ws && !origin_ws->has_maximized_state)
             win->restore_workspace_id = origin;
     }
-    win->workspace_id = lookup_or_create_maximized_ws (m, win->monitor_id);
+    win->workspace_id = wm_lookup_or_create_maximized_ws (m, win->monitor_id);
 
     // Claim the slot immediately: the window isn't in the tracked list yet
     // (that happens later in finalize_window_registration), so
@@ -816,9 +816,9 @@ apply_rule_to_window (gf_wm_t *m, gf_win_info_t *win, const gf_window_rule_t *ru
     if (!target_ws || target_ws->monitor_id != win->monitor_id)
         return;
 
-    if (workspace_monitor_window_count (m, target, win->monitor_id) >= max_per_ws)
+    if (wm_workspace_monitor_window_count (m, target, win->monitor_id) >= max_per_ws)
     {
-        evict_non_rule_window (m, target, win->monitor_id);
+        wm_evict_non_rule_window (m, target, win->monitor_id);
     }
     else
     {
@@ -895,7 +895,7 @@ finalize_window_registration (gf_wm_t *m, gf_win_info_t *win)
             minimize_workspace_windows (m, ws_id, 0, win->monitor_id);
     }
 
-    sync_dock_visibility (m);
+    wm_sync_dock_visibility (m);
 }
 
 void

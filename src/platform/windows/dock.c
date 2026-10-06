@@ -1,5 +1,5 @@
-﻿#include "internal.h"
-#include "taskbar_recovery.h"
+#include "internal.h"
+#include "taskbar.h"
 #include <string.h>
 
 // Explorer's auto-hide preference is desktop-wide. Manage individual taskbar
@@ -7,7 +7,7 @@
 // Work-area changes during maximize previously invalidated unrelated layouts.
 // The core expands visible maximized apps separately into their taskbar gap.
 static bool
-_native_autohide (void)
+gf_taskbar_native_autohide (void)
 {
     APPBARDATA abd
         = { .cbSize = sizeof (abd), .hWnd = FindWindowA ("Shell_TrayWnd", NULL) };
@@ -15,7 +15,7 @@ _native_autohide (void)
 }
 
 static gf_taskbar_state_t *
-_taskbar_find (gf_windows_platform_data_t *data, HWND window)
+gf_taskbar_find (gf_windows_platform_data_t *data, HWND window)
 {
     for (uint32_t i = 0; i < data->taskbar_count; i++)
         if (data->taskbars[i].window == window)
@@ -24,8 +24,8 @@ _taskbar_find (gf_windows_platform_data_t *data, HWND window)
 }
 
 static bool
-_taskbar_interacting (HWND window, gf_monitor_id_t monitor_id,
-                      gf_windows_platform_data_t *data, POINT cursor)
+gf_taskbar_interacting (HWND window, gf_monitor_id_t monitor_id,
+                        gf_windows_platform_data_t *data, POINT cursor)
 {
     HWND foreground = GetForegroundWindow ();
     if (foreground && GetAncestor (foreground, GA_ROOTOWNER) == window)
@@ -46,7 +46,7 @@ _taskbar_interacting (HWND window, gf_monitor_id_t monitor_id,
 }
 
 static bool
-_taskbar_edge (gf_taskbar_state_t *bar, const gf_rect_t *full, POINT cursor)
+gf_taskbar_edge (gf_taskbar_state_t *bar, const gf_rect_t *full, POINT cursor)
 {
     RECT monitor = { full->x, full->y, full->x + (int32_t)full->width,
                      full->y + (int32_t)full->height };
@@ -66,8 +66,9 @@ _taskbar_edge (gf_taskbar_state_t *bar, const gf_rect_t *full, POINT cursor)
 }
 
 static void
-_taskbar_sync (gf_platform_t *platform, HWND window, const bool *hide_on_monitor,
-               uint32_t monitor_count, bool native_autohide, POINT cursor, ULONGLONG now)
+gf_taskbar_sync (gf_platform_t *platform, HWND window, const bool *hide_on_monitor,
+                 uint32_t monitor_count, bool native_autohide, POINT cursor,
+                 ULONGLONG now)
 {
     if (!window)
         return;
@@ -75,7 +76,7 @@ _taskbar_sync (gf_platform_t *platform, HWND window, const bool *hide_on_monitor
     gf_monitor_id_t id = gf_monitor_from_window (platform, window);
     bool hide = !native_autohide && id < monitor_count
                 && id < data->enumerated_monitor_count && hide_on_monitor[id];
-    gf_taskbar_state_t *bar = _taskbar_find (data, window);
+    gf_taskbar_state_t *bar = gf_taskbar_find (data, window);
     if (!hide)
     {
         gf_taskbar_restore_window (window);
@@ -103,8 +104,8 @@ _taskbar_sync (gf_platform_t *platform, HWND window, const bool *hide_on_monitor
     // Explorer can move the taskbar after a display or DPI change while our
     // visibility override is active. Follow its current edge even when hidden.
     GetWindowRect (window, &bar->rect);
-    if (_taskbar_edge (bar, &data->monitors[id].full_bounds, cursor)
-        || _taskbar_interacting (window, id, data, cursor))
+    if (gf_taskbar_edge (bar, &data->monitors[id].full_bounds, cursor)
+        || gf_taskbar_interacting (window, id, data, cursor))
         bar->reveal_until = now + 300;
     bool reveal = now < bar->reveal_until;
     if (reveal != (IsWindowVisible (window) != FALSE))
@@ -131,14 +132,14 @@ gf_dock_sync (gf_platform_t *platform, const bool *hide_on_monitor,
     POINT cursor;
     if (!GetCursorPos (&cursor))
         return;
-    bool native_autohide = _native_autohide ();
+    bool native_autohide = gf_taskbar_native_autohide ();
     ULONGLONG now = GetTickCount64 ();
-    _taskbar_sync (platform, FindWindowA ("Shell_TrayWnd", NULL), hide_on_monitor,
-                   monitor_count, native_autohide, cursor, now);
+    gf_taskbar_sync (platform, FindWindowA ("Shell_TrayWnd", NULL), hide_on_monitor,
+                     monitor_count, native_autohide, cursor, now);
     HWND secondary = NULL;
     while ((secondary = FindWindowExA (NULL, secondary, "Shell_SecondaryTrayWnd", NULL)))
-        _taskbar_sync (platform, secondary, hide_on_monitor, monitor_count,
-                       native_autohide, cursor, now);
+        gf_taskbar_sync (platform, secondary, hide_on_monitor, monitor_count,
+                         native_autohide, cursor, now);
 }
 
 void

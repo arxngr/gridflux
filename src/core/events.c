@@ -145,8 +145,8 @@ gf_wm_keymap_event (gf_wm_t *m)
         int idx = (current_idx + step * offset + n) % n;
         if (workspaces->items[idx].monitor_id == active_monitor
             && !workspaces->items[idx].is_excluded_ws
-            && workspace_monitor_window_count (m, workspaces->items[idx].id,
-                                               active_monitor)
+            && wm_workspace_monitor_window_count (m, workspaces->items[idx].id,
+                                                  active_monitor)
                    > 0)
         {
             target_idx = idx;
@@ -162,7 +162,7 @@ gf_wm_keymap_event (gf_wm_t *m)
     if (target_ws == workspaces->active_workspace[active_monitor])
         return;
 
-    switch_workspace (m, target_ws, active_monitor);
+    wm_switch_workspace (m, target_ws, active_monitor);
 
     workspaces->active_workspace[active_monitor] = target_ws;
     m->state.last_active_workspace[active_monitor] = target_ws;
@@ -189,12 +189,12 @@ gf_wm_keymap_event (gf_wm_t *m)
 
 static void enter_maximized_mode (gf_wm_t *m, gf_win_info_t *focused,
                                   gf_handle_t curr_win_id);
-static void enter_background_maximized_mode (gf_wm_t *m, gf_win_info_t *window);
+static void wm_enter_background_maximized_mode (gf_wm_t *m, gf_win_info_t *window);
 static void exit_maximized_mode (gf_wm_t *m, gf_win_info_t *focused);
 
 static bool
-another_window_focused_on_monitor (gf_wm_t *m, gf_handle_t window,
-                                   gf_monitor_id_t monitor_id)
+wm_another_window_focused_on_monitor (gf_wm_t *m, gf_handle_t window,
+                                      gf_monitor_id_t monitor_id)
 {
     gf_platform_t *platform = wm_platform (m);
     if (!platform->window_get_focused)
@@ -219,7 +219,7 @@ another_window_focused_on_monitor (gf_wm_t *m, gf_handle_t window,
 }
 
 static bool
-window_live_minimized (gf_wm_t *m, gf_handle_t window, bool fallback)
+wm_window_live_minimized (gf_wm_t *m, gf_handle_t window, bool fallback)
 {
     gf_platform_t *platform = wm_platform (m);
     if (!platform->window_is_minimized)
@@ -228,9 +228,9 @@ window_live_minimized (gf_wm_t *m, gf_handle_t window, bool fallback)
 }
 
 static void
-sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *existing)
+wm_sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *existing)
 {
-    bool live_minimized = window_live_minimized (m, live->id, live->is_minimized);
+    bool live_minimized = wm_window_live_minimized (m, live->id, live->is_minimized);
     bool native_minimized = live_minimized;
     bool mode_pending = existing->mode_wait != 0;
     bool live_maximized
@@ -260,7 +260,7 @@ sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *exis
     bool interacting = wm_platform (m)->window_is_interacting
                        && wm_platform (m)->window_is_interacting (*wm_display (m));
     if (!interacting)
-        move_window_to_monitor (m, existing, live->monitor_id);
+        wm_move_window_to_monitor (m, existing, live->monitor_id);
 
     // A window can maximize and lose focus before gf_wm_event sees it. Apply
     // every live transition here so it cannot remain in a normal workspace.
@@ -276,8 +276,8 @@ sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *exis
         live_maximized = existing->is_maximized;
     if (live_maximized && !existing->is_maximized)
     {
-        if (another_window_focused_on_monitor (m, existing->id, existing->monitor_id))
-            enter_background_maximized_mode (m, existing);
+        if (wm_another_window_focused_on_monitor (m, existing->id, existing->monitor_id))
+            wm_enter_background_maximized_mode (m, existing);
         else
         {
             enter_maximized_mode (m, existing, existing->id);
@@ -308,7 +308,7 @@ sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *exis
     live->is_minimized
         = existing->visibility_request && existing->visibility_wait
               ? existing->is_minimized
-              : window_live_minimized (m, live->id, existing->is_minimized);
+              : wm_window_live_minimized (m, live->id, existing->is_minimized);
 
     if (live->is_minimized)
         live->geometry = existing->geometry;
@@ -401,7 +401,7 @@ gf_wm_watch (gf_wm_t *m)
                 gf_wm_resolve_window_name (m, win->id, existing->name, win->name,
                                            sizeof (win->name));
 
-                sync_existing_window_state (m, win, existing);
+                wm_sync_existing_window_state (m, win, existing);
 
                 const gf_window_rule_t *rule = gf_rules_find (m->config, win->name);
 
@@ -411,7 +411,7 @@ gf_wm_watch (gf_wm_t *m)
                 if (current_ws && !rule && current_ws->has_rule)
                 {
                     gf_ws_id_t free_ws
-                        = lookup_or_create_ws_for_monitor (m, win->monitor_id);
+                        = wm_lookup_or_create_ws_for_monitor (m, win->monitor_id);
                     if (gf_workspace_list_find_by_id (workspaces, free_ws))
                         move_window_to_workspace (m, win, free_ws);
                 }
@@ -443,16 +443,16 @@ enter_maximized_mode (gf_wm_t *m, gf_win_info_t *focused, gf_handle_t curr_win_i
     gf_ws_id_t origin_ws = focused->workspace_id;
     focused->restore_workspace_id = origin_ws;
 
-    gf_ws_id_t max_ws = lookup_or_create_maximized_ws (m, focused->monitor_id);
+    gf_ws_id_t max_ws = wm_lookup_or_create_maximized_ws (m, focused->monitor_id);
     move_window_to_workspace (m, focused, max_ws);
     minimize_workspace_windows (m, origin_ws, focused->id, focused->monitor_id);
     gf_window_list_mark_all_needs_update (windows, &origin_ws);
 
-    sync_dock_visibility (m);
+    wm_sync_dock_visibility (m);
 }
 
 static void
-enter_background_maximized_mode (gf_wm_t *m, gf_win_info_t *window)
+wm_enter_background_maximized_mode (gf_wm_t *m, gf_win_info_t *window)
 {
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
@@ -465,13 +465,13 @@ enter_background_maximized_mode (gf_wm_t *m, gf_win_info_t *window)
 
     gf_ws_id_t origin_ws = window->workspace_id;
     window->restore_workspace_id = origin_ws;
-    gf_ws_id_t max_ws = lookup_or_create_maximized_ws (m, window->monitor_id);
+    gf_ws_id_t max_ws = wm_lookup_or_create_maximized_ws (m, window->monitor_id);
     move_window_to_workspace (m, window, max_ws);
 
     gf_wm_request_visibility (m, window, true);
     gf_window_list_mark_all_needs_update (windows, &origin_ws);
 
-    sync_dock_visibility (m);
+    wm_sync_dock_visibility (m);
 }
 
 static void
@@ -506,13 +506,13 @@ exit_maximized_mode (gf_wm_t *m, gf_win_info_t *focused)
             && !restore_ws->is_locked)
             target_ws = active_id;
         else
-            target_ws = lookup_or_create_ws_for_monitor (m, monitor);
+            target_ws = wm_lookup_or_create_ws_for_monitor (m, monitor);
     }
     move_window_to_workspace (m, focused, target_ws);
     focused->restore_workspace_id = 0;
     cleanup_empty_maximized_ws (m, old_ws_id);
 
-    sync_dock_visibility (m);
+    wm_sync_dock_visibility (m);
 
     /* Mark the target workspace dirty and clear custom layout flag so the
      * next tick's gf_wm_layout_apply re-tiles everything correctly.
@@ -563,25 +563,25 @@ gf_wm_event (gf_wm_t *m)
     // stale minimize request before selecting its monitor-local workspace.
     // An iconified foreground handle can linger during a native focus change;
     // it must not reverse minimization or wake a user-minimized app.
-    if (window_live_minimized (m, curr_win_id, focused->is_minimized)
+    if (wm_window_live_minimized (m, curr_win_id, focused->is_minimized)
         && focused->visibility_request != 2)
         return;
     gf_wm_request_visibility (m, focused, false);
 
     gf_monitor_id_t monitor_id = focused->monitor_id;
     if (platform->monitor_from_window && !focused->mode_wait
-        && !window_live_minimized (m, curr_win_id, focused->is_minimized))
+        && !wm_window_live_minimized (m, curr_win_id, focused->is_minimized))
     {
         gf_monitor_id_t actual_monitor
             = platform->monitor_from_window (platform, curr_win_id);
         if (actual_monitor < GF_MAX_MONITORS && actual_monitor != monitor_id)
         {
-            move_window_to_monitor (m, focused, actual_monitor);
+            wm_move_window_to_monitor (m, focused, actual_monitor);
             monitor_id = actual_monitor;
         }
     }
 
-    bool minimized = window_live_minimized (m, curr_win_id, focused->is_minimized);
+    bool minimized = wm_window_live_minimized (m, curr_win_id, focused->is_minimized);
     bool now_maximized
         = minimized || focused->mode_wait
               ? focused->is_maximized
@@ -599,16 +599,16 @@ gf_wm_event (gf_wm_t *m)
     if (monitor_id >= GF_MAX_MONITORS)
         return;
 
-    detect_minimize_changes (m, current_workspace, monitor_id);
+    wm_detect_minimize_changes (m, current_workspace, monitor_id);
 
     // Reconcile actual visibility even when a cached workspace ID already
     // matches. Delayed native restores can otherwise leave a maximized app
     // visible behind the selected normal workspace.
-    switch_workspace (m, current_workspace, monitor_id);
+    wm_switch_workspace (m, current_workspace, monitor_id);
 
     m->state.last_active_window[monitor_id] = curr_win_id;
     m->state.last_active_workspace[monitor_id] = current_workspace;
     workspaces->active_workspace[monitor_id] = current_workspace;
     gf_wm_sync_monitor_activity (m, monitor_id);
-    sync_dock_visibility (m);
+    wm_sync_dock_visibility (m);
 }

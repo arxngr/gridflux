@@ -296,7 +296,7 @@ tick (gf_wm_t *m)
 {
     gf_wm_watch (m);
     gf_wm_event (m);
-    sync_dock_visibility (m);
+    wm_sync_dock_visibility (m);
     gf_wm_layout_rebalance (m);
     gf_wm_layout_apply (m);
     for (unsigned i = 0; i < m->state.windows.count; i++)

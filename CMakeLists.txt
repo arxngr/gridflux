@@ -189,6 +189,8 @@ if(WIN32)
     endif()
     add_executable(gridflux-launcher WIN32
         src/launcher/win32.c
+        src/platform/windows/taskbar.c
+        src/platform/windows/window_state.c
         src/launcher/gridflux-launcher.rc
     )
     target_link_libraries(gridflux-launcher PRIVATE kernel32 user32 gdi32 shell32 advapi32 dwmapi)
@@ -205,7 +207,7 @@ add_executable(gridflux-cli
     src/core/workspace.c
     src/core/window.c
     src/core/events.c
-    src/core/monitor_activity.c
+    src/core/monitor.c
     src/core/debug.c
     src/core/border.c
     src/utils/list.c
@@ -248,7 +250,7 @@ if(GTK4_FOUND)
         src/core/workspace.c
         src/core/window.c
         src/core/events.c
-        src/core/monitor_activity.c
+        src/core/monitor.c
         src/core/debug.c
         src/core/border.c
         src/utils/list.c
@@ -379,8 +381,8 @@ message(STATUS "")
 include(CTest)
 if(BUILD_TESTING)
     add_executable(gridflux-multi-monitor-test
-        tests/multi_monitor.c src/core/arrange.c src/core/resize.c
-        src/core/monitor_activity.c
+        tests/test_multi_monitor.c src/core/arrange.c src/core/resize.c
+        src/core/monitor.c
         src/utils/list.c src/utils/memory.c)
     target_include_directories(gridflux-multi-monitor-test PRIVATE ${PLATFORM_INCLUDES})
     if(MSVC)
@@ -390,8 +392,8 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME multi-monitor COMMAND gridflux-multi-monitor-test)
     add_executable(gridflux-monitor-state-test
-        tests/monitor_state.c src/core/events.c src/core/workspace.c
-        src/core/window.c src/core/arrange.c src/core/monitor_activity.c
+        tests/test_monitor_state.c src/core/events.c src/core/workspace.c
+        src/core/window.c src/core/arrange.c src/core/monitor.c
         src/utils/list.c src/utils/memory.c)
     target_include_directories(gridflux-monitor-state-test PRIVATE ${PLATFORM_INCLUDES})
     if(MSVC)
@@ -402,7 +404,7 @@ if(BUILD_TESTING)
     add_test(NAME monitor-state COMMAND gridflux-monitor-state-test)
     if(WIN32)
         add_executable(gridflux-windows-border-test
-            tests/windows_border.c src/platform/windows/border.c)
+            tests/test_windows_border.c src/platform/windows/border.c)
         target_include_directories(gridflux-windows-border-test PRIVATE ${PLATFORM_INCLUDES})
         target_link_libraries(gridflux-windows-border-test PRIVATE user32 gdi32 dwmapi)
         if(MSVC)
@@ -411,7 +413,7 @@ if(BUILD_TESTING)
             target_compile_options(gridflux-windows-border-test PRIVATE -UNDEBUG)
         endif()
         add_test(NAME windows-border COMMAND gridflux-windows-border-test)
-        add_executable(gridflux-windows-dock-test tests/windows_dock.c)
+        add_executable(gridflux-windows-dock-test tests/test_windows_dock.c)
         target_include_directories(gridflux-windows-dock-test PRIVATE ${PLATFORM_INCLUDES})
         target_link_libraries(gridflux-windows-dock-test PRIVATE user32 gdi32 dwmapi)
         if(MSVC)
@@ -422,7 +424,7 @@ if(BUILD_TESTING)
         add_test(NAME windows-dock COMMAND gridflux-windows-dock-test)
         foreach(test_name IN ITEMS windows-maximized windows-maximized-native)
             string(REPLACE "-" "_" test_source "${test_name}")
-            add_executable(gridflux-${test_name}-test tests/${test_source}.c)
+            add_executable(gridflux-${test_name}-test tests/test_${test_source}.c)
             target_include_directories(gridflux-${test_name}-test PRIVATE ${PLATFORM_INCLUDES})
             target_link_libraries(gridflux-${test_name}-test PRIVATE user32 gdi32 dwmapi)
             if(MSVC)
@@ -431,6 +433,7 @@ if(BUILD_TESTING)
                 target_compile_options(gridflux-${test_name}-test PRIVATE -UNDEBUG)
             endif()
             if(test_name STREQUAL "windows-maximized-native")
+                target_sources(gridflux-${test_name}-test PRIVATE src/platform/windows/window_state.c)
                 add_dependencies(gridflux-${test_name}-test gridflux-launcher)
                 add_test(NAME ${test_name} COMMAND gridflux-${test_name}-test
                     $<TARGET_FILE:gridflux-launcher>)
@@ -440,7 +443,7 @@ if(BUILD_TESTING)
         endforeach()
     endif()
     if(UNIX AND NOT APPLE AND GTK4_FOUND)
-        add_executable(gridflux-tray-test tests/tray_protocol.c)
+        add_executable(gridflux-tray-test tests/test_tray_protocol.c)
         target_include_directories(gridflux-tray-test PRIVATE ${GTK4_INCLUDE_DIRS} ${PLATFORM_INCLUDES})
         target_link_libraries(gridflux-tray-test PRIVATE ${GTK4_LIBRARIES})
         target_compile_options(gridflux-tray-test PRIVATE -UNDEBUG)
