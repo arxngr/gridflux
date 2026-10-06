@@ -412,7 +412,8 @@ if(BUILD_TESTING)
     add_test(NAME monitor-state COMMAND gridflux-monitor-state-test)
     if(WIN32)
         add_executable(gridflux-windows-border-test
-            tests/test_windows_border.c src/platform/windows/border.c)
+            tests/test_windows_border.c src/platform/windows/border.c
+            src/platform/windows/window.c ${WINDOWS_WINDOW_SUPPORT_SOURCES})
         target_include_directories(gridflux-windows-border-test PRIVATE ${PLATFORM_INCLUDES})
         target_link_libraries(gridflux-windows-border-test PRIVATE user32 gdi32 dwmapi)
         if(MSVC)

@@ -221,30 +221,19 @@ gf_window_is_self (gf_display_t display, gf_handle_t window)
     return false;
 }
 
-// Resolve (and cache) the GridFlux GUI's process id from its own window,
-// identified by window class/title rather than a spoofable executable name.
-// Re-resolves if the cached process has exited.
+// Resolve the GUI from its dedicated tray window, which exists while the GTK
+// window is hidden. A generic title can belong to the server's console or an
+// unrelated app and must not make their windows GUI clipping surfaces.
 static DWORD
 gui_process_id (void)
 {
-    static DWORD cached = 0;
-    if (cached)
-    {
-        HANDLE h = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, cached);
-        if (h)
-        {
-            CloseHandle (h);
-            return cached;
-        }
-        cached = 0;
-    }
-
-    HWND gui = FindWindowA ("GridFluxGUI", NULL);
+    HWND gui = FindWindowA ("GridFluxTrayClass", "GridFluxTray");
     if (!gui)
-        gui = FindWindowA (NULL, "GridFlux");
+        gui = FindWindowA ("GridFluxGUI", NULL);
+    DWORD pid = 0;
     if (gui)
-        GetWindowThreadProcessId (gui, &cached);
-    return cached;
+        GetWindowThreadProcessId (gui, &pid);
+    return pid;
 }
 
 // True if hwnd is owned by the GUI process. Its transient popups (colour

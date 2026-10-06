@@ -53,7 +53,22 @@ window_visible (HWND window)
 
     int cloaked = 0;
     DwmGetWindowAttribute (window, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
-    return !cloaked;
+    if (cloaked)
+        return false;
+
+    // GUI helper windows can remain mapped with zero opacity. Their frame
+    // rectangle is not an occluder even though WS_VISIBLE is still set.
+    if (GetWindowLongPtr (window, GWL_EXSTYLE) & WS_EX_LAYERED)
+    {
+        BYTE alpha = 255;
+        DWORD flags = 0;
+        if (GetLayeredWindowAttributes (window, NULL, &alpha, &flags)
+            && (flags & LWA_ALPHA) && !alpha)
+            return false;
+    }
+
+    RECT region_rect;
+    return GetWindowRgnBox (window, &region_rect) != NULLREGION;
 }
 
 static bool
