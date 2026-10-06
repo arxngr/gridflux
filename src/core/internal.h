@@ -56,14 +56,19 @@ typedef struct
 
 bool wm_user_excluded (gf_wm_t *m, gf_handle_t w);
 
-// User exclusions remain tracked for removal and monitor identity, but share
-// the same management guards as system windows.
+static inline bool
+wm_is_system_excluded (gf_wm_t *m, gf_handle_t w)
+{
+    gf_platform_t *p = wm_platform (m);
+    return p->window_is_excluded && p->window_is_excluded (*wm_display (m), w);
+}
+
+// User-excluded windows participate in workspace visibility, but do not
+// receive layout, border, or managed maximize operations.
 static inline bool
 wm_is_excluded (gf_wm_t *m, gf_handle_t w)
 {
-    gf_platform_t *p = wm_platform (m);
-    return (p->window_is_excluded && p->window_is_excluded (*wm_display (m), w))
-           || wm_user_excluded (m, w);
+    return wm_is_system_excluded (m, w) || wm_user_excluded (m, w);
 }
 
 /* --- Workspace Management --- */
@@ -86,7 +91,8 @@ void wm_recount_workspace_windows (gf_wm_t *m, gf_ws_list_t *workspaces,
 void wm_sync_workspaces (gf_wm_t *m);
 bool wm_ws_has_capacity (gf_ws_info_t *ws, uint32_t max_per_ws);
 bool wm_ws_is_valid (gf_ws_list_t *workspaces, gf_ws_id_t id);
-gf_ws_id_t wm_lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id);
+gf_ws_id_t wm_lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id,
+                                            gf_handle_t window);
 void wm_reconcile_excluded_windows (gf_wm_t *m);
 
 /* --- Window Management --- */

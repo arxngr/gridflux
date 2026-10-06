@@ -14,7 +14,7 @@ window_is_minimized (gf_wm_t *m, gf_win_info_t *win)
 gf_err_t
 wm_request_visibility (gf_wm_t *m, gf_win_info_t *win, bool minimized)
 {
-    if (wm_is_excluded (m, win->id))
+    if (wm_is_system_excluded (m, win->id))
         return GF_SUCCESS;
     gf_platform_t *platform = wm_platform (m);
     uint8_t request = minimized ? 1 : 2;
@@ -143,7 +143,7 @@ wm_sync_monitor_activity (gf_wm_t *m, gf_monitor_id_t active_monitor)
         gf_win_info_t *win = &windows->items[i];
         if (!win->is_valid)
             continue;
-        if (wm_is_excluded (m, win->id))
+        if (wm_is_system_excluded (m, win->id))
         {
             if (platform->border_remove)
                 platform->border_remove (platform, win->id);
@@ -168,7 +168,8 @@ wm_sync_monitor_activity (gf_wm_t *m, gf_monitor_id_t active_monitor)
             wm_request_visibility (m, win, false);
         bool show_border = m->config && m->config->enable_borders && in_live_workspace
                            && !maximized && !win->is_minimized
-                           && !window_is_minimized (m, win);
+                           && !window_is_minimized (m, win)
+                           && !wm_user_excluded (m, win->id);
         if (show_border && platform->border_add)
             platform->border_add (platform, win->id, m->config->border_color,
                                   GF_BORDER_WIDTH);

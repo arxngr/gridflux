@@ -153,7 +153,7 @@ typedef struct
     bool has_maximized_state;
     bool is_custom_layout;
     bool has_rule;
-    bool is_excluded_ws; // holds user-excluded apps; never tiled or switched to
+    bool is_excluded_ws; // Dedicated excluded window workspace; never tiled
 } gf_ws_info_t;
 
 // Resize direction flags (bitmask for corner drags)

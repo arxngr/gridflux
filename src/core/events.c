@@ -134,7 +134,6 @@ gf_wm_keymap_event (gf_wm_t *m)
     {
         int idx = (current_idx + step * offset + n) % n;
         if (workspaces->items[idx].monitor_id == active_monitor
-            && !workspaces->items[idx].is_excluded_ws
             && wm_workspace_monitor_window_count (m, workspaces->items[idx].id,
                                                   active_monitor)
                    > 0)
@@ -162,7 +161,7 @@ gf_wm_keymap_event (gf_wm_t *m)
     {
         if (windows->items[i].workspace_id == target_ws && windows->items[i].is_valid
             && !windows->items[i].is_minimized
-            && !wm_is_excluded (m, windows->items[i].id))
+            && !wm_is_system_excluded (m, windows->items[i].id))
         {
             if (windows->items[i].monitor_id != active_monitor)
                 continue;
@@ -225,15 +224,33 @@ sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *exis
         = gf_workspace_list_find_by_id (wm_workspaces (m), existing->workspace_id);
     if (wm_user_excluded (m, live->id) || (workspace && workspace->is_excluded_ws))
     {
-        // Observe the app without issuing native state or geometry requests.
-        // Reconciliation releases/adopts management after this enumeration.
+        // Excluded apps share visibility acknowledgement and monitor transfer,
+        // while retaining their native geometry and maximize mode.
+        bool native_minimized = live_minimized, ignored_maximized = false;
+        existing->mode_wait = 0;
+        wm_observe_window_state (m, existing, &live_minimized, &ignored_maximized);
+        existing->is_minimized = live_minimized;
+        existing->is_maximized = false;
+        if (!live_minimized && !existing->visibility_request)
+            existing->monitor_suspended = false;
+        if (live_minimized || native_minimized)
+            live->monitor_id = existing->monitor_id;
+        if (workspace && workspace->is_excluded_ws && wm_user_excluded (m, live->id)
+            && (!wm_platform (m)->window_is_interacting
+                || !wm_platform (m)->window_is_interacting (*wm_display (m))))
+            wm_move_window_to_monitor (m, existing, live->monitor_id);
         live->workspace_id = existing->workspace_id;
         live->restore_workspace_id = existing->restore_workspace_id;
+        live->monitor_id = existing->monitor_id;
         live->monitor_suspended = existing->monitor_suspended;
-        live->is_minimized = live_minimized;
+        live->visibility_request = existing->visibility_request;
+        live->visibility_wait = existing->visibility_wait;
+        live->visibility_attempts = existing->visibility_attempts;
+        live->visibility_settle = existing->visibility_settle;
+        live->is_minimized = existing->is_minimized;
         live->is_maximized = false;
         if (live_minimized)
-            live->monitor_id = existing->monitor_id;
+            live->geometry = existing->geometry;
         return;
     }
     bool native_minimized = live_minimized;
@@ -558,7 +575,7 @@ gf_wm_event (gf_wm_t *m)
         return;
     }
 
-    if (wm_is_excluded (m, curr_win_id))
+    if (wm_is_system_excluded (m, curr_win_id))
     {
         if (platform->border_remove)
             platform->border_remove (platform, curr_win_id);
@@ -611,7 +628,9 @@ gf_wm_event (gf_wm_t *m)
                     && platform->window_is_maximized (display, curr_win_id);
     bool was_maximized = focused->is_maximized;
 
-    if (now_maximized && !was_maximized)
+    if (wm_user_excluded (m, curr_win_id))
+        focused->is_maximized = false;
+    else if (now_maximized && !was_maximized)
         enter_maximized_mode (m, focused, curr_win_id);
     else if (!now_maximized && was_maximized)
         exit_maximized_mode (m, focused);

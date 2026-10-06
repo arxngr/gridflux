@@ -157,7 +157,8 @@ wm_recount_workspace_windows (gf_wm_t *m, gf_ws_list_t *workspaces,
 
     for (uint32_t i = 0; i < windows->count; i++)
     {
-        if (windows->items[i].is_valid && !wm_is_excluded (m, windows->items[i].id))
+        if (windows->items[i].is_valid
+            && !wm_is_system_excluded (m, windows->items[i].id))
         {
             gf_ws_id_t ws_id = windows->items[i].workspace_id;
             gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, ws_id);
@@ -206,8 +207,8 @@ wm_sync_dock_visibility (gf_wm_t *m)
         should_hide = true;
     }
 
-    // An excluded foreground app uses the native taskbar on its own monitor,
-    // even when a managed maximized workspace remains selected behind it.
+    // Keep the excluded app's monitor taskbar visible while foreground and
+    // workspace selection settle after a native focus change.
     gf_handle_t focused
         = platform->window_get_focused ? platform->window_get_focused (display) : 0;
     if (focused && wm_user_excluded (m, focused))
@@ -288,7 +289,7 @@ wm_switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace,
         return;
 
     gf_ws_info_t *target = gf_workspace_list_find_by_id (workspaces, current_workspace);
-    if (!target || target->monitor_id != active_monitor || target->is_excluded_ws)
+    if (!target || target->monitor_id != active_monitor)
         return;
 
     if (workspaces->active_workspace[active_monitor] != current_workspace)
@@ -447,7 +448,7 @@ preserve_existing_assignments (gf_wm_t *m)
         else if (old_ws && old_ws->has_maximized_state)
             target = wm_lookup_or_create_maximized_ws (m, win->monitor_id);
         else if (old_ws && old_ws->is_excluded_ws)
-            target = wm_lookup_or_create_excluded_ws (m, win->monitor_id);
+            target = wm_lookup_or_create_excluded_ws (m, win->monitor_id, win->id);
         else
             target = wm_lookup_or_create_ws_for_monitor (m, win->monitor_id);
         if (target > 0)
@@ -581,7 +582,7 @@ wm_workspace_monitor_window_count (gf_wm_t *m, gf_ws_id_t workspace_id,
     {
         const gf_win_info_t *win = &windows->items[i];
         if (win->is_valid && win->workspace_id == workspace_id
-            && win->monitor_id == monitor_id && !wm_is_excluded (m, win->id))
+            && win->monitor_id == monitor_id && !wm_is_system_excluded (m, win->id))
             count++;
     }
 
@@ -665,7 +666,7 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_m
         }
     }
     else if (old_ws && old_ws->is_excluded_ws)
-        target_workspace = wm_lookup_or_create_excluded_ws (m, new_monitor);
+        target_workspace = wm_lookup_or_create_excluded_ws (m, new_monitor, win->id);
     else if (old_ws && old_ws->rule_target_id > 0)
     {
         target_workspace
@@ -685,9 +686,7 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_m
     wm_request_maximized (m, win);
 
     gf_ws_info_t *target_ws = gf_workspace_list_find_by_id (workspaces, target_workspace);
-    bool parked_excluded = target_ws && target_ws->is_excluded_ws;
-    if (activates_monitor && target_ws && target_ws->monitor_id == new_monitor
-        && !parked_excluded)
+    if (activates_monitor && target_ws && target_ws->monitor_id == new_monitor)
     {
         gf_ws_id_t previous_active = workspaces->active_workspace[new_monitor];
         if (previous_active != target_workspace)
@@ -698,7 +697,7 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_m
         m->state.last_active_workspace[new_monitor] = target_workspace;
         m->state.last_active_window[new_monitor] = win->id;
     }
-    else if (target_ws && target_ws->monitor_id == new_monitor && !parked_excluded
+    else if (target_ws && target_ws->monitor_id == new_monitor
              && target_workspace != workspaces->active_workspace[new_monitor]
              && platform->window_minimize)
     {
@@ -716,11 +715,11 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_m
     if (new_ws)
         new_ws->is_custom_layout = false;
 
-    // A maximized workspace vacated by a transfer must reveal its own
+    // A maximized or excluded workspace vacated by a transfer reveals its own
     // monitor's normal workspace, without activating anything on the destination.
     if (old_monitor < GF_MAX_MONITORS
         && workspaces->active_workspace[old_monitor] == old_workspace && old_ws
-        && old_ws->has_maximized_state
+        && (old_ws->has_maximized_state || old_ws->is_excluded_ws)
         && wm_workspace_monitor_window_count (m, old_workspace, old_monitor) == 0)
     {
         gf_ws_info_t *restore = gf_workspace_list_find_by_id (workspaces, old_restore);
@@ -739,24 +738,34 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_m
         wm_sync_monitor_activity (m, new_monitor);
 
     if (!win->is_maximized && !win->is_minimized && m->config->enable_borders
-        && platform->border_add
+        && platform->border_add && !wm_user_excluded (m, win->id)
         && workspaces->active_workspace[new_monitor] == target_workspace)
         platform->border_add (platform, win->id, m->config->border_color,
                               GF_BORDER_WIDTH);
 }
 
-// The single workspace that parks user-excluded windows. Created locked so
-// assignment never places normal windows on it.
+// Each excluded window owns a workspace on its monitor. Empty excluded
+// workspaces can be reused, but normal assignment never places windows on them.
 gf_ws_id_t
-wm_lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id)
+wm_lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id,
+                                 gf_handle_t window)
 {
     if (monitor_id >= GF_MAX_MONITORS)
         monitor_id = 0;
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
+    gf_win_info_t *tracked = gf_window_list_find_by_window_id (wm_windows (m), window);
+    gf_ws_info_t *current
+        = tracked ? gf_workspace_list_find_by_id (workspaces, tracked->workspace_id)
+                  : NULL;
+    if (current && current->is_excluded_ws && current->monitor_id == monitor_id)
+        return current->id;
+
     for (uint32_t i = 0; i < workspaces->count; i++)
         if (workspaces->items[i].is_excluded_ws
-            && workspaces->items[i].monitor_id == monitor_id)
+            && workspaces->items[i].monitor_id == monitor_id
+            && gf_window_list_count_by_workspace (wm_windows (m), workspaces->items[i].id)
+                   == 0)
             return workspaces->items[i].id;
 
     gf_ws_id_t id = gf_workspace_create (workspaces, m->config->max_windows_per_workspace,
@@ -937,12 +946,22 @@ wm_register_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws
 
     if (wm_user_excluded (m, win->id))
     {
-        win->workspace_id = wm_lookup_or_create_excluded_ws (m, win->monitor_id);
+        win->workspace_id = wm_lookup_or_create_excluded_ws (m, win->monitor_id, win->id);
         win->restore_workspace_id = 0;
         win->is_maximized = false;
         gf_window_list_add (wm_windows (m), win);
+        gf_win_info_t *registered
+            = gf_window_list_find_by_window_id (wm_windows (m), win->id);
+        if (!registered)
+            return;
         if (platform->border_remove)
             platform->border_remove (platform, win->id);
+        if (platform->window_get_focused
+            && platform->window_get_focused (display) == win->id && !win->is_minimized)
+            wm_switch_workspace (m, registered->workspace_id, registered->monitor_id);
+        else if (win->monitor_id < GF_MAX_MONITORS
+                 && workspaces->active_workspace[win->monitor_id] != win->workspace_id)
+            wm_request_visibility (m, registered, true);
         return;
     }
 

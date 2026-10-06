@@ -119,10 +119,8 @@ excluded_force_retile (gf_wm_t *m)
         ws_list->items[i].is_custom_layout = false;
 }
 
-// Park user-excluded windows on the excluded workspace without native changes
-// and bring restored ones back to a normal workspace. Runs each tick after the
-// window list is synced; only acts on state transitions, so it is idle once
-// everything is reconciled.
+// Assign excluded windows their own monitor-local workspace, preserving native
+// geometry and mode. Exclusion changes still participate in workspace visibility.
 void
 wm_reconcile_excluded_windows (gf_wm_t *m)
 {
@@ -153,34 +151,41 @@ wm_reconcile_excluded_windows (gf_wm_t *m)
                   && workspaces->active_workspace[old_monitor] == old_ws_id;
             if (platform->border_remove)
                 platform->border_remove (platform, win->id);
-            // Release only visibility owned by GridFlux. User-minimized apps
-            // stay minimized; future native maximize/restore remains their choice.
-            if (win->monitor_suspended && platform->window_unminimize)
-                platform->window_unminimize (display, win->id);
-            win->monitor_suspended = false;
-            win->visibility_request = win->visibility_wait = win->visibility_attempts
-                = win->visibility_settle = win->mode_wait = 0;
             win->is_maximized = false;
-            win->maximize_fill_failures = 0;
-            win->restore_workspace_id = 0;
-            win->is_minimized = platform->window_is_minimized
-                                    ? platform->window_is_minimized (display, win->id)
-                                    : win->is_minimized;
             if (!parked || cur->monitor_id != win->monitor_id)
             {
-                win->workspace_id = wm_lookup_or_create_excluded_ws (m, win->monitor_id);
+                win->mode_wait = win->maximize_fill_failures = 0;
+                win->restore_workspace_id = 0;
+                win->workspace_id
+                    = wm_lookup_or_create_excluded_ws (m, win->monitor_id, win->id);
                 changed = true;
-            }
-            if (was_active_max)
-            {
-                gf_ws_info_t *restore
-                    = gf_workspace_list_find_by_id (workspaces, restore_id);
-                gf_ws_id_t target
-                    = restore && restore->monitor_id == old_monitor
-                              && !restore->has_maximized_state && !restore->is_excluded_ws
-                          ? restore_id
-                          : wm_lookup_or_create_ws_for_monitor (m, old_monitor);
-                wm_switch_workspace (m, target, old_monitor);
+                bool native_minimized
+                    = platform->window_is_minimized
+                          ? platform->window_is_minimized (display, win->id)
+                          : win->is_minimized;
+                bool focused = platform->window_get_focused
+                               && platform->window_get_focused (display) == win->id;
+                if (!native_minimized && (focused || was_active_max))
+                {
+                    wm_request_visibility (m, win, false);
+                    wm_switch_workspace (m, win->workspace_id, win->monitor_id);
+                }
+                else
+                {
+                    wm_request_visibility (m, win, true);
+                    if (was_active_max)
+                    {
+                        gf_ws_info_t *restore
+                            = gf_workspace_list_find_by_id (workspaces, restore_id);
+                        gf_ws_id_t target
+                            = restore && restore->monitor_id == old_monitor
+                                      && !restore->has_maximized_state
+                                      && !restore->is_excluded_ws
+                                  ? restore_id
+                                  : wm_lookup_or_create_ws_for_monitor (m, old_monitor);
+                        wm_switch_workspace (m, target, old_monitor);
+                    }
+                }
             }
             wm_cleanup_empty_maximized_ws (m, old_ws_id);
         }
@@ -197,7 +202,10 @@ wm_reconcile_excluded_windows (gf_wm_t *m)
                        >= m->config->max_windows_per_workspace)
                 target = wm_lookup_or_create_ws_for_monitor (m, mon);
 
+            gf_ws_id_t old_workspace = win->workspace_id;
             wm_move_window_to_workspace (m, win, target);
+            if (workspaces->active_workspace[mon] == old_workspace)
+                wm_switch_workspace (m, target, mon);
             if (m->config->enable_borders && platform->border_add && !win->is_minimized
                 && (!platform->window_is_maximized
                     || !platform->window_is_maximized (display, win->id)))
@@ -285,7 +293,7 @@ wm_minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude
 
         if (!win->is_valid || win->workspace_id != ws_id || win->id == exclude_id)
             continue;
-        if (wm_is_excluded (m, win->id))
+        if (wm_is_system_excluded (m, win->id))
             continue;
 
         if (platform->monitor_from_window && !win->mode_wait
@@ -328,7 +336,7 @@ restore_non_active_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_win
 
         if (win->workspace_id != ws_id || is_maximized_ws)
             continue;
-        if (wm_is_excluded (m, win->id))
+        if (wm_is_system_excluded (m, win->id))
             continue;
         if (win->monitor_id != active_monitor)
             continue;
@@ -395,7 +403,7 @@ restore_fallback_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_monitor_id_t active_mo
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_win_info_t *win = &windows->items[i];
-        if (win->workspace_id != ws_id || wm_is_excluded (m, win->id))
+        if (win->workspace_id != ws_id || wm_is_system_excluded (m, win->id))
             continue;
         if (win->monitor_id != active_monitor)
             continue;
@@ -427,7 +435,7 @@ wm_restore_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_w
 
     if (active_belongs_to_target)
         restore_active_window (m, ws_id, active_window, active_monitor);
-    else if (is_maximized_ws)
+    else if (is_maximized_ws || ws->is_excluded_ws)
         restore_fallback_window (m, ws_id, active_monitor);
     else if (active_window != 0)
         restore_active_window (m, ws_id, active_window, active_monitor);
@@ -448,7 +456,7 @@ wm_detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace,
     {
         gf_win_info_t *win = &windows->items[i];
 
-        if (!win->is_valid || wm_is_excluded (m, win->id))
+        if (!win->is_valid || wm_is_system_excluded (m, win->id))
             continue;
         if (win->workspace_id != current_workspace)
             continue;
