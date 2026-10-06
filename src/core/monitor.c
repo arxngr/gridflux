@@ -14,6 +14,8 @@ window_is_minimized (gf_wm_t *m, gf_win_info_t *win)
 gf_err_t
 wm_request_visibility (gf_wm_t *m, gf_win_info_t *win, bool minimized)
 {
+    if (wm_is_excluded (m, win->id))
+        return GF_SUCCESS;
     gf_platform_t *platform = wm_platform (m);
     uint8_t request = minimized ? 1 : 2;
     bool actual = window_is_minimized (m, win);
@@ -109,6 +111,8 @@ wm_observe_window_state (gf_wm_t *m, gf_win_info_t *win, bool *minimized, bool *
 void
 wm_request_maximized (gf_wm_t *m, gf_win_info_t *win)
 {
+    if (wm_is_excluded (m, win->id))
+        return;
     gf_platform_t *platform = wm_platform (m);
     if (!win->is_minimized && platform->window_set_maximized
         && platform->window_set_maximized (*wm_display (m), win->id, win->is_maximized)
@@ -137,8 +141,14 @@ wm_sync_monitor_activity (gf_wm_t *m, gf_monitor_id_t active_monitor)
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_win_info_t *win = &windows->items[i];
-        if (!win->is_valid || wm_is_excluded (m, win->id))
+        if (!win->is_valid)
             continue;
+        if (wm_is_excluded (m, win->id))
+        {
+            if (platform->border_remove)
+                platform->border_remove (platform, win->id);
+            continue;
+        }
 
         bool maximized = win->is_maximized
                          || (platform->window_is_maximized

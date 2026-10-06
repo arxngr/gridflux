@@ -119,7 +119,7 @@ excluded_force_retile (gf_wm_t *m)
         ws_list->items[i].is_custom_layout = false;
 }
 
-// Park user-excluded windows on the excluded workspace (minimized, no border)
+// Park user-excluded windows on the excluded workspace without native changes
 // and bring restored ones back to a normal workspace. Runs each tick after the
 // window list is synced; only acts on state transitions, so it is idle once
 // everything is reconciled.
@@ -140,25 +140,49 @@ wm_reconcile_excluded_windows (gf_wm_t *m)
 
         gf_ws_info_t *cur = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
 
-        // Leave maximized windows on their maximized workspace; only reconcile
-        // them once they are unmaximized.
-        if (win->is_maximized || (cur && cur->has_maximized_state))
-            continue;
-
         bool parked = cur && cur->is_excluded_ws;
         bool excluded = wm_user_excluded (m, win->id);
 
-        if (excluded && !parked)
+        if (excluded)
         {
-            platform->border_remove (platform, win->id);
-            wm_move_window_to_workspace (
-                m, win, wm_lookup_or_create_excluded_ws (m, win->monitor_id));
-            changed = true;
-        }
-        else if (excluded && parked)
-        {
-            // Already parked: keep any border off (idempotent no-op once gone).
-            platform->border_remove (platform, win->id);
+            gf_ws_id_t old_ws_id = win->workspace_id;
+            gf_ws_id_t restore_id = win->restore_workspace_id;
+            gf_monitor_id_t old_monitor = cur ? cur->monitor_id : win->monitor_id;
+            bool was_active_max
+                = cur && cur->has_maximized_state && old_monitor < GF_MAX_MONITORS
+                  && workspaces->active_workspace[old_monitor] == old_ws_id;
+            if (platform->border_remove)
+                platform->border_remove (platform, win->id);
+            // Release only visibility owned by GridFlux. User-minimized apps
+            // stay minimized; future native maximize/restore remains their choice.
+            if (win->monitor_suspended && platform->window_unminimize)
+                platform->window_unminimize (display, win->id);
+            win->monitor_suspended = false;
+            win->visibility_request = win->visibility_wait = win->visibility_attempts
+                = win->visibility_settle = win->mode_wait = 0;
+            win->is_maximized = false;
+            win->maximize_fill_failures = 0;
+            win->restore_workspace_id = 0;
+            win->is_minimized = platform->window_is_minimized
+                                    ? platform->window_is_minimized (display, win->id)
+                                    : win->is_minimized;
+            if (!parked || cur->monitor_id != win->monitor_id)
+            {
+                win->workspace_id = wm_lookup_or_create_excluded_ws (m, win->monitor_id);
+                changed = true;
+            }
+            if (was_active_max)
+            {
+                gf_ws_info_t *restore
+                    = gf_workspace_list_find_by_id (workspaces, restore_id);
+                gf_ws_id_t target
+                    = restore && restore->monitor_id == old_monitor
+                              && !restore->has_maximized_state && !restore->is_excluded_ws
+                          ? restore_id
+                          : wm_lookup_or_create_ws_for_monitor (m, old_monitor);
+                wm_switch_workspace (m, target, old_monitor);
+            }
+            wm_cleanup_empty_maximized_ws (m, old_ws_id);
         }
         else if (!excluded && parked)
         {
@@ -174,10 +198,9 @@ wm_reconcile_excluded_windows (gf_wm_t *m)
                 target = wm_lookup_or_create_ws_for_monitor (m, mon);
 
             wm_move_window_to_workspace (m, win, target);
-            if (platform->window_unminimize)
-                platform->window_unminimize (display, win->id);
-            win->is_minimized = false;
-            if (m->config->enable_borders && platform->border_add)
+            if (m->config->enable_borders && platform->border_add && !win->is_minimized
+                && (!platform->window_is_maximized
+                    || !platform->window_is_maximized (display, win->id)))
                 platform->border_add (platform, win->id, m->config->border_color,
                                       GF_BORDER_WIDTH);
             changed = true;

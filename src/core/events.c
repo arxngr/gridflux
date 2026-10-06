@@ -59,16 +59,6 @@ exclude_focused_window (gf_wm_t *m)
         return;
     }
 
-    // Only exclude normal tiled windows, not maximized/fullscreen ones.
-    if ((platform->window_is_maximized
-         && platform->window_is_maximized (display, focused))
-        || (platform->window_is_fullscreen
-            && platform->window_is_fullscreen (display, focused)))
-    {
-        GF_LOG_DEBUG ("Keymap: ignoring exclude for maximized/fullscreen window");
-        return;
-    }
-
     if (gf_excludes_add (m->config, class_name) == GF_SUCCESS)
     {
         GF_LOG_INFO ("Keymap: excluded focused app '%s'", class_name);
@@ -231,6 +221,21 @@ static void
 sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *existing)
 {
     bool live_minimized = window_live_minimized (m, live->id, live->is_minimized);
+    gf_ws_info_t *workspace
+        = gf_workspace_list_find_by_id (wm_workspaces (m), existing->workspace_id);
+    if (wm_user_excluded (m, live->id) || (workspace && workspace->is_excluded_ws))
+    {
+        // Observe the app without issuing native state or geometry requests.
+        // Reconciliation releases/adopts management after this enumeration.
+        live->workspace_id = existing->workspace_id;
+        live->restore_workspace_id = existing->restore_workspace_id;
+        live->monitor_suspended = existing->monitor_suspended;
+        live->is_minimized = live_minimized;
+        live->is_maximized = false;
+        if (live_minimized)
+            live->monitor_id = existing->monitor_id;
+        return;
+    }
     bool native_minimized = live_minimized;
     bool mode_pending = existing->mode_wait != 0;
     bool live_maximized
@@ -383,7 +388,9 @@ gf_wm_watch (gf_wm_t *m)
         {
             gf_win_info_t *win = &ws_wins[i];
 
-            if (!win->is_valid || wm_is_excluded (m, win->id))
+            if (!win->is_valid
+                || (platform->window_is_excluded
+                    && platform->window_is_excluded (display, win->id)))
                 continue;
 
             if (platform->monitor_from_window)
@@ -408,7 +415,8 @@ gf_wm_watch (gf_wm_t *m)
                 gf_ws_info_t *current_ws
                     = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
 
-                if (current_ws && !rule && current_ws->has_rule)
+                if (current_ws && !rule && current_ws->has_rule
+                    && !wm_user_excluded (m, win->id))
                 {
                     gf_ws_id_t free_ws
                         = wm_lookup_or_create_ws_for_monitor (m, win->monitor_id);
@@ -547,6 +555,20 @@ gf_wm_event (gf_wm_t *m)
     if (curr_win_id == 0)
     {
         GF_LOG_WARN ("[EVENT] No active window");
+        return;
+    }
+
+    if (wm_is_excluded (m, curr_win_id))
+    {
+        if (platform->border_remove)
+            platform->border_remove (platform, curr_win_id);
+        gf_monitor_id_t monitor_id = wm_find_active_monitor (m);
+        if (monitor_id < GF_MAX_MONITORS)
+        {
+            m->state.active_monitor_id = monitor_id;
+            m->state.active_monitor_valid = true;
+        }
+        wm_sync_dock_visibility (m);
         return;
     }
 

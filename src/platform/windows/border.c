@@ -464,9 +464,15 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    for (int i = 0; i < data->border_count; i++)
+    for (int i = 0; i < data->border_count;)
     {
         gf_border_t *b = data->borders[i];
+
+        if (window_user_excluded (config, b->target))
+        {
+            gf_border_remove (platform, b->target);
+            continue;
+        }
 
         if (IsWindow (b->target) && !IsIconic (b->target))
             b->monitor_id = gf_monitor_from_window (platform, b->target);
@@ -481,6 +487,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
             }
         }
         border_update_overlay (b, gui_rects, gui_count);
+        i++;
     }
 
     // Process messages for border windows (they are created on this thread)

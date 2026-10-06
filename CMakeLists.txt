@@ -402,6 +402,7 @@ if(BUILD_TESTING)
     add_executable(gridflux-monitor-state-test
         tests/test_monitor_state.c src/core/events.c src/core/workspace.c
         src/core/window.c src/core/arrange.c src/core/monitor.c
+        src/config/excludes.c src/config/rules.c
         src/utils/list.c src/utils/memory.c)
     target_include_directories(gridflux-monitor-state-test PRIVATE ${PLATFORM_INCLUDES})
     if(MSVC)
@@ -413,6 +414,7 @@ if(BUILD_TESTING)
     if(WIN32)
         add_executable(gridflux-windows-border-test
             tests/test_windows_border.c src/platform/windows/border.c
+            src/config/excludes.c src/config/rules.c
             src/platform/windows/window.c ${WINDOWS_WINDOW_SUPPORT_SOURCES})
         target_include_directories(gridflux-windows-border-test PRIVATE ${PLATFORM_INCLUDES})
         target_link_libraries(gridflux-windows-border-test PRIVATE user32 gdi32 dwmapi)

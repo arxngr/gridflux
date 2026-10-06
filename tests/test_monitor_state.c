@@ -20,7 +20,7 @@ static uint32_t mode_requests[5];
 static uint32_t writes[5], minimizes[5], restores[5], failures;
 static gf_handle_t focused, rejected;
 static gf_handle_t rejected_visibility;
-static bool dragging, missing_external;
+static bool dragging, missing_external, fourth_window;
 static unsigned
 index_of (gf_handle_t window)
 {
@@ -38,12 +38,16 @@ gf_log (gf_log_level_t level, const char *format, ...)
     (void)level;
     (void)format;
 }
-const gf_window_rule_t *
-gf_rules_find (const gf_config_t *cfg, const char *name)
+const char *
+gf_config_get_path (void)
 {
-    (void)cfg;
-    (void)name;
     return NULL;
+}
+void
+gf_config_save (const char *path, const gf_config_t *cfg)
+{
+    (void)path;
+    (void)cfg;
 }
 bool
 gf_config_workspace_is_locked (const gf_config_t *cfg, gf_ws_id_t id)
@@ -66,26 +70,11 @@ gf_config_workspace_unlock (gf_config_t *cfg, gf_ws_id_t id)
     (void)id;
     return GF_SUCCESS;
 }
-bool
-gf_exclude_list_contains (const gf_exclude_list_t *list, const char *name)
+static void
+get_class (gf_display_t display, gf_handle_t window, char *name, size_t size)
 {
-    (void)list;
-    (void)name;
-    return false;
-}
-gf_err_t
-gf_excludes_add (gf_config_t *cfg, const char *name)
-{
-    (void)cfg;
-    (void)name;
-    return GF_SUCCESS;
-}
-gf_err_t
-gf_excludes_remove (gf_config_t *cfg, const char *name)
-{
-    (void)cfg;
-    (void)name;
-    return GF_SUCCESS;
+    (void)display;
+    snprintf (name, size, "test-app-%u", index_of (window));
 }
 
 static gf_handle_t
@@ -240,9 +229,9 @@ enumerate (gf_display_t display, gf_ws_id_t *ws, gf_win_info_t **out, uint32_t *
 {
     (void)display;
     (void)ws;
-    *count = 3;
+    *count = fourth_window ? 4 : 3;
     *out = gf_calloc (*count, sizeof (**out));
-    for (unsigned i = 1; i <= 3; i++)
+    for (unsigned i = 1; i <= *count; i++)
     {
         (*out)[i - 1]
             = (gf_win_info_t){ .id = handle (i),
@@ -252,7 +241,7 @@ enumerate (gf_display_t display, gf_ws_id_t *ws, gf_win_info_t **out, uint32_t *
                                .is_valid = true,
                                .is_minimized = minimized[i],
                                .is_maximized = is_maximized (NULL, handle (i)) };
-        strcpy ((*out)[i - 1].name, "test-app");
+        get_class (display, handle (i), (*out)[i - 1].name, sizeof ((*out)[i - 1].name));
     }
     return GF_SUCCESS;
 }
@@ -322,6 +311,7 @@ main (void)
     gf_layout_engine_t engine = { .apply_layout = layout };
     gf_platform_t platform = { .window_enumerate = enumerate,
                                .window_get_focused = get_focused,
+                               .window_get_class = get_class,
                                .window_is_minimized = is_minimized,
                                .window_is_maximized = is_maximized,
                                .window_is_fullscreen = no_state,
@@ -615,6 +605,106 @@ main (void)
         wm_observe_window_state (&m, &pending, &observed_min, &observed_max);
         assert (observed_max && pending.mode_wait == 5 - i);
     }
+    // Excluding an already maximized app releases GridFlux's mode without
+    // changing the app's native maximize state or the other monitor.
+    missing_external = false;
+    rejected = rejected_visibility = NULL;
+    platform.window_maximize_async = false;
+    focused = handle (1);
+    maximized[1] = true;
+    minimized[1] = false;
+    tick (&m);
+    assert (dock_hidden[0] && filled[1]);
+    unsigned mode_before = mode_requests[1], writes_before = writes[1];
+    unsigned min_before = minimizes[1], restore_before = restores[1];
+    bool external_min = minimized[2], external_dock = dock_hidden[1];
+    assert (gf_excludes_add (&cfg, "test-app-1") == GF_SUCCESS);
+    tick (&m);
+    gf_ws_info_t *excluded_ws
+        = gf_workspace_list_find_by_id (&m.state.workspaces, win (&m, 1)->workspace_id);
+    assert (excluded_ws && excluded_ws->is_excluded_ws && excluded_ws->monitor_id == 0);
+    assert (!bordered[1] && !win (&m, 1)->is_maximized && maximized[1]);
+    assert (!dock_hidden[0] && !filled[1]);
+    assert (minimized[2] == external_min && dock_hidden[1] == external_dock);
+    for (unsigned i = 0; i < 10; i++)
+        tick (&m);
+    assert (mode_requests[1] == mode_before && writes[1] == writes_before);
+    assert (minimizes[1] == min_before && restores[1] == restore_before);
+
+    // Native restore, minimize, and monitor transfers remain entirely the
+    // excluded app's choice. Its parked workspace still follows its monitor.
+    maximized[1] = false;
+    physical[1] = 1;
+    actual[1].x = 2050;
+    tick (&m);
+    excluded_ws
+        = gf_workspace_list_find_by_id (&m.state.workspaces, win (&m, 1)->workspace_id);
+    assert (win (&m, 1)->monitor_id == 1 && excluded_ws->monitor_id == 1);
+    assert (!bordered[1] && !dock_hidden[1] && writes[1] == writes_before);
+    minimized[1] = true;
+    for (unsigned i = 0; i < 3; i++)
+        tick (&m);
+    assert (minimized[1] && restores[1] == restore_before);
+    minimized[1] = false;
+    maximized[1] = true;
+    tick (&m);
+    assert (maximized[1] && !dock_hidden[1] && !win (&m, 1)->is_maximized);
+
+    // Excluded apps discovered already maximized are never registered in a
+    // managed maximized workspace, even when they open in the background.
+    assert (gf_excludes_add (&cfg, "test-app-4") == GF_SUCCESS);
+    fourth_window = true;
+    physical[4] = 0;
+    minimized[4] = false;
+    maximized[4] = true;
+    bounds (NULL, 0, &actual[4]);
+    min_before = minimizes[4];
+    tick (&m);
+    assert (!win (&m, 4)->is_maximized && maximized[4] && !minimized[4]);
+    assert (!bordered[4] && minimizes[4] == min_before && !filled[4]);
+
+    // Focusing an excluded app over a managed maximized app reveals only its
+    // monitor's taskbar. It does not select a workspace or minimize either app.
+    focused = handle (3);
+    maximized[3] = true;
+    minimized[3] = false;
+    tick (&m);
+    assert (dock_hidden[0] && !dock_hidden[1]);
+    gf_ws_id_t behind = m.state.workspaces.active_workspace[0];
+    min_before = minimizes[3];
+    focused = handle (4);
+    tick (&m);
+    assert (!dock_hidden[0] && !dock_hidden[1]);
+    assert (m.state.workspaces.active_workspace[0] == behind);
+    assert (win (&m, 3)->is_maximized && !minimized[3] && !minimized[4]);
+    assert (minimizes[3] == min_before && !bordered[4] && !filled[4]);
+    focused = handle (3);
+    tick (&m);
+    assert (dock_hidden[0] && !dock_hidden[1]);
+
+    // Removing an exclusion adopts the current native mode once. It must
+    // neither draw a border on a maximized app nor require another selection.
+    assert (gf_excludes_remove (&cfg, "test-app-1") == GF_SUCCESS);
+    focused = handle (1);
+    tick (&m);
+    assert (win (&m, 1)->is_maximized && !bordered[1] && dock_hidden[1]);
+    maximized[1] = false;
+    tick (&m);
+    assert (!win (&m, 1)->is_maximized && bordered[1] && !dock_hidden[1]);
+    assert (dock_hidden[0] && !minimized[4] && !bordered[4]);
+
+    // Exclusion releases an earlier GridFlux minimize once, while retaining
+    // the user-minimized behavior checked above.
+    restore_before = restores[2];
+    assert (wm_request_visibility (&m, win (&m, 2), true) == GF_SUCCESS);
+    assert (minimized[2] && win (&m, 2)->monitor_suspended);
+    assert (gf_excludes_add (&cfg, "test-app-2") == GF_SUCCESS);
+    tick (&m);
+    assert (!minimized[2] && !bordered[2] && restores[2] == restore_before + 1);
+    for (unsigned i = 0; i < 3; i++)
+        tick (&m);
+    assert (restores[2] == restore_before + 1 && !win (&m, 2)->monitor_suspended);
+    gf_exclude_list_free (&cfg.excluded_apps);
     gf_window_list_cleanup (&m.state.windows);
     gf_workspace_list_cleanup (&m.state.workspaces);
     puts ("Monitor isolation and maximize transition regressions passed");

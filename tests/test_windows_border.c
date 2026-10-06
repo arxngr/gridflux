@@ -8,12 +8,16 @@
 // The test target is a nonactivating tool window outside the visible desktop.
 static HWND clip_window;
 
-bool
-gf_exclude_list_contains (const gf_exclude_list_t *list, const char *name)
+const char *
+gf_config_get_path (void)
 {
-    (void)list;
-    (void)name;
-    return false;
+    return NULL;
+}
+void
+gf_config_save (const char *path, const gf_config_t *cfg)
+{
+    (void)path;
+    (void)cfg;
 }
 gf_monitor_id_t
 gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window)
@@ -147,6 +151,15 @@ main (void)
     assert (DestroyWindow (data.borders[0]->overlay));
     gf_border_add (&platform, target, config.border_color, 3);
     check_overlay (&data);
+    // Runtime exclusions must remove existing overlays, not merely clip
+    // around the target's frame and leave its own outside ring visible.
+    assert (gf_excludes_add (&config, cls.lpszClassName) == GF_SUCCESS);
+    gf_border_update (&platform, &config);
+    assert (data.border_count == 0);
+    assert (gf_excludes_remove (&config, cls.lpszClassName) == GF_SUCCESS);
+    gf_border_add (&platform, target, config.border_color, 3);
+    check_overlay (&data);
+    gf_exclude_list_free (&config.excluded_apps);
     gf_border_cleanup (&platform);
     assert (data.border_count == 0);
     DestroyWindow (target);

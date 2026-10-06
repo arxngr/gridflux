@@ -56,14 +56,14 @@ typedef struct
 
 bool wm_user_excluded (gf_wm_t *m, gf_handle_t w);
 
-// Platform (system) exclusion only: windows GridFlux never manages (shell, its
-// own GUI, tool windows). User exclusions are handled separately by parking the
-// window on the excluded workspace, so they stay tracked/managed.
+// User exclusions remain tracked for removal and monitor identity, but share
+// the same management guards as system windows.
 static inline bool
 wm_is_excluded (gf_wm_t *m, gf_handle_t w)
 {
     gf_platform_t *p = wm_platform (m);
-    return p->window_is_excluded && p->window_is_excluded (*wm_display (m), w);
+    return (p->window_is_excluded && p->window_is_excluded (*wm_display (m), w))
+           || wm_user_excluded (m, w);
 }
 
 /* --- Workspace Management --- */

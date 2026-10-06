@@ -409,7 +409,7 @@ wm_enforce_fullscreen (gf_wm_t *m)
     gf_win_list_t *windows = wm_windows (m);
     gf_handle_t active = m->platform->window_get_focused (m->display);
 
-    if (active == 0
+    if (active == 0 || wm_is_excluded (m, active)
         || !m->platform->window_is_fullscreen (m->display, (gf_handle_t)active))
         return;
 
@@ -417,7 +417,7 @@ wm_enforce_fullscreen (gf_wm_t *m)
 
     for (uint32_t i = 0; i < windows->count; i++)
     {
-        if (windows->items[i].id == active)
+        if (windows->items[i].id == active || wm_is_excluded (m, windows->items[i].id))
             continue;
         if (active_monitor != (gf_monitor_id_t)-1
             && windows->items[i].monitor_id != active_monitor)

@@ -11,6 +11,14 @@ static gf_resize_event_t gesture;
 static bool fake_minimized[4];
 static bool fake_bordered[4];
 
+bool
+wm_user_excluded (gf_wm_t *m, gf_handle_t window)
+{
+    (void)m;
+    (void)window;
+    return false;
+}
+
 static uintptr_t
 fake_index (gf_handle_t window)
 {

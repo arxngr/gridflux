@@ -206,6 +206,20 @@ wm_sync_dock_visibility (gf_wm_t *m)
         should_hide = true;
     }
 
+    // An excluded foreground app uses the native taskbar on its own monitor,
+    // even when a managed maximized workspace remains selected behind it.
+    gf_handle_t focused
+        = platform->window_get_focused ? platform->window_get_focused (display) : 0;
+    if (focused && wm_user_excluded (m, focused))
+    {
+        gf_monitor_id_t monitor_id = wm_find_active_monitor (m);
+        if (monitor_id < GF_MAX_MONITORS)
+            hide_on_monitor[monitor_id] = false;
+        should_hide = false;
+        for (uint32_t i = 0; i < m->state.monitor_count; i++)
+            should_hide |= hide_on_monitor[i];
+    }
+
     if (platform->dock_sync)
     {
         platform->dock_sync (platform, hide_on_monitor, m->state.monitor_count);
@@ -920,6 +934,17 @@ wm_register_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws
     gf_ws_id_t current_ws_id = current_ws ? current_ws->id : -1;
 
     gf_wm_resolve_window_name (m, win->id, NULL, win->name, sizeof (win->name));
+
+    if (wm_user_excluded (m, win->id))
+    {
+        win->workspace_id = wm_lookup_or_create_excluded_ws (m, win->monitor_id);
+        win->restore_workspace_id = 0;
+        win->is_maximized = false;
+        gf_window_list_add (wm_windows (m), win);
+        if (platform->border_remove)
+            platform->border_remove (platform, win->id);
+        return;
+    }
 
     if (platform->window_is_maximized && platform->window_is_maximized (display, win->id))
     {

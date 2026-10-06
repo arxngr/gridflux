@@ -1,3 +1,4 @@
+#include "platform/windows/internal.h"
 #include "platform/windows/window.h"
 #include <assert.h>
 #include <stdio.h>
@@ -113,6 +114,34 @@ main (int argc, char **argv)
                       .hInstance = GetModuleHandle (NULL),
                       .lpszClassName = "GridFluxMaximizedTest" };
     assert (RegisterClassA (&cls));
+    // Restoring another monitor's maximized workspace must not activate its
+    // app and steal the user's first Alt-Tab selection. Use an isolated desktop.
+    HWND restore_target = CreateWindowExA (WS_EX_APPWINDOW, cls.lpszClassName, "restore",
+                                           WS_OVERLAPPEDWINDOW, -30000, -30000, 320, 240,
+                                           NULL, NULL, cls.hInstance, NULL);
+    HWND selected = CreateWindowExA (WS_EX_APPWINDOW, cls.lpszClassName, "selected",
+                                     WS_OVERLAPPEDWINDOW, -29000, -30000, 320, 240, NULL,
+                                     NULL, cls.hInstance, NULL);
+    assert (restore_target && selected);
+    ShowWindow (restore_target, SW_SHOWMAXIMIZED);
+    ShowWindow (restore_target, SW_SHOWMINNOACTIVE);
+    ShowWindow (selected, SW_SHOW);
+    SetActiveWindow (selected);
+    assert (GetActiveWindow () == selected && IsIconic (restore_target));
+    assert (gf_window_unminimize (NULL, restore_target) == GF_SUCCESS);
+    assert (!IsIconic (restore_target) && IsZoomed (restore_target));
+    assert (GetActiveWindow () == selected);
+    // Unmaximize explicitly before exercising normal restore.
+    ShowWindow (restore_target, SW_RESTORE);
+    ShowWindow (restore_target, SW_SHOWMINNOACTIVE);
+    ShowWindow (selected, SW_SHOW);
+    SetActiveWindow (selected);
+    assert (GetActiveWindow () == selected && IsIconic (restore_target));
+    assert (gf_window_unminimize (NULL, restore_target) == GF_SUCCESS);
+    assert (!IsIconic (restore_target) && !IsZoomed (restore_target));
+    assert (GetActiveWindow () == selected);
+    DestroyWindow (restore_target);
+    DestroyWindow (selected);
     // WS_MAXIMIZE sets native maximize state without displaying the test window.
     HWND window = CreateWindowExA (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, cls.lpszClassName,
                                    "GridFlux maximized bounds test",

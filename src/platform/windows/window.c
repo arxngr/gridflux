@@ -657,13 +657,9 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
     if (!IsIconic (window))
         return GF_SUCCESS;
 
-    WINDOWPLACEMENT placement = { .length = sizeof (placement) };
-    bool was_maximized = GetWindowPlacement (window, &placement)
-                         && (placement.flags & WPF_RESTORETOMAXIMIZED);
-    // SW_RESTORE/SW_SHOW activate the window and can change the focused monitor.
-    // Normal tiles are restored without activation; maximized workspace selection
-    // restores the original maximized placement rather than turning it into a tile.
-    ShowWindow (window, was_maximized ? SW_SHOWMAXIMIZED : SW_SHOWNOACTIVATE);
+    // Windows honors WPF_RESTORETOMAXIMIZED when restoring without activation.
+    // SW_SHOWMAXIMIZED would steal an Alt-Tab selection on another monitor.
+    ShowWindow (window, SW_SHOWNOACTIVATE);
     return GF_SUCCESS;
 }
 
