@@ -122,7 +122,7 @@ wm_move_window_to_workspace (gf_wm_t *m, gf_win_info_t *win, gf_ws_id_t new_ws_i
     gf_ws_info_t *old = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
     gf_ws_info_t *new = gf_workspace_list_find_by_id (workspaces, new_ws_id);
 
-    if (!old || !new || old == new || new->monitor_id != win->monitor_id)
+    if (!old || !new || old == new || !gf_workspace_has_monitor (new, win->monitor_id))
         return;
 
     gf_win_info_t *tracked = gf_window_list_find_by_window_id (windows, win->id);
@@ -152,7 +152,8 @@ wm_recount_workspace_windows (gf_wm_t *m, gf_ws_list_t *workspaces,
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         workspaces->items[i].window_count = 0;
-        workspaces->items[i].available_space = max_per_ws;
+        workspaces->items[i].available_space
+            = workspaces->items[i].is_excluded_ws ? INT32_MAX : max_per_ws;
     }
 
     for (uint32_t i = 0; i < windows->count; i++)
@@ -162,7 +163,7 @@ wm_recount_workspace_windows (gf_wm_t *m, gf_ws_list_t *workspaces,
         {
             gf_ws_id_t ws_id = windows->items[i].workspace_id;
             gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, ws_id);
-            if (ws && ws->monitor_id == windows->items[i].monitor_id)
+            if (gf_workspace_has_monitor (ws, windows->items[i].monitor_id))
             {
                 ws->window_count++;
                 ws->available_space--;
@@ -177,7 +178,7 @@ wm_win_has_assigned_workspace (gf_win_info_t *win, gf_ws_list_t *workspaces)
     if (win->workspace_id < GF_FIRST_WORKSPACE_ID)
         return false;
     gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
-    return ws && ws->monitor_id == win->monitor_id;
+    return gf_workspace_has_monitor (ws, win->monitor_id);
 }
 
 void
@@ -289,7 +290,7 @@ wm_switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace,
         return;
 
     gf_ws_info_t *target = gf_workspace_list_find_by_id (workspaces, current_workspace);
-    if (!target || target->monitor_id != active_monitor)
+    if (!gf_workspace_has_monitor (target, active_monitor))
         return;
 
     if (workspaces->active_workspace[active_monitor] != current_workspace)
@@ -302,7 +303,7 @@ wm_switch_workspace (gf_wm_t *m, gf_ws_id_t current_workspace,
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
         gf_ws_id_t ws_id = workspaces->items[i].id;
-        if (workspaces->items[i].monitor_id != active_monitor)
+        if (!gf_workspace_has_monitor (&workspaces->items[i], active_monitor))
             continue;
         if (ws_id == current_workspace)
             continue;
@@ -409,7 +410,7 @@ wm_sync_workspaces (gf_wm_t *m)
 
         gf_ws_id_t active_id = workspaces->active_workspace[monitor_id];
         gf_ws_info_t *active = gf_workspace_list_find_by_id (workspaces, active_id);
-        if (!active || active->monitor_id != monitor_id)
+        if (!gf_workspace_has_monitor (active, monitor_id))
         {
             gf_ws_info_t *first = gf_workspace_list_find_by_monitor_local (
                 workspaces, monitor_id, GF_FIRST_WORKSPACE_ID);
@@ -448,7 +449,7 @@ preserve_existing_assignments (gf_wm_t *m)
         else if (old_ws && old_ws->has_maximized_state)
             target = wm_lookup_or_create_maximized_ws (m, win->monitor_id);
         else if (old_ws && old_ws->is_excluded_ws)
-            target = wm_lookup_or_create_excluded_ws (m, win->monitor_id, win->id);
+            target = wm_lookup_or_create_excluded_ws (m);
         else
             target = wm_lookup_or_create_ws_for_monitor (m, win->monitor_id);
         if (target > 0)
@@ -505,7 +506,7 @@ wm_assign_windows_to_workspaces (gf_wm_t *m)
     {
         gf_ws_info_t *active = gf_workspace_list_find_by_id (
             workspaces, workspaces->active_workspace[mon_idx]);
-        if (!active || active->monitor_id != mon_idx)
+        if (!gf_workspace_has_monitor (active, mon_idx))
         {
             gf_ws_info_t *first = gf_workspace_list_find_by_monitor_local (
                 workspaces, mon_idx, GF_FIRST_WORKSPACE_ID);
@@ -572,7 +573,7 @@ wm_workspace_monitor_window_count (gf_wm_t *m, gf_ws_id_t workspace_id,
                                    gf_monitor_id_t monitor_id)
 {
     gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), workspace_id);
-    if (!ws || ws->monitor_id != monitor_id)
+    if (!gf_workspace_has_monitor (ws, monitor_id))
         return 0;
 
     gf_win_list_t *windows = wm_windows (m);
@@ -666,7 +667,7 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_m
         }
     }
     else if (old_ws && old_ws->is_excluded_ws)
-        target_workspace = wm_lookup_or_create_excluded_ws (m, new_monitor, win->id);
+        target_workspace = wm_lookup_or_create_excluded_ws (m);
     else if (old_ws && old_ws->rule_target_id > 0)
     {
         target_workspace
@@ -686,7 +687,7 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_m
     wm_request_maximized (m, win);
 
     gf_ws_info_t *target_ws = gf_workspace_list_find_by_id (workspaces, target_workspace);
-    if (activates_monitor && target_ws && target_ws->monitor_id == new_monitor)
+    if (activates_monitor && gf_workspace_has_monitor (target_ws, new_monitor))
     {
         gf_ws_id_t previous_active = workspaces->active_workspace[new_monitor];
         if (previous_active != target_workspace)
@@ -697,7 +698,7 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_m
         m->state.last_active_workspace[new_monitor] = target_workspace;
         m->state.last_active_window[new_monitor] = win->id;
     }
-    else if (target_ws && target_ws->monitor_id == new_monitor
+    else if (gf_workspace_has_monitor (target_ws, new_monitor)
              && target_workspace != workspaces->active_workspace[new_monitor]
              && platform->window_minimize)
     {
@@ -744,35 +745,24 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t new_m
                               GF_BORDER_WIDTH);
 }
 
-// Each excluded window owns a workspace on its monitor. Empty excluded
-// workspaces can be reused, but normal assignment never places windows on them.
+// All excluded windows reuse one workspace identity. Its active selection and
+// visibility are still evaluated independently for each window's monitor.
 gf_ws_id_t
-wm_lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id,
-                                 gf_handle_t window)
+wm_lookup_or_create_excluded_ws (gf_wm_t *m)
 {
-    if (monitor_id >= GF_MAX_MONITORS)
-        monitor_id = 0;
     gf_ws_list_t *workspaces = wm_workspaces (m);
 
-    gf_win_info_t *tracked = gf_window_list_find_by_window_id (wm_windows (m), window);
-    gf_ws_info_t *current
-        = tracked ? gf_workspace_list_find_by_id (workspaces, tracked->workspace_id)
-                  : NULL;
-    if (current && current->is_excluded_ws && current->monitor_id == monitor_id)
-        return current->id;
-
     for (uint32_t i = 0; i < workspaces->count; i++)
-        if (workspaces->items[i].is_excluded_ws
-            && workspaces->items[i].monitor_id == monitor_id
-            && gf_window_list_count_by_workspace (wm_windows (m), workspaces->items[i].id)
-                   == 0)
+        if (workspaces->items[i].is_excluded_ws)
             return workspaces->items[i].id;
 
-    gf_ws_id_t id = gf_workspace_create (workspaces, m->config->max_windows_per_workspace,
-                                         false, true, monitor_id, 0);
+    gf_ws_id_t id = gf_workspace_create (workspaces, INT32_MAX, false, true, 0, 0);
     gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, id);
     if (ws)
+    {
         ws->is_excluded_ws = true;
+        ws->monitor_id = GF_MONITOR_SHARED;
+    }
     return id;
 }
 
@@ -946,7 +936,7 @@ wm_register_new_window (gf_wm_t *m, gf_win_info_t *win, gf_ws_info_t *current_ws
 
     if (wm_user_excluded (m, win->id))
     {
-        win->workspace_id = wm_lookup_or_create_excluded_ws (m, win->monitor_id, win->id);
+        win->workspace_id = wm_lookup_or_create_excluded_ws (m);
         win->restore_workspace_id = 0;
         win->is_maximized = false;
         gf_window_list_add (wm_windows (m), win);

@@ -392,6 +392,13 @@ gf_workspace_list_init (gf_ws_list_t *list, uint32_t initial_capacity)
     return GF_SUCCESS;
 }
 
+bool
+gf_workspace_has_monitor (const gf_ws_info_t *ws, gf_monitor_id_t monitor_id)
+{
+    return ws && monitor_id < GF_MAX_MONITORS
+           && (ws->is_excluded_ws || ws->monitor_id == monitor_id);
+}
+
 gf_ws_info_t *
 gf_workspace_list_get_current (gf_ws_list_t *ws, gf_monitor_id_t monitor_id)
 {
@@ -400,7 +407,7 @@ gf_workspace_list_get_current (gf_ws_list_t *ws, gf_monitor_id_t monitor_id)
 
     gf_ws_info_t *current
         = gf_workspace_list_find_by_id (ws, ws->active_workspace[monitor_id]);
-    return current && current->monitor_id == monitor_id ? current : NULL;
+    return gf_workspace_has_monitor (current, monitor_id) ? current : NULL;
 }
 
 uint32_t
@@ -551,7 +558,7 @@ gf_workspace_list_remove_window (gf_ws_info_t *ws, gf_win_list_t *windows,
             continue;
 
         if (w->id == win_id && w->workspace_id == ws->id
-            && w->monitor_id == ws->monitor_id)
+            && gf_workspace_has_monitor (ws, w->monitor_id))
         {
             ws->window_count--;
             ws->available_space++;
@@ -576,7 +583,7 @@ gf_workspace_list_add_window (gf_ws_info_t *ws, gf_win_list_t *windows,
         if (!w->is_valid)
             continue;
 
-        if (w->id == win_id && w->monitor_id == ws->monitor_id)
+        if (w->id == win_id && gf_workspace_has_monitor (ws, w->monitor_id))
         {
             w->workspace_id = ws->id;
 

@@ -114,7 +114,7 @@ gf_wm_keymap_event (gf_wm_t *m)
     int current_idx = -1;
     for (uint32_t i = 0; i < workspaces->count; i++)
     {
-        if (workspaces->items[i].monitor_id != active_monitor)
+        if (!gf_workspace_has_monitor (&workspaces->items[i], active_monitor))
             continue;
         if (workspaces->items[i].id == workspaces->active_workspace[active_monitor])
         {
@@ -133,7 +133,7 @@ gf_wm_keymap_event (gf_wm_t *m)
     for (int offset = 1; offset < n; offset++)
     {
         int idx = (current_idx + step * offset + n) % n;
-        if (workspaces->items[idx].monitor_id == active_monitor
+        if (gf_workspace_has_monitor (&workspaces->items[idx], active_monitor)
             && wm_workspace_monitor_window_count (m, workspaces->items[idx].id,
                                                   active_monitor)
                    > 0)

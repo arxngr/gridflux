@@ -156,8 +156,7 @@ wm_sync_monitor_activity (gf_wm_t *m, gf_monitor_id_t active_monitor)
         gf_ws_info_t *workspace
             = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
         bool in_live_workspace
-            = win->monitor_id < GF_MAX_MONITORS && workspace
-              && workspace->monitor_id == win->monitor_id
+            = gf_workspace_has_monitor (workspace, win->monitor_id)
               && win->workspace_id == workspaces->active_workspace[win->monitor_id];
 
         if (!in_live_workspace)

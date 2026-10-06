@@ -39,6 +39,7 @@ gf_err_t gf_window_list_remove (gf_win_list_t *list, gf_handle_t window_id);
 gf_err_t gf_window_list_update (gf_win_list_t *list, const gf_win_info_t *window);
 
 // --- Workspace List Operations ---
+bool gf_workspace_has_monitor (const gf_ws_info_t *ws, gf_monitor_id_t monitor_id);
 gf_ws_id_t gf_workspace_create (gf_ws_list_t *ws, uint32_t max_win_per_ws,
                                 bool maximized_state, bool is_locked,
                                 gf_monitor_id_t monitor_id, gf_ws_id_t local_id);

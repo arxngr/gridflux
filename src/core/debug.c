@@ -57,7 +57,8 @@ gf_wm_debug_stats (const gf_wm_t *m)
         {
             const gf_win_info_t *win = &windows->items[w];
 
-            if (win->workspace_id != ws->id || win->monitor_id != ws->monitor_id)
+            if (win->workspace_id != ws->id
+                || !gf_workspace_has_monitor (ws, win->monitor_id))
                 continue;
 
             gf_wm_window_class (m, win->id, win_name, sizeof (win_name));

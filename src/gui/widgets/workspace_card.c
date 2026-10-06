@@ -204,7 +204,7 @@ static gboolean
 window_in_workspace (const gf_win_info_t *win, const gf_ws_info_t *ws)
 {
     return win->is_valid && win->workspace_id == ws->id
-           && win->monitor_id == ws->monitor_id && win->name[0] != '\0';
+           && gf_workspace_has_monitor (ws, win->monitor_id) && win->name[0] != '\0';
 }
 
 static GtkWidget *
@@ -252,7 +252,10 @@ build_chips (gf_app_state_t *app, const gf_ws_info_t *ws, const gf_win_list_t *w
 static void
 compose_status (const gf_ws_info_t *ws, char *buf, size_t n)
 {
-    if (ws->has_maximized_state)
+    if (ws->is_excluded_ws)
+        snprintf (buf, n, "All monitors · %u excluded app%s", ws->window_count,
+                  ws->window_count == 1 ? "" : "s");
+    else if (ws->has_maximized_state)
         snprintf (buf, n, "Monitor %u · %u window%s · maximized", ws->monitor_id,
                   ws->window_count, ws->window_count == 1 ? "" : "s");
     else if (ws->window_count == 0)
@@ -275,7 +278,10 @@ build_number (const gf_ws_info_t *ws)
     GtkWidget *num = gtk_label_new (idbuf);
     gtk_widget_add_css_class (num, "gf-wsnum");
     char cap_text[24];
-    snprintf (cap_text, sizeof (cap_text), "M%u · WS", ws->monitor_id);
+    if (ws->is_excluded_ws)
+        snprintf (cap_text, sizeof (cap_text), "Shared · WS");
+    else
+        snprintf (cap_text, sizeof (cap_text), "M%u · WS", ws->monitor_id);
     GtkWidget *cap = gtk_label_new (cap_text);
     gtk_widget_add_css_class (cap, "gf-wsnum-cap");
 
@@ -321,11 +327,13 @@ build_minimap (uint32_t count, uint32_t cap, bool maximized)
 }
 
 static GtkWidget *
-build_pill (bool maximized)
+build_pill (const gf_ws_info_t *ws)
 {
-    GtkWidget *pill = gtk_label_new (maximized ? "Maximized" : "Tiled");
+    GtkWidget *pill = gtk_label_new (ws->is_excluded_ws        ? "Excluded"
+                                     : ws->has_maximized_state ? "Maximized"
+                                                               : "Tiled");
     gtk_widget_add_css_class (pill, "gf-pill");
-    gtk_widget_add_css_class (pill, maximized ? "max" : "tiled");
+    gtk_widget_add_css_class (pill, ws->has_maximized_state ? "max" : "tiled");
     return pill;
 }
 
@@ -355,7 +363,7 @@ build_right_column (const gf_ws_info_t *ws, ws_ctx_t *ctx)
     uint32_t cap = ws->max_windows ? ws->max_windows : 4;
     gtk_box_append (GTK_BOX (right),
                     build_minimap (ws->window_count, cap, ws->has_maximized_state));
-    gtk_box_append (GTK_BOX (right), build_pill (ws->has_maximized_state));
+    gtk_box_append (GTK_BOX (right), build_pill (ws));
     gtk_box_append (GTK_BOX (right), build_lock (ctx));
     return right;
 }
@@ -375,8 +383,12 @@ gf_gui_workspace_card_new (const gf_ws_info_t *ws, const gf_win_list_t *windows,
     g_object_set_data_full (G_OBJECT (card), "ctx", ctx, g_free);
     gtk_box_append (GTK_BOX (card), build_number (ws));
     char tooltip[96];
-    snprintf (tooltip, sizeof (tooltip), "Monitor %u, local workspace %d (ID %d)",
-              ws->monitor_id, ws->local_id, ws->id);
+    if (ws->is_excluded_ws)
+        snprintf (tooltip, sizeof (tooltip),
+                  "Excluded workspace shared across monitors (ID %d)", ws->id);
+    else
+        snprintf (tooltip, sizeof (tooltip), "Monitor %u, local workspace %d (ID %d)",
+                  ws->monitor_id, ws->local_id, ws->id);
     gtk_widget_set_tooltip_text (card, tooltip);
 
     GtkWidget *info = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);

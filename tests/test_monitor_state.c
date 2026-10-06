@@ -312,7 +312,8 @@ tick (gf_wm_t *m)
         gf_win_info_t *w = &m->state.windows.items[i];
         gf_ws_info_t *ws
             = gf_workspace_list_find_by_id (&m->state.workspaces, w->workspace_id);
-        assert (ws && ws->monitor_id == w->monitor_id);
+        assert (w->monitor_id < m->state.monitor_count);
+        assert (gf_workspace_has_monitor (ws, w->monitor_id));
         if (w->restore_workspace_id)
         {
             ws = gf_workspace_list_find_by_id (&m->state.workspaces,
@@ -641,7 +642,9 @@ main (void)
     tick (&m);
     gf_ws_info_t *excluded_ws
         = gf_workspace_list_find_by_id (&m.state.workspaces, win (&m, 1)->workspace_id);
-    assert (excluded_ws && excluded_ws->is_excluded_ws && excluded_ws->monitor_id == 0);
+    assert (excluded_ws && excluded_ws->is_excluded_ws
+            && excluded_ws->monitor_id == GF_MONITOR_SHARED);
+    gf_ws_id_t shared_excluded_id = excluded_ws->id;
     assert (!excluded_ws->has_maximized_state && excluded_ws->window_count == 1);
     assert (m.state.workspaces.active_workspace[0] == excluded_ws->id);
     assert (!bordered[1] && !win (&m, 1)->is_maximized && maximized[1]);
@@ -660,7 +663,8 @@ main (void)
     tick (&m);
     excluded_ws
         = gf_workspace_list_find_by_id (&m.state.workspaces, win (&m, 1)->workspace_id);
-    assert (win (&m, 1)->monitor_id == 1 && excluded_ws->monitor_id == 1);
+    assert (win (&m, 1)->monitor_id == 1 && excluded_ws->monitor_id == GF_MONITOR_SHARED);
+    assert (excluded_ws->id == shared_excluded_id);
     assert (m.state.workspaces.active_workspace[1] == excluded_ws->id);
     assert (m.state.workspaces.active_workspace[0] == 1 && !minimized[3]);
     assert (minimized[2] && !minimized[1]);
@@ -674,8 +678,8 @@ main (void)
     tick (&m);
     assert (maximized[1] && !dock_hidden[1] && !win (&m, 1)->is_maximized);
 
-    // Each excluded window has a distinct workspace on its current monitor.
-    // A background window is hidden until its own workspace is selected.
+    // A second excluded app reuses the populated shared workspace. Opening it
+    // on a monitor already viewing that workspace does not hide its siblings.
     assert (gf_excludes_add (&cfg, "test-app-4") == GF_SUCCESS);
     fourth_window = true;
     physical[4] = 1;
@@ -683,24 +687,18 @@ main (void)
     maximized[4] = true;
     bounds (NULL, 1, &actual[4]);
     min_before = minimizes[4];
-    delay_visibility[4] = true;
     tick (&m);
-    assert (!minimized[4] && win (&m, 4)->is_minimized);
-    assert (win (&m, 4)->visibility_request == 1 && win (&m, 4)->monitor_id == 1);
     for (unsigned i = 0; i < 3; i++)
         tick (&m);
-    assert (minimizes[4] == min_before + 1);
-    delay_visibility[4] = false;
-    minimized[4] = true;
-    tick (&m);
-    assert (!win (&m, 4)->is_maximized && maximized[4] && minimized[4]);
-    assert (win (&m, 4)->workspace_id != win (&m, 1)->workspace_id);
+    assert (!win (&m, 4)->is_maximized && maximized[4] && !minimized[4]);
+    assert (win (&m, 4)->workspace_id == shared_excluded_id);
     gf_ws_info_t *second_excluded_ws
         = gf_workspace_list_find_by_id (&m.state.workspaces, win (&m, 4)->workspace_id);
-    assert (second_excluded_ws->is_excluded_ws && second_excluded_ws->monitor_id == 1);
+    assert (second_excluded_ws->is_excluded_ws
+            && second_excluded_ws->monitor_id == GF_MONITOR_SHARED);
     assert (!second_excluded_ws->has_maximized_state
-            && second_excluded_ws->window_count == 1);
-    assert (!bordered[4] && minimizes[4] == min_before + 1 && !filled[4]);
+            && second_excluded_ws->window_count == 2);
+    assert (!bordered[4] && minimizes[4] == min_before && !filled[4]);
 
     // A maximized workspace on monitor 0 remains live while monitor 1 switches
     // between excluded and normal workspaces.
@@ -717,7 +715,7 @@ main (void)
     assert (dock_hidden[0] && !dock_hidden[1]);
     assert (m.state.workspaces.active_workspace[0] == behind);
     assert (m.state.workspaces.active_workspace[1] == win (&m, 4)->workspace_id);
-    assert (minimized[1] && minimized[2]);
+    assert (!minimized[1] && minimized[2]);
     assert (win (&m, 3)->is_maximized && !minimized[3] && !minimized[4]);
     assert (minimizes[3] == min_before && !bordered[4] && !filled[4]);
     focused = handle (2);
@@ -727,13 +725,13 @@ main (void)
     assert (m.state.workspaces.active_workspace[1] == win (&m, 2)->workspace_id);
     assert (dock_hidden[0] && !dock_hidden[1]);
 
-    // Selecting an excluded app immediately selects its own workspace and
+    // Selecting an excluded app immediately selects the shared workspace and
     // restores its native mode, with no geometry, border, or maximize writes.
     focused = handle (1);
     minimized[1] = false;
     tick (&m);
     assert (m.state.workspaces.active_workspace[1] == win (&m, 1)->workspace_id);
-    assert (minimized[2] && minimized[4] && !minimized[1] && maximized[1]);
+    assert (minimized[2] && !minimized[4] && !minimized[1] && maximized[1]);
     assert (!win (&m, 1)->is_maximized && !bordered[1] && !dock_hidden[1]);
     assert (mode_requests[1] == mode_before && writes[1] == writes_before);
 
@@ -765,7 +763,7 @@ main (void)
     assert (!win (&m, 1)->is_maximized && bordered[1] && !dock_hidden[1]);
     assert (dock_hidden[0] && minimized[4] && !bordered[4]);
 
-    // Excluding a background tile moves it to its own inactive workspace.
+    // Excluding a background tile moves it to the shared inactive workspace.
     // A single user selection restores it and hides the previous workspace.
     restore_before = restores[2];
     assert (wm_request_visibility (&m, win (&m, 2), true) == GF_SUCCESS);
@@ -774,37 +772,94 @@ main (void)
     tick (&m);
     assert (minimized[2] && !bordered[2] && restores[2] == restore_before);
     assert (win (&m, 2)->workspace_id != win (&m, 1)->workspace_id);
+    assert (win (&m, 2)->workspace_id == win (&m, 4)->workspace_id);
     focused = handle (2);
     minimized[2] = false;
     tick (&m);
     assert (m.state.workspaces.active_workspace[1] == win (&m, 2)->workspace_id);
     assert (!minimized[2] && minimized[1] && !bordered[2]);
-    for (unsigned i = 0; i < 3; i++)
+    for (unsigned i = 0; i < 2; i++)
         tick (&m);
     assert (restores[2] == restore_before && !win (&m, 2)->monitor_suspended);
 
-    // Keyboard workspace navigation visits excluded workspaces, restores only
-    // the selected window, and keeps the other monitor's maximized state live.
+    // Keyboard navigation visits the shared workspace once, restores its
+    // siblings, and keeps the other monitor's maximized state live.
     platform.window_focus = focus_window;
     platform.keymap_poll = poll_keymap;
     m.state.keymap_initialized = true;
     unsigned visited = 0;
-    for (unsigned i = 0; i < 3; i++)
+    for (unsigned i = 0; i < 2; i++)
     {
         key_action = GF_KEY_WORKSPACE_NEXT;
         gf_wm_keymap_event (&m);
         tick (&m);
         unsigned selected = index_of (focused);
-        assert ((selected == 1 || selected == 2 || selected == 4)
-                && !(visited & (1u << selected)));
+        assert ((selected == 1 || selected == 2) && !(visited & (1u << selected)));
         visited |= 1u << selected;
         assert (m.state.workspaces.active_workspace[1]
                 == win (&m, index_of (focused))->workspace_id);
         assert (!minimized[index_of (focused)] && !minimized[3] && dock_hidden[0]);
         if (focused != handle (1))
-            assert (!bordered[index_of (focused)] && !dock_hidden[1]);
+            assert (!bordered[index_of (focused)] && !dock_hidden[1] && !minimized[4]);
     }
-    assert (visited == ((1u << 1) | (1u << 2) | (1u << 4)));
+    assert (visited == ((1u << 1) | (1u << 2)));
+
+    // The same excluded workspace can be active on both monitors at once.
+    // Moving one sibling leaves the other's source workspace active.
+    physical[4] = 0;
+    actual[4].x = 100;
+    focused = handle (4);
+    minimized[4] = false;
+    tick (&m);
+    assert (win (&m, 4)->workspace_id == shared_excluded_id);
+    assert (m.state.workspaces.active_workspace[0] == shared_excluded_id);
+    assert (m.state.workspaces.active_workspace[1] == shared_excluded_id);
+    assert (!minimized[2] && !minimized[4] && minimized[1] && minimized[3]);
+    assert (!dock_hidden[0] && !dock_hidden[1] && !bordered[2] && !bordered[4]);
+    assert (gf_workspace_list_get_current (&m.state.workspaces, 0)
+            == gf_workspace_list_get_current (&m.state.workspaces, 1));
+    assert (wm_workspace_monitor_window_count (&m, shared_excluded_id, 0) == 1);
+    assert (wm_workspace_monitor_window_count (&m, shared_excluded_id, 1) == 1);
+
+    // Switching one monitor to normal hides only its excluded windows.
+    focused = handle (1);
+    minimized[1] = false;
+    tick (&m);
+    assert (minimized[2] && !minimized[4] && !minimized[1] && minimized[3]);
+    assert (m.state.workspaces.active_workspace[0] == shared_excluded_id);
+    focused = handle (3);
+    minimized[3] = false;
+    tick (&m);
+    assert (minimized[4] && minimized[2] && !minimized[1] && !minimized[3]);
+    assert (dock_hidden[0] && !dock_hidden[1]);
+    focused = handle (2);
+    minimized[2] = false;
+    tick (&m);
+    assert (!minimized[2] && minimized[4] && !minimized[3] && minimized[1]);
+
+    // Repeated transfers reuse the same global ID and never create another
+    // excluded workspace, even with a tile capacity below the excluded count.
+    for (unsigned i = 0; i < 6; i++)
+    {
+        physical[4] = i % 2;
+        actual[4].x = physical[4] ? 2100 : 100;
+        focused = handle (4);
+        minimized[4] = false;
+        tick (&m);
+        assert (win (&m, 4)->workspace_id == shared_excluded_id);
+        assert (win (&m, 2)->workspace_id == shared_excluded_id);
+        unsigned excluded_count = 0;
+        for (unsigned j = 0; j < m.state.workspaces.count; j++)
+            excluded_count += m.state.workspaces.items[j].is_excluded_ws;
+        assert (excluded_count == 1);
+    }
+    cfg.max_windows_per_workspace = 1;
+    tick (&m);
+    excluded_ws = gf_workspace_list_find_by_id (&m.state.workspaces, shared_excluded_id);
+    assert (excluded_ws->window_count == 2 && excluded_ws->available_space > 0);
+    assert (gf_workspace_has_monitor (excluded_ws, 0)
+            && gf_workspace_has_monitor (excluded_ws, 1));
+    assert (!gf_workspace_has_monitor (excluded_ws, GF_MONITOR_SHARED));
     gf_exclude_list_free (&cfg.excluded_apps);
     gf_window_list_cleanup (&m.state.windows);
     gf_workspace_list_cleanup (&m.state.workspaces);

@@ -91,8 +91,7 @@ void wm_recount_workspace_windows (gf_wm_t *m, gf_ws_list_t *workspaces,
 void wm_sync_workspaces (gf_wm_t *m);
 bool wm_ws_has_capacity (gf_ws_info_t *ws, uint32_t max_per_ws);
 bool wm_ws_is_valid (gf_ws_list_t *workspaces, gf_ws_id_t id);
-gf_ws_id_t wm_lookup_or_create_excluded_ws (gf_wm_t *m, gf_monitor_id_t monitor_id,
-                                            gf_handle_t window);
+gf_ws_id_t wm_lookup_or_create_excluded_ws (gf_wm_t *m);
 void wm_reconcile_excluded_windows (gf_wm_t *m);
 
 /* --- Window Management --- */

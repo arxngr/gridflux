@@ -48,6 +48,7 @@ typedef void (*gf_window_destroy_callback_t) (gf_handle_t window, void *user_dat
 #define GF_MAX_WINDOWS_PER_WORKSPACE 10
 #define GF_MAX_WORKSPACES 32
 #define GF_MAX_MONITORS 16
+#define GF_MONITOR_SHARED UINT32_MAX
 #define GF_MAX_WORKSPACES_TOTAL (GF_MAX_WORKSPACES * GF_MAX_MONITORS)
 #define GF_FIRST_WORKSPACE_ID 1
 #define GF_DEFAULT_PADDING 8
@@ -142,10 +143,10 @@ typedef struct
 // Workspace information
 typedef struct
 {
-    gf_ws_id_t id;             // globally unique runtime workspace ID
-    gf_ws_id_t local_id;       // monitor-local slot; 0 for special workspaces
-    gf_ws_id_t rule_target_id; // configured logical workspace number, or 0
-    gf_monitor_id_t monitor_id;
+    gf_ws_id_t id;              // globally unique runtime workspace ID
+    gf_ws_id_t local_id;        // monitor-local slot; 0 for special workspaces
+    gf_ws_id_t rule_target_id;  // configured logical workspace number, or 0
+    gf_monitor_id_t monitor_id; // GF_MONITOR_SHARED for the excluded workspace
     uint32_t window_count;
     uint32_t max_windows;
     int32_t available_space;
@@ -153,7 +154,7 @@ typedef struct
     bool has_maximized_state;
     bool is_custom_layout;
     bool has_rule;
-    bool is_excluded_ws; // Dedicated excluded window workspace; never tiled
+    bool is_excluded_ws; // Shared across monitors; never tiled
 } gf_ws_info_t;
 
 // Resize direction flags (bitmask for corner drags)
