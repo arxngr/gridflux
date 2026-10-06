@@ -44,18 +44,22 @@ typedef struct
     RECT visible;   // DWM extended frame bounds, used as the change-detect key
 } border_layout_t;
 
-// True if the target should currently show a border (visible, not cloaked,
-// minimized, or maximized).
+// Hidden, minimized, and cloaked windows contribute no visible pixels.
 static bool
-border_target_visible (gf_border_t *b)
+window_visible (HWND window)
 {
-    if (!IsWindow (b->target) || !IsWindow (b->overlay))
+    if (!IsWindowVisible (window) || IsIconic (window))
         return false;
 
     int cloaked = 0;
-    DwmGetWindowAttribute (b->target, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
+    DwmGetWindowAttribute (window, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
+    return !cloaked;
+}
 
-    return IsWindowVisible (b->target) && !cloaked && !IsIconic (b->target)
+static bool
+border_target_visible (gf_border_t *b)
+{
+    return IsWindow (b->target) && IsWindow (b->overlay) && window_visible (b->target)
            && !IsZoomed (b->target);
 }
 
@@ -139,7 +143,11 @@ border_apply_region (gf_border_t *b, const border_layout_t *lay,
         DeleteObject (ir);
     }
 
-    SetWindowRgn (b->overlay, full_rgn, TRUE);
+    if (!SetWindowRgn (b->overlay, full_rgn, TRUE))
+    {
+        DeleteObject (full_rgn);
+        return;
+    }
 
     b->last_rect = lay->visible;
     b->last_intersect_count = count;
@@ -172,7 +180,13 @@ border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
     int count
         = border_find_intersections (&lay.rect, gui_rects, gui_count, intersections, 16);
 
-    bool shape_changed = border_shape_changed (b, &lay.visible, intersections, count);
+    // A native region can disappear while the target's geometry stays cached.
+    // An empty region is intentional only when a clipping window intersects it.
+    RECT region_rect;
+    int region_type = GetWindowRgnBox (b->overlay, &region_rect);
+    bool region_missing = region_type == ERROR || (region_type == NULLREGION && !count);
+    bool shape_changed
+        = region_missing || border_shape_changed (b, &lay.visible, intersections, count);
 
     // Always re-assert HWND_TOPMOST to fix async Z-order inconsistency.
     // When a window is re-tiled (e.g. after another app closes), or gains focus,
@@ -406,7 +420,7 @@ border_collect_gui_rects (const gf_config_t *config, RECT *out, int max)
     HWND hwnd = GetTopWindow (NULL);
     while (hwnd && count < max)
     {
-        if (IsWindowVisible (hwnd)
+        if (window_visible (hwnd)
             && (gf_window_is_border_excluded (hwnd)
                 || window_user_excluded (config, hwnd))
             && (SUCCEEDED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,

@@ -6,6 +6,8 @@
 
 // Exercise real Win32 overlay geometry, regions, visibility, and recovery.
 // The test target is a nonactivating tool window outside the visible desktop.
+static HWND clip_window;
+
 void
 gf_log (gf_log_level_t level, const char *format, ...)
 {
@@ -22,8 +24,7 @@ gf_exclude_list_contains (const gf_exclude_list_t *list, const char *name)
 BOOL
 gf_window_is_border_excluded (HWND hwnd)
 {
-    (void)hwnd;
-    return FALSE;
+    return hwnd == clip_window;
 }
 void
 gf_window_get_class (gf_display_t display, gf_handle_t window, char *out, size_t size)
@@ -71,6 +72,41 @@ main (void)
     gf_config_t config = { .enable_borders = true, .border_color = 0x00ff00 };
     gf_border_add (&platform, target, config.border_color, 3);
     check_overlay (&data);
+
+    // Native window state can invalidate an overlay region without changing
+    // the target frame. The geometry cache must not keep an empty border.
+    HRGN empty = CreateRectRgn (0, 0, 0, 0);
+    assert (empty && SetWindowRgn (data.borders[0]->overlay, empty, TRUE));
+    gf_border_update (&platform, &config);
+    check_overlay (&data);
+
+    // A real covering GUI window may intentionally clip the entire border.
+    // Keep that region empty until the window is hidden, minimized, or cloaked.
+    clip_window = CreateWindowExA (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, cls.lpszClassName,
+                                   "GridFlux clipping regression", WS_POPUP, -30010,
+                                   -30010, 350, 270, NULL, NULL, cls.hInstance, NULL);
+    assert (clip_window);
+    ShowWindow (clip_window, SW_SHOWNOACTIVATE);
+    DwmFlush ();
+    RECT region_rect;
+    for (int i = 0; i < 2; i++)
+    {
+        gf_border_update (&platform, &config);
+        assert (GetWindowRgnBox (data.borders[0]->overlay, &region_rect) == NULLREGION);
+    }
+    ShowWindow (clip_window, SW_SHOWMINNOACTIVE);
+    assert (IsWindowVisible (clip_window) && IsIconic (clip_window));
+    gf_border_update (&platform, &config);
+    check_overlay (&data);
+    ShowWindow (clip_window, SW_SHOWNOACTIVATE);
+    BOOL cloaked = TRUE;
+    assert (SUCCEEDED (
+        DwmSetWindowAttribute (clip_window, DWMWA_CLOAK, &cloaked, sizeof (cloaked))));
+    DwmFlush ();
+    gf_border_update (&platform, &config);
+    check_overlay (&data);
+    DestroyWindow (clip_window);
+    clip_window = NULL;
 
     ShowWindow (target, SW_HIDE);
     gf_border_update (&platform, &config);
