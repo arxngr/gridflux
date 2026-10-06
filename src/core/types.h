@@ -48,6 +48,7 @@ typedef void (*gf_window_destroy_callback_t) (gf_handle_t window, void *user_dat
 #define GF_MAX_WINDOWS_PER_WORKSPACE 10
 #define GF_MAX_WORKSPACES 32
 #define GF_MAX_MONITORS 16
+#define GF_MAX_WORKSPACES_TOTAL (GF_MAX_WORKSPACES * GF_MAX_MONITORS)
 #define GF_FIRST_WORKSPACE_ID 1
 #define GF_DEFAULT_PADDING 8
 #define GF_BORDER_WIDTH 4
@@ -98,11 +99,23 @@ typedef struct
 {
     gf_handle_t id;
     gf_ws_id_t workspace_id;
+    gf_ws_id_t restore_workspace_id;
+    // Physical monitor identity. Minimized/maximized window state stays attached
+    // to this monitor and to a workspace owned by the same monitor.
     gf_monitor_id_t monitor_id;
     gf_rect_t geometry;
     bool is_maximized;
     bool is_minimized;
+    bool monitor_suspended; // Minimized by GridFlux for this monitor's inactive workspace
+    uint8_t
+        visibility_request; // 0: none, 1: minimize, 2: restore (native acknowledgement)
+    uint8_t visibility_wait;
+    uint8_t visibility_attempts;
+    uint8_t visibility_settle; // Guard a reversed request against a late native response
+    uint8_t mode_wait; // Preserve the requested maximize mode during native transitions
     bool needs_update;
+    uint8_t arrange_failures; // Bounded retries until the next observed state change
+    uint8_t maximize_fill_failures;
     bool is_valid;
     time_t last_modified;
     char name[256];
@@ -110,8 +123,9 @@ typedef struct
 
 typedef struct
 {
-    gf_handle_t target;  // The window we’re tracking
-    gf_handle_t overlay; // The overlay border window
+    gf_handle_t target;         // The window we’re tracking
+    gf_handle_t overlay;        // The overlay border window
+    gf_monitor_id_t monitor_id; // Physical monitor of the target window
     gf_color_t color;
     int thickness;
 #if defined(_WIN32)
@@ -128,7 +142,10 @@ typedef struct
 // Workspace information
 typedef struct
 {
-    gf_ws_id_t id;
+    gf_ws_id_t id;             // globally unique runtime workspace ID
+    gf_ws_id_t local_id;       // monitor-local slot; 0 for special workspaces
+    gf_ws_id_t rule_target_id; // configured logical workspace number, or 0
+    gf_monitor_id_t monitor_id;
     uint32_t window_count;
     uint32_t max_windows;
     int32_t available_space;

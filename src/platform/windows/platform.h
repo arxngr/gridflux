@@ -19,6 +19,14 @@ typedef struct
 // Windows platform data
 typedef struct
 {
+    HWND window;
+    RECT rect;
+    gf_monitor_id_t monitor_id;
+    ULONGLONG reveal_until;
+} gf_taskbar_state_t;
+
+typedef struct
+{
     HANDLE event_hook;
     HANDLE shell_hook;
     HMONITOR monitor;
@@ -30,8 +38,8 @@ typedef struct
     HWINEVENTHOOK resize_hook;
     HWINEVENTHOOK location_hook;
     gf_resize_state_t resize_state;
-    UINT original_dock_state;
-    bool dock_state_saved;
+    gf_taskbar_state_t taskbars[GF_MAX_MONITORS];
+    uint32_t taskbar_count;
 } gf_windows_platform_data_t;
 
 // Platform interface (Windows implementation)
@@ -59,6 +67,11 @@ bool gf_window_is_excluded (gf_display_t display, gf_handle_t window);
 gf_handle_t gf_window_get_focused (gf_display_t display);
 gf_err_t gf_window_minimize (gf_display_t display, gf_handle_t window);
 gf_err_t gf_window_unminimize (gf_display_t display, gf_handle_t window);
+gf_err_t gf_window_focus (gf_display_t display, gf_handle_t window);
+gf_err_t gf_window_set_maximized (gf_display_t display, gf_handle_t window,
+                                  bool maximized);
+gf_err_t gf_window_fill_maximized (gf_display_t display, gf_handle_t window,
+                                   bool fill_monitor);
 bool gf_platform_window_minimized (gf_display_t display, gf_handle_t window);
 void gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
                     int thickness);
@@ -70,6 +83,8 @@ bool gf_window_is_maximized (gf_display_t display, gf_handle_t window);
 bool gf_window_is_fullscreen (gf_display_t display, gf_handle_t window);
 void gf_dock_hide (gf_platform_t *platform);
 void gf_dock_restore (gf_platform_t *platform);
+void gf_dock_sync (gf_platform_t *platform, const bool *hide_on_monitor,
+                   uint32_t monitor_count);
 
 // Monitor management
 uint32_t gf_monitor_get_count (gf_platform_t *platform);

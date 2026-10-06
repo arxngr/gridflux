@@ -178,7 +178,7 @@ _border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
     // When a window is re-tiled (e.g. after another app closes), or gains focus,
     // the OS can push it above the overlay asynchronously, making the border invisible.
     // We force TOPMOST every time to prevent this.
-    UINT swp_flags = SWP_NOACTIVATE | SWP_NOREDRAW;
+    UINT swp_flags = SWP_NOACTIVATE;
     if (!shape_changed && !was_hidden)
         swp_flags |= SWP_NOMOVE | SWP_NOSIZE;
     SetWindowPos (b->overlay, HWND_TOPMOST, lay.x, lay.y, lay.w, lay.h, swp_flags);
@@ -190,9 +190,11 @@ _border_update_overlay (gf_border_t *b, const RECT *gui_rects, int gui_count)
     // the cached DC content may be stale after being hidden.
     if (was_hidden)
         ShowWindow (b->overlay, SW_SHOWNOACTIVATE);
-    InvalidateRect (b->overlay, NULL, TRUE);
-    if (was_hidden)
+    if (shape_changed || was_hidden)
+    {
+        InvalidateRect (b->overlay, NULL, FALSE);
         UpdateWindow (b->overlay);
+    }
 }
 
 // Paint the four border edges of the overlay using its cached props.
@@ -234,6 +236,8 @@ _border_paint (HWND hwnd)
 static LRESULT CALLBACK
 _border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
+    if (msg == WM_ERASEBKGND)
+        return 1;
     if (msg == WM_PAINT)
     {
         _border_paint (hwnd);
@@ -248,24 +252,37 @@ _border_exists (gf_windows_platform_data_t *data, gf_handle_t window)
 {
     for (int i = 0; i < data->border_count; i++)
         if (data->borders[i] && data->borders[i]->target == window)
+        {
+            if (!IsWindow (data->borders[i]->overlay))
+            {
+                free (data->borders[i]);
+                for (int j = i; j < data->border_count - 1; j++)
+                    data->borders[j] = data->borders[j + 1];
+                data->border_count--;
+                return false;
+            }
             return true;
+        }
     return false;
 }
 
 // Allocate and initialise a border, stashing its props on the overlay window.
 static gf_border_t *
-_border_alloc (HWND overlay, gf_handle_t window, gf_color_t color, int thickness,
-               RECT rect)
+_border_alloc (HWND overlay, gf_handle_t window, gf_color_t color, int thickness)
 {
     gf_border_t *b = malloc (sizeof (gf_border_t));
     if (!b)
         return NULL;
 
     b->target = window;
+    b->monitor_id = 0;
     b->overlay = overlay;
     b->color = color;
     b->thickness = thickness;
-    b->last_rect = rect;
+    // The overlay starts at zero size. Its first update must build the region
+    // and paint even when the target's rectangle has not changed.
+    b->last_rect = (RECT){ 0 };
+    b->last_intersect_count = 0;
 
     SetPropA (overlay, "BorderThickness", (HANDLE)(INT_PTR)thickness);
     SetPropA (overlay, "BorderColor", (HANDLE)(INT_PTR)color);
@@ -312,7 +329,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
         return;
     }
 
-    gf_border_t *b = _border_alloc (overlay, window, color, thickness, rect);
+    gf_border_t *b = _border_alloc (overlay, window, color, thickness);
     if (!b)
     {
         DestroyWindow (overlay);
@@ -321,6 +338,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     }
 
     data->borders[data->border_count++] = b;
+    b->monitor_id = gf_monitor_from_window (platform, window);
 
     // Force square corners so the rectangular border overlay sits flush
     DWM_WINDOW_CORNER_PREFERENCE corner = DWMWCP_DONOTROUND;
@@ -420,22 +438,26 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     {
         gf_border_t *b = data->borders[i];
 
+        if (IsWindow (b->target) && !IsIconic (b->target))
+            b->monitor_id = gf_monitor_from_window (platform, b->target);
+
         if (b->color != config->border_color)
         {
             b->color = config->border_color;
             if (b->overlay && IsWindow (b->overlay))
             {
                 SetPropA (b->overlay, "BorderColor", (HANDLE)(INT_PTR)b->color);
-                InvalidateRect (b->overlay, NULL, TRUE);
+                InvalidateRect (b->overlay, NULL, FALSE);
             }
         }
         _border_update_overlay (b, gui_rects, gui_count);
     }
 
     // Process messages for border windows (they are created on this thread)
-    // Limit to 10 messages per poll to avoid infinite spinning
+    // Bound message processing so overlay repaint cannot starve workspace polling.
     MSG msg;
-    while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
+    for (int processed = 0; processed < 32 && PeekMessage (&msg, NULL, 0, 0, PM_REMOVE);
+         processed++)
     {
         TranslateMessage (&msg);
         DispatchMessage (&msg);
@@ -459,7 +481,7 @@ gf_border_set_color (gf_platform_t *platform, gf_color_t color)
         {
             b->color = color;
             SetPropA (b->overlay, "BorderColor", (HANDLE)(INT_PTR)color);
-            InvalidateRect (b->overlay, NULL, TRUE);
+            InvalidateRect (b->overlay, NULL, FALSE);
         }
     }
 }

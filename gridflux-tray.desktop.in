@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GridFlux Tray
+Comment=GridFlux system tray controls
+Exec=@CMAKE_INSTALL_PREFIX@/bin/gridflux-gui --minimized
+Icon=gridflux
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

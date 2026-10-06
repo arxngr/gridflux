@@ -381,6 +381,22 @@ install_icons() {
     fi
 }
 
+install_tray_autostart() {
+    if [ -x "$INSTALL_DIR/gridflux-gui" ]; then
+        mkdir -p "$HOME/.config/autostart"
+        cat >"$HOME/.config/autostart/gridflux-tray.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=GridFlux Tray
+Exec=$INSTALL_DIR/gridflux-gui --minimized
+Icon=gridflux
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+EOF
+    fi
+}
+
 create_default_config() {
     mkdir -p "$HOME/.config/gridflux"
     if [ ! -f "$HOME/.config/gridflux/config.json" ]; then
@@ -407,8 +423,13 @@ build_and_install
 create_default_config
 create_desktop_entry
 install_icons
+install_tray_autostart
 
 install_systemd_service
+if [ -x "$INSTALL_DIR/gridflux-gui" ]; then
+    nohup "$INSTALL_DIR/gridflux-gui" --minimized >/dev/null 2>&1 &
+    log_info "Tray started and enabled at login"
+fi
 
 echo ""
 echo "=== Installation Complete ==="

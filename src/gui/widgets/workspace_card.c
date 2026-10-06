@@ -201,9 +201,10 @@ build_chip (gf_app_state_t *app, const gf_win_info_t *win, bool draggable)
 }
 
 static gboolean
-window_in_workspace (const gf_win_info_t *win, gf_ws_id_t ws)
+window_in_workspace (const gf_win_info_t *win, const gf_ws_info_t *ws)
 {
-    return win->is_valid && win->workspace_id == ws && win->name[0] != '\0';
+    return win->is_valid && win->workspace_id == ws->id
+           && win->monitor_id == ws->monitor_id && win->name[0] != '\0';
 }
 
 static GtkWidget *
@@ -218,7 +219,7 @@ build_chips (gf_app_state_t *app, const gf_ws_info_t *ws, const gf_win_list_t *w
     uint32_t shown = 0, hidden = 0;
     for (uint32_t i = 0; windows && i < windows->count; i++)
     {
-        if (!window_in_workspace (&windows->items[i], ws->id))
+        if (!window_in_workspace (&windows->items[i], ws))
             continue;
         GtkWidget *chip = build_chip (app, &windows->items[i], !ws->has_rule);
         gtk_flow_box_append (GTK_FLOW_BOX (fb), chip);
@@ -252,27 +253,30 @@ static void
 compose_status (const gf_ws_info_t *ws, char *buf, size_t n)
 {
     if (ws->has_maximized_state)
-        snprintf (buf, n, "%u window%s · maximized", ws->window_count,
-                  ws->window_count == 1 ? "" : "s");
+        snprintf (buf, n, "Monitor %u · %u window%s · maximized", ws->monitor_id,
+                  ws->window_count, ws->window_count == 1 ? "" : "s");
     else if (ws->window_count == 0)
-        snprintf (buf, n, "Empty · %d slots free", ws->available_space);
+        snprintf (buf, n, "Monitor %u · Empty · %d slots free", ws->monitor_id,
+                  ws->available_space);
     else
-        snprintf (buf, n, "%u window%s · %d slot%s free", ws->window_count,
-                  ws->window_count == 1 ? "" : "s", ws->available_space,
+        snprintf (buf, n, "Monitor %u · %u window%s · %d slot%s free", ws->monitor_id,
+                  ws->window_count, ws->window_count == 1 ? "" : "s", ws->available_space,
                   ws->available_space == 1 ? "" : "s");
 }
 
 static GtkWidget *
-build_number (gf_ws_id_t id)
+build_number (const gf_ws_info_t *ws)
 {
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_valign (box, GTK_ALIGN_CENTER);
 
     char idbuf[16];
-    snprintf (idbuf, sizeof (idbuf), "%d", id);
+    snprintf (idbuf, sizeof (idbuf), "%d", ws->local_id > 0 ? ws->local_id : ws->id);
     GtkWidget *num = gtk_label_new (idbuf);
     gtk_widget_add_css_class (num, "gf-wsnum");
-    GtkWidget *cap = gtk_label_new ("WS");
+    char cap_text[24];
+    snprintf (cap_text, sizeof (cap_text), "M%u · WS", ws->monitor_id);
+    GtkWidget *cap = gtk_label_new (cap_text);
     gtk_widget_add_css_class (cap, "gf-wsnum-cap");
 
     gtk_box_append (GTK_BOX (box), num);
@@ -369,7 +373,11 @@ gf_gui_workspace_card_new (const gf_ws_info_t *ws, const gf_win_list_t *windows,
     GtkWidget *card = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 14);
     gtk_widget_add_css_class (card, "gf-wscard");
     g_object_set_data_full (G_OBJECT (card), "ctx", ctx, g_free);
-    gtk_box_append (GTK_BOX (card), build_number (ws->id));
+    gtk_box_append (GTK_BOX (card), build_number (ws));
+    char tooltip[96];
+    snprintf (tooltip, sizeof (tooltip), "Monitor %u, local workspace %d (ID %d)",
+              ws->monitor_id, ws->local_id, ws->id);
+    gtk_widget_set_tooltip_text (card, tooltip);
 
     GtkWidget *info = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_hexpand (info, TRUE);

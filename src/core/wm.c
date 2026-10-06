@@ -36,12 +36,15 @@ handle_max_windows_change (gf_wm_t *m, const gf_config_t *old, const gf_config_t
 static void
 wm_reset_monitor_state (gf_wm_t *m)
 {
+    m->state.monitor_count = 0;
     for (int i = 0; i < GF_MAX_MONITORS; i++)
     {
         m->state.last_active_window[i] = 0;
         m->state.last_active_workspace[i] = 0;
-        wm_workspaces (m)->active_workspace[i] = 0;
+        wm_workspaces (m)->active_workspace[i] = GF_FIRST_WORKSPACE_ID;
     }
+    m->state.active_monitor_id = 0;
+    m->state.active_monitor_valid = false;
 }
 
 static void
@@ -51,8 +54,6 @@ wm_tick (gf_wm_t *m)
     gf_wm_watch (m);
 
     gf_wm_resize_event (m);
-    gf_wm_layout_rebalance (m);
-    gf_wm_layout_apply (m);
     gf_wm_event (m);
 
     /*
@@ -61,6 +62,10 @@ wm_tick (gf_wm_t *m)
      * switching back.
      */
     gf_wm_keymap_event (m);
+    // Poll edge reveal even while the foreground window belongs to the shell.
+    sync_dock_visibility (m);
+    gf_wm_layout_rebalance (m);
+    gf_wm_layout_apply (m);
 
     if (m->config->enable_borders && m->platform->border_update)
         m->platform->border_update (m->platform, m->config);

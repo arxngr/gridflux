@@ -258,6 +258,12 @@ gf_config_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
         }
     }
 
+    for (uint32_t i = 0; i < old_cfg->locked_workspaces_count; i++)
+    {
+        if (old_cfg->locked_workspaces[i] != new_cfg->locked_workspaces[i])
+            return true;
+    }
+
     return false;
 }
 
@@ -350,15 +356,15 @@ load_or_create_config (const char *filename)
         size_t len = json_object_array_length (arr_obj);
         cfg.locked_workspaces_count = 0;
 
-        if (len > cfg.max_workspaces)
+        if (len > GF_MAX_LOCKED_WORKSPACES)
             changed = true; // truncated
 
-        for (size_t i = 0; i < len && cfg.locked_workspaces_count < cfg.max_workspaces;
-             i++)
+        for (size_t i = 0;
+             i < len && cfg.locked_workspaces_count < GF_MAX_LOCKED_WORKSPACES; i++)
         {
             int ws = json_object_get_int (json_object_array_get_idx (arr_obj, i));
 
-            if (ws < 0 || ws >= cfg.max_workspaces)
+            if (ws < GF_FIRST_WORKSPACE_ID || ws > GF_MAX_WORKSPACES_TOTAL)
             {
                 changed = true;
                 continue;
@@ -393,7 +399,8 @@ load_or_create_config (const char *filename)
                 const char *cls = json_object_get_string (class_obj);
                 int ws = json_object_get_int (ws_obj);
 
-                if (cls && cls[0] != '\0' && ws >= GF_FIRST_WORKSPACE_ID)
+                if (cls && cls[0] != '\0' && ws >= GF_FIRST_WORKSPACE_ID
+                    && ws <= GF_MAX_WORKSPACES)
                 {
                     strncpy (cfg.window_rules[cfg.window_rules_count].wm_class, cls,
                              GF_RULE_CLASS_MAX - 1);
@@ -494,8 +501,7 @@ gf_config_release (gf_config_t *cfg)
 bool
 gf_config_workspace_is_locked (const gf_config_t *cfg, gf_ws_id_t ws)
 {
-    if (!cfg || ws < GF_FIRST_WORKSPACE_ID
-        || ws >= (gf_ws_id_t)cfg->max_workspaces + GF_FIRST_WORKSPACE_ID)
+    if (!cfg || ws < GF_FIRST_WORKSPACE_ID || ws > GF_MAX_WORKSPACES_TOTAL)
         return false;
 
     for (uint32_t i = 0; i < cfg->locked_workspaces_count; i++)
@@ -511,7 +517,7 @@ gf_config_workspace_is_locked (const gf_config_t *cfg, gf_ws_id_t ws)
 gf_err_t
 gf_config_workspace_lock (gf_config_t *config, gf_ws_id_t ws_id)
 {
-    if (!config || ws_id < 0)
+    if (!config || ws_id < GF_FIRST_WORKSPACE_ID || ws_id > GF_MAX_WORKSPACES_TOTAL)
         return GF_ERROR_INVALID_PARAMETER;
 
     for (uint32_t i = 0; i < config->locked_workspaces_count; i++)
@@ -522,9 +528,7 @@ gf_config_workspace_lock (gf_config_t *config, gf_ws_id_t ws_id)
         }
     }
 
-    // max_workspaces is clamped to the array size at load, so it is the
-    // authoritative (config-driven) limit here.
-    if (config->locked_workspaces_count >= config->max_workspaces)
+    if (config->locked_workspaces_count >= GF_MAX_LOCKED_WORKSPACES)
     {
         return GF_ERROR_INVALID_PARAMETER;
     }
@@ -543,7 +547,7 @@ gf_config_workspace_lock (gf_config_t *config, gf_ws_id_t ws_id)
 gf_err_t
 gf_config_workspace_unlock (gf_config_t *config, gf_ws_id_t ws_id)
 {
-    if (!config || ws_id < 0)
+    if (!config || ws_id < GF_FIRST_WORKSPACE_ID || ws_id > GF_MAX_WORKSPACES_TOTAL)
         return GF_ERROR_INVALID_PARAMETER;
 
     bool found = false;

@@ -45,7 +45,7 @@ gf_rules_add (gf_config_t *cfg, const char *wm_class, gf_ws_id_t ws_id)
     if (!cfg || !wm_class || wm_class[0] == '\0')
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (ws_id < GF_FIRST_WORKSPACE_ID)
+    if (ws_id < GF_FIRST_WORKSPACE_ID || ws_id > GF_MAX_WORKSPACES)
         return GF_ERROR_INVALID_PARAMETER;
 
     // Check if rule already exists for this class — update it

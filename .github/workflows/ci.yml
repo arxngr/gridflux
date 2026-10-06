@@ -58,7 +58,9 @@ jobs:
 
       - name: Build Codebase (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: cmake --build build --config Release
+        run: |
+          cmake --build build --config Release
+          ctest --test-dir build --output-on-failure
 
       - name: Setup MSYS2 (Windows)
         if: matrix.os == 'windows-latest'
@@ -101,6 +103,7 @@ jobs:
             exit 1
           fi
           echo "Build completed successfully: $(ls GridFlux-*.msi)"
+          ctest --test-dir build --output-on-failure
 
       - name: Test MSI Installation (Windows)
         if: matrix.os == 'windows-latest'

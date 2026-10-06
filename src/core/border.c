@@ -1,15 +1,18 @@
 #include "border.h"
 #include "../utils/logger.h"
-#include "../utils/memory.h"
 #include "internal.h"
 #include "wm.h"
-#include <inttypes.h>
-#include <stdint.h>
 
 static bool
 _win_needs_border (gf_wm_t *m, const gf_win_info_t *win)
 {
-    return win->is_valid && !win->is_minimized && !wm_is_excluded (m, win->id);
+    if (!win->is_valid || win->is_minimized || win->is_maximized
+        || wm_is_excluded (m, win->id))
+        return false;
+    if (win->monitor_id >= GF_MAX_MONITORS
+        || m->state.workspaces.active_workspace[win->monitor_id] != win->workspace_id)
+        return false;
+    return true;
 }
 
 static void
@@ -20,44 +23,6 @@ _border_add_to_win (gf_wm_t *m, const gf_win_info_t *win)
 
     m->platform->border_add (m->platform, win->id, m->config->border_color,
                              GF_BORDER_WIDTH);
-}
-
-static void
-_borders_apply_to_workspace (gf_wm_t *m, gf_ws_id_t workspace)
-{
-    gf_win_info_t *wins = NULL;
-    uint32_t count = 0;
-    gf_err_t err;
-
-    err = m->platform->window_enumerate (m->display, &workspace, &wins, &count);
-    if (err != GF_SUCCESS)
-    {
-        GF_LOG_DEBUG ("Failed to get windows for workspace %d", workspace);
-        return;
-    }
-
-    GF_LOG_DEBUG ("Processing workspace %d with %u windows", workspace, count);
-
-    for (uint32_t i = 0; i < count; i++)
-    {
-        gf_win_info_t *win = &wins[i];
-
-        if (_win_needs_border (m, win))
-        {
-            GF_LOG_DEBUG ("Adding border to window %" PRIuPTR " in workspace %d",
-                          (uintptr_t)win->id, workspace);
-            _border_add_to_win (m, win);
-        }
-        else
-        {
-            GF_LOG_DEBUG ("Skipping window %" PRIuPTR
-                          " (valid=%d, minimized=%d, excluded=%d)",
-                          (uintptr_t)win->id, win->is_valid, win->is_minimized,
-                          wm_is_excluded (m, win->id));
-        }
-    }
-
-    gf_free (wins);
 }
 
 static void
@@ -82,10 +47,8 @@ gf_border_enable_all (gf_wm_t *m)
     if (m->platform->border_cleanup)
         m->platform->border_cleanup (m->platform);
 
-    for (gf_ws_id_t ws = 0; ws < GF_MAX_WORKSPACES; ws++)
-        _borders_apply_to_workspace (m, ws);
-
-    /* Fallback: catch any windows tracked in the current list */
+    // Platform enumeration returns native desktop/monitor defaults, not the
+    // monitor-local identities tracked by the manager.
     _borders_apply_to_current_windows (m);
 }
 

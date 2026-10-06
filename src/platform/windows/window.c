@@ -1,6 +1,7 @@
 #include "../../utils/logger.h"
 #include "../../utils/memory.h"
 #include "internal.h"
+#include "maximized_bounds.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <time.h>
@@ -142,6 +143,10 @@ _window_fill_info (HWND hwnd, gf_win_info_t *info)
         && !GetWindowRect (hwnd, &rect))
         return false;
 
+    // Enumeration allocates an uninitialised array; clear every tracked field
+    // so newly added core state (and minimized/restore fields) starts defined.
+    *info = (gf_win_info_t){ 0 };
+
     if (GetWindowTextA (hwnd, info->name, sizeof (info->name)))
         info->name[sizeof (info->name) - 1] = '\0';
     else
@@ -153,7 +158,8 @@ _window_fill_info (HWND hwnd, gf_win_info_t *info)
     info->geometry.y = rect.top;
     info->geometry.width = (gf_dimension_t)(rect.right - rect.left);
     info->geometry.height = (gf_dimension_t)(rect.bottom - rect.top);
-    info->is_maximized = IsZoomed (hwnd);
+    info->is_maximized = gf_window_is_maximized (NULL, hwnd);
+    info->is_minimized = IsIconic (hwnd);
     info->is_valid = true;
     info->last_modified = time (NULL);
     info->monitor_id = 0;
@@ -215,33 +221,6 @@ gf_window_get_geometry (gf_display_t display, gf_handle_t window, gf_rect_t *geo
     return GF_ERROR_PLATFORM_ERROR;
 }
 
-// Arrange runs before gf_wm_event notices a fresh maximize, so a window that
-// just got zoomed can still get an immediate restore-and-retile; only treat
-// the zoom as stale (and worth restoring) after it survives a couple of ticks.
-#define GF_ZOOM_DEBOUNCE_MS 250
-static const wchar_t *const GF_ZOOM_PROP = L"GridFluxZoomedSinceTick";
-
-static bool
-_window_zoom_is_stale (HWND hwnd)
-{
-    if (!IsZoomed (hwnd))
-    {
-        RemovePropW (hwnd, GF_ZOOM_PROP);
-        return false;
-    }
-
-    DWORD now = GetTickCount ();
-    HANDLE prop = GetPropW (hwnd, GF_ZOOM_PROP);
-    if (!prop)
-    {
-        SetPropW (hwnd, GF_ZOOM_PROP, (HANDLE)(UINT_PTR)now);
-        return false;
-    }
-
-    DWORD since = (DWORD)(UINT_PTR)prop;
-    return (DWORD)(now - since) >= GF_ZOOM_DEBOUNCE_MS;
-}
-
 gf_err_t
 gf_window_set_geometry (gf_display_t display, gf_handle_t window,
                         const gf_rect_t *geometry, gf_geom_flags_t flags,
@@ -254,10 +233,10 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
     if (!window_validate (window) || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
-    // A maximized (zoomed) window ignores SetWindowPos moves/resizes; restore it
-    // first so the requested tiled geometry can actually be applied.
-    if (IsZoomed ((HWND)window) && _window_zoom_is_stale ((HWND)window))
-        ShowWindow ((HWND)window, SW_RESTORE);
+    // A maximize can occur between the core's state check and this write.
+    // Geometry updates must never undo it or revive an iconified window.
+    if (IsZoomed (window) || IsIconic (window))
+        return GF_SUCCESS;
 
     int new_x = geometry->x;
     int new_y = geometry->y;
@@ -409,8 +388,8 @@ gf_window_minimize (gf_display_t display, gf_handle_t window)
     if (!window_validate (window))
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (ShowWindow (window, SW_SHOWMINNOACTIVE) == 0)
-        return GF_ERROR_PLATFORM_ERROR;
+    if (!IsIconic (window))
+        ShowWindow (window, SW_SHOWMINNOACTIVE);
 
     return GF_SUCCESS;
 }
@@ -423,23 +402,76 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
     if (!window_validate (window))
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (IsIconic ((HWND)window))
-    {
-        if (ShowWindow ((HWND)window, SW_RESTORE) == 0)
-            return GF_ERROR_PLATFORM_ERROR;
-    }
-    else
-    {
-        if (ShowWindow ((HWND)window, SW_SHOW) == 0)
-            return GF_ERROR_PLATFORM_ERROR;
-    }
+    if (!IsIconic (window))
+        return GF_SUCCESS;
 
-    // Intentionally do NOT call SetForegroundWindow here: gf_window_unminimize is
-    // invoked in loops (e.g. restoring a whole workspace), and forcing the
-    // foreground on every window steals focus. The window is shown without
-    // activation; a caller that needs a specific window focused must do so
-    // explicitly on that window alone.
+    WINDOWPLACEMENT placement = { .length = sizeof (placement) };
+    bool was_maximized = GetWindowPlacement (window, &placement)
+                         && (placement.flags & WPF_RESTORETOMAXIMIZED);
+    // SW_RESTORE/SW_SHOW activate the window and can change the focused monitor.
+    // Normal tiles are restored without activation; maximized workspace selection
+    // restores the original maximized placement rather than turning it into a tile.
+    ShowWindow (window, was_maximized ? SW_SHOWMAXIMIZED : SW_SHOWNOACTIVATE);
     return GF_SUCCESS;
+}
+
+// Activation is explicit and is never part of restoring sibling tiles.
+gf_err_t
+gf_window_set_maximized (gf_display_t display, gf_handle_t window, bool maximized)
+{
+    (void)display;
+    if (!window_validate (window) || IsIconic (window))
+        return GF_ERROR_INVALID_PARAMETER;
+
+    // Restoring a transferred maximized window may use a saved rectangle on
+    // its old display. Preserve the destination before touching placement.
+    HMONITOR destination = MonitorFromWindow (window, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitor = { .cbSize = sizeof (monitor) };
+    if (!GetMonitorInfo (destination, &monitor))
+        return GF_ERROR_PLATFORM_ERROR;
+    // A monitor transfer can change DPI and the native frame. Capture fresh
+    // insets after the native restore/maximize sequence on the destination.
+    gf_maximized_forget_window (window);
+    if (IsZoomed (window))
+        ShowWindow (window, SW_SHOWNOACTIVATE);
+
+    RECT rect;
+    if (!GetWindowRect (window, &rect))
+        return GF_ERROR_PLATFORM_ERROR;
+    if (MonitorFromWindow (window, MONITOR_DEFAULTTONEAREST) != destination)
+    {
+        int width = rect.right - rect.left;
+        int height = rect.bottom - rect.top;
+        int available_width = monitor.rcWork.right - monitor.rcWork.left;
+        int available_height = monitor.rcWork.bottom - monitor.rcWork.top;
+        if (width > available_width)
+            width = available_width;
+        if (height > available_height)
+            height = available_height;
+        if (!SetWindowPos (window, NULL, monitor.rcWork.left, monitor.rcWork.top, width,
+                           height, SWP_NOZORDER | SWP_NOACTIVATE))
+            return GF_ERROR_PLATFORM_ERROR;
+    }
+    if (maximized)
+        ShowWindow (window, SW_SHOWMAXIMIZED);
+    return GF_SUCCESS;
+}
+
+gf_err_t
+gf_window_focus (gf_display_t display, gf_handle_t window)
+{
+    (void)display;
+    if (!window_validate (window))
+        return GF_ERROR_INVALID_PARAMETER;
+    return SetForegroundWindow (window) ? GF_SUCCESS : GF_ERROR_PLATFORM_ERROR;
+}
+
+gf_err_t
+gf_window_fill_maximized (gf_display_t display, gf_handle_t window, bool fill_monitor)
+{
+    (void)display;
+    return gf_maximized_apply_bounds (window, fill_monitor) ? GF_SUCCESS
+                                                            : GF_ERROR_PLATFORM_ERROR;
 }
 
 // Resolve the owning process id for a window. UWP host windows
@@ -535,5 +567,9 @@ gf_window_is_maximized (gf_display_t display, gf_handle_t window)
     (void)display;
     if (!window_validate ((HWND)window))
         return false;
-    return IsZoomed ((HWND)window);
+    if (IsZoomed (window))
+        return true;
+    WINDOWPLACEMENT placement = { .length = sizeof (placement) };
+    return IsIconic (window) && GetWindowPlacement (window, &placement)
+           && (placement.flags & WPF_RESTORETOMAXIMIZED);
 }

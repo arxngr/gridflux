@@ -96,16 +96,25 @@ main (int argc, char **argv)
         }
 
         printf ("Workspaces:\n");
-        printf ("%-5s %-12s %-12s %-8s %-6s\n", "ID", "Windows", "Max", "Avail",
-                "Locked");
-        printf ("%-5s %-12s %-12s %-8s %-6s\n", "----", "------", "---", "-----",
-                "------");
+        printf ("%-5s %-8s %-8s %-12s %-8s %-6s %-8s\n", "ID", "Monitor", "Local",
+                "Windows", "Avail", "Locked", "State");
+        printf ("%-5s %-8s %-8s %-12s %-8s %-6s %-8s\n", "----", "-------", "-----",
+                "-------", "-----", "------", "-----");
 
         for (uint32_t i = 0; i < workspaces->count; i++)
         {
             gf_ws_info_t *ws = &workspaces->items[i];
-            printf ("%-5d %-12u %-12u %-8d %-6s\n", ws->id, ws->window_count,
-                    ws->max_windows, ws->available_space, ws->is_locked ? "Yes" : "No");
+            const char *state = ws->has_maximized_state ? "Maximized"
+                                : ws->is_excluded_ws    ? "Excluded"
+                                : ws->has_rule          ? "Rule"
+                                                        : "Normal";
+            printf ("%-5d %-8u %-8d %-12u %-8d %-6s %-8s%s\n", ws->id, ws->monitor_id,
+                    ws->local_id, ws->window_count, ws->available_space,
+                    ws->is_locked ? "Yes" : "No", state,
+                    ws->monitor_id < GF_MAX_MONITORS
+                            && workspaces->active_workspace[ws->monitor_id] == ws->id
+                        ? " *"
+                        : "");
         }
 
         gf_workspace_list_cleanup (workspaces);
@@ -120,17 +129,18 @@ main (int argc, char **argv)
         }
 
         printf ("Windows:\n");
-        printf ("%-18s %-20s %-10s %-6s\n", "ID", "Name", "Workspace", "State");
-        printf ("%-18s %-20s %-10s %-6s\n", "------------------", "--------------------",
-                "----------", "------");
+        printf ("%-18s %-20s %-8s %-10s %-6s\n", "ID", "Name", "Monitor", "Workspace",
+                "State");
+        printf ("%-18s %-20s %-8s %-10s %-6s\n", "------------------",
+                "--------------------", "-------", "----------", "------");
 
         for (uint32_t i = 0; i < windows->count; i++)
         {
             gf_win_info_t *win = &windows->items[i];
             const char *state
                 = win->is_minimized ? "Min" : (win->is_maximized ? "Max" : "Norm");
-            printf ("%-18p %-20s %-10d %-6s\n", (void *)win->id, win->name,
-                    win->workspace_id, state);
+            printf ("%-18p %-20s %-8u %-10d %-6s\n", (void *)win->id, win->name,
+                    win->monitor_id, win->workspace_id, state);
         }
 
         gf_window_list_cleanup (windows);

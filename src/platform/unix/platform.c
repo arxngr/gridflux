@@ -28,9 +28,21 @@ platform_io_error_handler (Display *dpy)
 }
 
 // Bind the window enumeration, info, geometry and state operations.
+static bool
+window_is_interacting (gf_display_t display)
+{
+    Window root, child;
+    int root_x, root_y, win_x, win_y;
+    unsigned int mask = 0;
+    return XQueryPointer (display, DefaultRootWindow (display), &root, &child, &root_x,
+                          &root_y, &win_x, &win_y, &mask)
+           && (mask & Button1Mask);
+}
+
 static void
 _platform_bind_window_ops (gf_platform_t *p)
 {
+    p->window_is_interacting = window_is_interacting;
     // --- Window Enumeration & Info ---
     p->window_enumerate = gf_platform_get_windows;
     p->window_get_focused = gf_window_get_focused;
@@ -47,6 +59,9 @@ _platform_bind_window_ops (gf_platform_t *p)
     p->window_minimize = gf_window_minimize;
     p->window_set_geometry = gf_window_set_geometry;
     p->window_unminimize = gf_window_unminimize;
+    p->window_focus = gf_window_focus;
+    p->window_set_maximized = gf_window_set_maximized;
+    p->window_maximize_async = true;
 }
 
 // Bind lifecycle, screen, monitor, border, dock and keymap operations.

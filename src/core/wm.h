@@ -17,10 +17,14 @@ typedef struct
     uint32_t loop_counter;
     gf_handle_t last_active_window[GF_MAX_MONITORS];
     gf_ws_id_t last_active_workspace[GF_MAX_MONITORS];
+    gf_monitor_id_t active_monitor_id;
+    bool active_monitor_valid;
     bool initialized;
     bool dock_hidden;
     bool keymap_initialized;
     bool resize_active;
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    uint32_t monitor_count;
 } gf_wm_state_t;
 
 typedef struct

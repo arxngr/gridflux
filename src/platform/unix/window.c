@@ -351,10 +351,11 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
         return GF_ERROR_PLATFORM_ERROR;
     }
 
-    // Map the window first — XIconifyWindow unmaps it, so we need to
-    // re-map before any focus requests can succeed. XSync ensures the WM has
-    // processed the map before we later attempt to set input focus.
-    XMapRaised (display, window);
+    // Restoring sibling tiles must not activate them and move keyboard focus
+    // to another monitor. Only map windows that are actually iconified.
+    if (attr.map_state == IsViewable && !gf_window_is_minimized (display, window))
+        return GF_SUCCESS;
+    XMapWindow (display, window);
     XSync (display, False);
 
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
@@ -369,26 +370,70 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
         gf_platform_send_client_message (display, window, atoms->net_wm_state, data, 5);
     }
 
-    if (atoms->net_active_window != None)
-    {
-        long data[5] = { 2, // source: pager/task-switcher (authoritative)
-                         CurrentTime, 0, 0, 0 };
-
-        gf_platform_send_client_message (display, window, atoms->net_active_window, data,
-                                         5);
-    }
-
-    // Force focus transfer — _NET_ACTIVE_WINDOW is advisory, this is required so
-    // gf_wm_event sees the correct focused window. Only focus once the window is
-    // actually viewable: XSetInputFocus on an unmapped window yields BadMatch.
-    if (XGetWindowAttributes (display, window, &attr) != 0
-        && attr.map_state == IsViewable)
-    {
-        XSetInputFocus (display, window, RevertToPointerRoot, CurrentTime);
-    }
     XFlush (display);
 
     return GF_SUCCESS;
+}
+
+gf_err_t
+gf_window_focus (gf_display_t display, gf_handle_t window)
+{
+    if (!display || !gf_window_is_valid (display, window))
+        return GF_ERROR_INVALID_PARAMETER;
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    if (atoms && atoms->net_active_window != None)
+    {
+        long data[5] = { 2, CurrentTime, 0, 0, 0 };
+        gf_platform_send_client_message (display, window, atoms->net_active_window, data,
+                                         5);
+    }
+    XWindowAttributes attr;
+    if (XGetWindowAttributes (display, window, &attr) && attr.map_state == IsViewable)
+        XSetInputFocus (display, window, RevertToPointerRoot, CurrentTime);
+    XFlush (display);
+    return GF_SUCCESS;
+}
+
+gf_err_t
+gf_window_set_maximized (gf_display_t display, gf_handle_t window, bool maximized)
+{
+    if (!display || !gf_window_is_valid (display, window))
+        return GF_ERROR_INVALID_PARAMETER;
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    if (!atoms || atoms->net_wm_state == None)
+        return GF_ERROR_PLATFORM_ERROR;
+    bool native_maximized = gf_window_is_maximized (display, window);
+    if (!maximized && !native_maximized)
+        return GF_SUCCESS;
+    gf_rect_t destination;
+    if (gf_window_get_geometry (display, window, &destination) != GF_SUCCESS)
+        return GF_ERROR_PLATFORM_ERROR;
+    long data[5] = { 0, atoms->net_wm_state_maximized_vert,
+                     atoms->net_wm_state_maximized_horz, 2, 0 };
+    gf_err_t result = GF_SUCCESS;
+    if (native_maximized)
+    {
+        result = gf_platform_send_client_message (display, window, atoms->net_wm_state,
+                                                  data, 5);
+        if (result != GF_SUCCESS)
+            return result;
+        // Removing maximize can restore a saved position on the old monitor.
+        // Move back to the captured destination before applying its new mode.
+        long position[5] = { StaticGravity | (1 << 8) | (1 << 9) | (2 << 12),
+                             destination.x, destination.y, 0, 0 };
+        result = gf_platform_send_client_message (
+            display, window, atoms->net_moveresize_window, position, 5);
+        if (result != GF_SUCCESS)
+            return result;
+    }
+    if (maximized)
+    {
+        data[0] = 1;
+        result = gf_platform_send_client_message (display, window, atoms->net_wm_state,
+                                                  data, 5);
+    }
+    XFlush (display);
+    return result;
 }
 
 void

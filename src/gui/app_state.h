@@ -15,9 +15,9 @@ typedef struct
     GtkWidget *workspace_table; // scrolled window hosting the workspace cards
     GtkWidget *server_btn;      // persistent start/stop toggle in the header
     gf_gui_platform_t *platform;
+    void *tray_data;
 #ifdef _WIN32
     gboolean operation_in_progress;
-    void *tray_data;
 #endif
 } gf_app_state_t;
 

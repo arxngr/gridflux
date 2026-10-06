@@ -102,9 +102,15 @@ _keymap_action_from_raw (gf_display_t display, XEvent *ev, gf_linux_platform_dat
     if (mods == GF_MOD_MASK)
     {
         if (sym == XK_Left)
+        {
+            data->pending_focus_window = gf_window_get_focused (display);
             return GF_KEY_WORKSPACE_PREV;
+        }
         if (sym == XK_Right)
+        {
+            data->pending_focus_window = gf_window_get_focused (display);
             return GF_KEY_WORKSPACE_NEXT;
+        }
         return GF_KEY_NONE;
     }
 

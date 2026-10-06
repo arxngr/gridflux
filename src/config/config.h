@@ -10,7 +10,7 @@
 
 #include "../platform/platform_compat.h" // Centralized platform-specific includes
 
-#define GF_MAX_LOCKED_WORKSPACES 32
+#define GF_MAX_LOCKED_WORKSPACES GF_MAX_WORKSPACES_TOTAL
 #define GF_MAX_EXCLUDE_ZONES 8
 
 typedef struct gf_config gf_config_t;

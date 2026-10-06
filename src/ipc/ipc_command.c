@@ -90,7 +90,7 @@ gf_cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *us
         return;
     }
 
-    size_t header = 2 * sizeof (uint32_t) + sizeof (gf_ws_id_t);
+    size_t header = 2 * sizeof (uint32_t) + sizeof (workspaces->active_workspace);
     uint32_t max_items = gf_ipc_max_records (header, sizeof (gf_ws_info_t));
     uint32_t send_count = (workspaces->count < max_items) ? workspaces->count : max_items;
 
@@ -100,8 +100,8 @@ gf_cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *us
     memcpy (response->message + offset, &workspaces->capacity, sizeof (uint32_t));
     offset += sizeof (uint32_t);
     memcpy (response->message + offset, &workspaces->active_workspace,
-            sizeof (gf_ws_id_t));
-    offset += sizeof (gf_ws_id_t);
+            sizeof (workspaces->active_workspace));
+    offset += sizeof (workspaces->active_workspace);
     memcpy (response->message + offset, workspaces->items,
             send_count * sizeof (gf_ws_info_t));
 }
@@ -731,8 +731,8 @@ gf_parse_workspace_list (const char *buffer)
     offset += sizeof (uint32_t);
     memcpy (&list->capacity, buffer + offset, sizeof (uint32_t));
     offset += sizeof (uint32_t);
-    memcpy (&list->active_workspace, buffer + offset, sizeof (gf_ws_id_t));
-    offset += sizeof (gf_ws_id_t);
+    memcpy (&list->active_workspace, buffer + offset, sizeof (list->active_workspace));
+    offset += sizeof (list->active_workspace);
 
     // Never trust the peer-supplied count: clamp it to what the fixed reply
     // buffer can actually hold before allocating/copying.

@@ -87,6 +87,7 @@
  * together -- the same edge logic as above, just done on both axes at once.
  */
 #include "../platform/platform.h"
+#include "../utils/list.h"
 #include "../utils/logger.h"
 #include "../utils/memory.h"
 #include "internal.h"
@@ -919,11 +920,16 @@ _commit_resize (gf_wm_t *m, gf_resize_event_t *ev)
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
 
-    // Sync all windows' geometry from their actual screen positions
+    gf_win_info_t *source = gf_window_list_find_by_window_id (windows, ev->window);
+    if (!source)
+        return;
+
+    // Sync the resized monitor's tiles without clearing other monitors' updates.
     for (uint32_t i = 0; i < windows->count; i++)
     {
         gf_win_info_t *w = &windows->items[i];
-        if (!w->is_valid || w->is_minimized)
+        if (!w->is_valid || w->is_minimized || w->workspace_id != source->workspace_id
+            || w->monitor_id != source->monitor_id)
             continue;
 
         gf_rect_t geom;
@@ -937,10 +943,7 @@ _commit_resize (gf_wm_t *m, gf_resize_event_t *ev)
     GF_LOG_INFO ("[RESIZE] Committed resize for window %p", (void *)ev->window);
 
     // Mark workspace as having a custom layout
-    gf_ws_id_t ws_id
-        = ev->window
-              ? (gf_window_list_find_by_window_id (windows, ev->window)->workspace_id)
-              : 0;
+    gf_ws_id_t ws_id = source->workspace_id;
     if (ws_id > 0)
     {
         gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
@@ -952,6 +955,43 @@ _commit_resize (gf_wm_t *m, gf_resize_event_t *ev)
     }
 }
 
+static void
+_commit_monitor_transfer (gf_wm_t *m, gf_win_info_t *source, gf_monitor_id_t new_monitor)
+{
+    move_window_to_monitor (m, source, new_monitor);
+}
+
+static void
+_commit_move (gf_wm_t *m, gf_resize_event_t *ev)
+{
+    gf_win_list_t *windows = wm_windows (m);
+    gf_platform_t *platform = wm_platform (m);
+    gf_display_t display = *wm_display (m);
+
+    gf_win_info_t *source = gf_window_list_find_by_window_id (windows, ev->window);
+    if (!source)
+        return;
+
+    if (platform->window_get_geometry
+        && platform->window_get_geometry (display, ev->window, &source->geometry)
+               != GF_SUCCESS)
+        source->geometry = ev->current_rect;
+    else if (!platform->window_get_geometry)
+        source->geometry = ev->current_rect;
+
+    gf_monitor_id_t old_monitor = source->monitor_id;
+    gf_monitor_id_t new_monitor = old_monitor;
+    if (platform->monitor_from_window)
+        new_monitor = platform->monitor_from_window (platform, ev->window);
+
+    if (new_monitor != old_monitor)
+        _commit_monitor_transfer (m, source, new_monitor);
+
+    if (new_monitor != old_monitor)
+        GF_LOG_INFO ("[RESIZE] Window %p moved from monitor %u to %u", (void *)ev->window,
+                     old_monitor, new_monitor);
+}
+
 // Entry point, called from the event loop. Polls the platform for a resize
 // event and dispatches by phase: ACTIVE = live update each drag tick,
 // COMPLETE = final update then commit, IDLE = nothing.
@@ -959,9 +999,6 @@ void
 gf_wm_resize_event (gf_wm_t *m)
 {
     if (!m)
-        return;
-
-    if (m->config && !m->config->enable_live_resize)
         return;
 
     gf_platform_t *platform = wm_platform (m);
@@ -972,6 +1009,14 @@ gf_wm_resize_event (gf_wm_t *m)
     if (!platform->resize_poll (platform, &ev))
         return;
 
+    if (!gf_window_list_find_by_window_id (wm_windows (m), ev.window)
+        || wm_is_excluded (m, ev.window))
+    {
+        if (ev.phase == GF_RESIZE_COMPLETE)
+            m->state.resize_active = false;
+        return;
+    }
+
     switch (ev.phase)
     {
     case GF_RESIZE_ACTIVE:
@@ -981,7 +1026,7 @@ gf_wm_resize_event (gf_wm_t *m)
             GF_LOG_INFO ("[RESIZE] Resize started for window %p, dir=%d",
                          (void *)ev.window, ev.direction);
         }
-        if (ev.direction != GF_RESIZE_NONE)
+        if (ev.direction != GF_RESIZE_NONE && m->config->enable_live_resize)
         {
             GF_LOG_DEBUG ("[RESIZE] Propagating dir=%d dw=%d dh=%d", ev.direction, ev.dw,
                           ev.dh);
@@ -992,8 +1037,15 @@ gf_wm_resize_event (gf_wm_t *m)
     case GF_RESIZE_COMPLETE:
         GF_LOG_INFO ("[RESIZE] Resize complete for window %p, dir=%d", (void *)ev.window,
                      ev.direction);
-        _propagate_resize (m, &ev);
-        _commit_resize (m, &ev);
+        if (ev.direction != GF_RESIZE_NONE && m->config->enable_live_resize)
+        {
+            _propagate_resize (m, &ev);
+            _commit_resize (m, &ev);
+        }
+        else if (ev.direction == GF_RESIZE_NONE)
+        {
+            _commit_move (m, &ev);
+        }
         m->state.resize_active = false;
         break;
 

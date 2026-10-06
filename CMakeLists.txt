@@ -40,8 +40,16 @@ if(WIN32)
         _CRT_NONSTDC_NO_DEPRECATE
     )
 
-    # Statically link GCC runtime to avoid missing DLL errors on user machines
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc")
+    # This linker option applies only to the MinGW GCC toolchain.
+    if(MINGW)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc")
+    endif()
+
+    if(MSVC AND DEFINED VCPKG_INSTALLED_DIR)
+        find_program(PKG_CONFIG_EXECUTABLE NAMES pkgconf pkg-config
+            PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/tools/pkgconf"
+                  "${VCPKG_INSTALLED_DIR}/${VCPKG_HOST_TRIPLET}/tools/pkgconf")
+    endif()
 
     find_package(PkgConfig REQUIRED)
 
@@ -133,6 +141,9 @@ elseif(WIN32)
         gdi32
         kernel32
         shell32
+        advapi32
+        ole32
+        uuid
         dwmapi
         ${JSONC_LIBRARIES}
     )
@@ -180,7 +191,7 @@ if(WIN32)
         src/launcher/win32.c
         src/launcher/gridflux-launcher.rc
     )
-    target_link_libraries(gridflux-launcher PRIVATE kernel32 user32 shell32)
+    target_link_libraries(gridflux-launcher PRIVATE kernel32 user32 gdi32 shell32 advapi32 dwmapi)
     if(NOT GF_DEV_MODE)
         install(TARGETS gridflux-launcher DESTINATION bin)
     endif()
@@ -194,6 +205,7 @@ add_executable(gridflux-cli
     src/core/workspace.c
     src/core/window.c
     src/core/events.c
+    src/core/monitor_activity.c
     src/core/debug.c
     src/core/border.c
     src/utils/list.c
@@ -229,12 +241,14 @@ if(GTK4_FOUND)
         src/gui/bridge/ipc_client.c
         src/gui/bridge/refresh.c
         src/gui/platform/async.c
+        src/gui/window/tray.c
         src/ipc/ipc_command.c
         src/core/wm.c
         src/core/arrange.c
         src/core/workspace.c
         src/core/window.c
         src/core/events.c
+        src/core/monitor_activity.c
         src/core/debug.c
         src/core/border.c
         src/utils/list.c
@@ -253,7 +267,6 @@ if(GTK4_FOUND)
         target_sources(gridflux-gui PRIVATE
             src/gui/platform/windows/gui_platform.c
             src/gui/bridge/windows/process_manager.c
-            src/gui/window/tray.c
         )
     elseif(UNIX AND NOT APPLE)
         target_sources(gridflux-gui PRIVATE
@@ -271,6 +284,9 @@ if(GTK4_FOUND)
         ${GTK4_LIBRARIES}
         ${PLATFORM_LIBRARIES}
     )
+    if(GTK4_LIBRARY_DIRS)
+        target_link_directories(gridflux-gui PRIVATE ${GTK4_LIBRARY_DIRS})
+    endif()
 
     # Embed icon resource on Windows (taskbar, alt-tab, explorer)
     if(WIN32)
@@ -337,6 +353,10 @@ if(NOT GF_DEV_MODE)
             @ONLY
         )
         install(FILES "${CMAKE_BINARY_DIR}/gridflux-gui.desktop" DESTINATION share/applications)
+        if(TARGET gridflux-gui)
+            configure_file(gridflux-tray.desktop.in gridflux-tray.desktop @ONLY)
+            install(FILES "${CMAKE_BINARY_DIR}/gridflux-tray.desktop" DESTINATION /etc/xdg/autostart)
+        endif()
         
         # Install icons to system icon theme for window manager integration
         install(DIRECTORY icons/hicolor/ DESTINATION share/icons/hicolor)
@@ -356,4 +376,75 @@ message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "")
 
 # Include CPack for packaging
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(gridflux-multi-monitor-test
+        tests/multi_monitor.c src/core/arrange.c src/core/resize.c
+        src/core/monitor_activity.c
+        src/utils/list.c src/utils/memory.c)
+    target_include_directories(gridflux-multi-monitor-test PRIVATE ${PLATFORM_INCLUDES})
+    if(MSVC)
+        target_compile_options(gridflux-multi-monitor-test PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(gridflux-multi-monitor-test PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME multi-monitor COMMAND gridflux-multi-monitor-test)
+    add_executable(gridflux-monitor-state-test
+        tests/monitor_state.c src/core/events.c src/core/workspace.c
+        src/core/window.c src/core/arrange.c src/core/monitor_activity.c
+        src/utils/list.c src/utils/memory.c)
+    target_include_directories(gridflux-monitor-state-test PRIVATE ${PLATFORM_INCLUDES})
+    if(MSVC)
+        target_compile_options(gridflux-monitor-state-test PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(gridflux-monitor-state-test PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME monitor-state COMMAND gridflux-monitor-state-test)
+    if(WIN32)
+        add_executable(gridflux-windows-border-test
+            tests/windows_border.c src/platform/windows/border.c)
+        target_include_directories(gridflux-windows-border-test PRIVATE ${PLATFORM_INCLUDES})
+        target_link_libraries(gridflux-windows-border-test PRIVATE user32 gdi32 dwmapi)
+        if(MSVC)
+            target_compile_options(gridflux-windows-border-test PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(gridflux-windows-border-test PRIVATE -UNDEBUG)
+        endif()
+        add_test(NAME windows-border COMMAND gridflux-windows-border-test)
+        add_executable(gridflux-windows-dock-test tests/windows_dock.c)
+        target_include_directories(gridflux-windows-dock-test PRIVATE ${PLATFORM_INCLUDES})
+        target_link_libraries(gridflux-windows-dock-test PRIVATE user32 gdi32 dwmapi)
+        if(MSVC)
+            target_compile_options(gridflux-windows-dock-test PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(gridflux-windows-dock-test PRIVATE -UNDEBUG)
+        endif()
+        add_test(NAME windows-dock COMMAND gridflux-windows-dock-test)
+        foreach(test_name IN ITEMS windows-maximized windows-maximized-native)
+            string(REPLACE "-" "_" test_source "${test_name}")
+            add_executable(gridflux-${test_name}-test tests/${test_source}.c)
+            target_include_directories(gridflux-${test_name}-test PRIVATE ${PLATFORM_INCLUDES})
+            target_link_libraries(gridflux-${test_name}-test PRIVATE user32 gdi32 dwmapi)
+            if(MSVC)
+                target_compile_options(gridflux-${test_name}-test PRIVATE /UNDEBUG)
+            else()
+                target_compile_options(gridflux-${test_name}-test PRIVATE -UNDEBUG)
+            endif()
+            if(test_name STREQUAL "windows-maximized-native")
+                add_dependencies(gridflux-${test_name}-test gridflux-launcher)
+                add_test(NAME ${test_name} COMMAND gridflux-${test_name}-test
+                    $<TARGET_FILE:gridflux-launcher>)
+            else()
+                add_test(NAME ${test_name} COMMAND gridflux-${test_name}-test)
+            endif()
+        endforeach()
+    endif()
+    if(UNIX AND NOT APPLE AND GTK4_FOUND)
+        add_executable(gridflux-tray-test tests/tray_protocol.c)
+        target_include_directories(gridflux-tray-test PRIVATE ${GTK4_INCLUDE_DIRS} ${PLATFORM_INCLUDES})
+        target_link_libraries(gridflux-tray-test PRIVATE ${GTK4_LIBRARIES})
+        target_compile_options(gridflux-tray-test PRIVATE -UNDEBUG)
+        add_test(NAME tray-protocol COMMAND gridflux-tray-test)
+    endif()
+endif()
 include(CPack)

@@ -433,6 +433,7 @@ alloc_border (Window window, Window overlay, gf_color_t color, int thickness)
     if (!border)
         return NULL;
     border->target = window;
+    border->monitor_id = 0;
     border->overlay = overlay;
     border->color = color;
     border->thickness = thickness;
@@ -463,9 +464,9 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     gf_border_t *existing = find_border_by_window (data, (Window)window);
     if (existing)
     {
-        GF_LOG_INFO ("Border already exists for window %lu, updating color",
-                     (unsigned long)window);
-        update_border_color (data->display, existing, color);
+        existing->monitor_id = gf_monitor_from_window (platform, window);
+        if (existing->color != color)
+            update_border_color (data->display, existing, color);
         return;
     }
 
@@ -485,6 +486,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     }
 
     fetch_border_rect (data->display, (Window)window, border);
+    border->monitor_id = gf_monitor_from_window (platform, window);
     data->borders[data->border_count++] = border;
 
     XFlush (data->display);
@@ -672,6 +674,7 @@ update_single_border (Display *dpy, gf_linux_platform_data_t *data,
     }
 
     XMapWindow (dpy, b->overlay);
+    b->monitor_id = gf_monitor_from_window (platform, b->target);
     border_stack_above_target (dpy, b);
 
     if (b->color != config->border_color)

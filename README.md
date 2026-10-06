@@ -66,6 +66,22 @@ get to work; move things around by hand whenever you need to.
 
 ## The control panel
 
+Installed builds start the control panel in the system tray without opening a
+window. Click the GridFlux icon to open it; closing the panel keeps the tray
+available. Use `gridflux-gui --minimized` to start it in the tray manually.
+On Linux, the desktop must provide a StatusNotifier tray host. GNOME users can
+enable [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/).
+
+Each extended monitor is arranged independently. After dragging a window to
+another monitor and releasing it, both monitors rearrange their remaining tiles.
+On Windows, a monitor's taskbar hides while its live workspace has a visible
+maximized app. Move the pointer to that taskbar's screen edge to reveal it;
+returning to a normal workspace restores it. Other monitors keep their own
+taskbar state, and GridFlux preserves Windows' existing auto-hide preference.
+Maximized apps fill their monitor's hidden taskbar area without changing normal
+workspace bounds. Stop, Exit, crash recovery, and uninstall restore managed
+taskbars and the standard work-area sizing of expanded maximized apps.
+
 The GUI (`gridflux-gui`, built on GTK4) is a single, compact window for watching
 and steering GridFlux without touching the command line.
 
@@ -148,6 +164,35 @@ git clone https://github.com/arxngr/gridflux.git
 cd gridflux
 cmake -B build && cmake --build build
 ```
+
+Alternatively, use Visual Studio 2026 with the **Desktop development with C++**
+workload. From PowerShell in the repository directory (Community edition):
+
+```powershell
+$vs = "C:\Program Files\Microsoft Visual Studio\18\Community"
+$cmake = "$vs\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+& $cmake -S . -B build-vs -G "Visual Studio 18 2026" -A x64 `
+  "-DCMAKE_TOOLCHAIN_FILE=$vs\VC\vcpkg\scripts\buildsystems\vcpkg.cmake" `
+  -DVCPKG_TARGET_TRIPLET=x64-windows
+& $cmake --build build-vs --config Release --parallel
+.\build-vs\Release\gridflux-launcher.exe
+```
+
+The first configure downloads and builds GTK4 and json-c using the repository's
+vcpkg manifest. Use a separate build directory when switching from MinGW.
+For Professional or Enterprise, replace `Community` in the path.
+
+To package an existing Visual Studio Release build as an MSI, install WiX 4
+locally and run the PowerShell packager:
+
+```powershell
+dotnet tool install wix --tool-path build/tools/wix4 --version 4.0.6
+.\scripts\build_msi.ps1 -Version 1.4.1
+```
+
+The installer is written to `build/installer/`. It includes GTK, compiled GLib
+schemas, and the Visual C++ runtime, and checks that all native DLL imports are
+resolved. The staging process preserves the CMake build directory.
 
 ---
 

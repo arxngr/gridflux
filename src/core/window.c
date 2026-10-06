@@ -151,7 +151,8 @@ reconcile_excluded_windows (gf_wm_t *m)
         if (excluded && !parked)
         {
             platform->border_remove (platform, win->id);
-            move_window_to_workspace (m, win, lookup_or_create_excluded_ws (m));
+            move_window_to_workspace (m, win,
+                                      lookup_or_create_excluded_ws (m, win->monitor_id));
             changed = true;
         }
         else if (excluded && parked)
@@ -163,12 +164,14 @@ reconcile_excluded_windows (gf_wm_t *m)
         {
             // Bring the window back to the workspace currently in view, not an
             // arbitrary free one, so it re-tiles where the user can see it.
-            gf_monitor_id_t mon = find_active_monitor (m);
+            gf_monitor_id_t mon = win->monitor_id;
             gf_ws_id_t target = workspaces->active_workspace[mon];
             gf_ws_info_t *tws = gf_workspace_list_find_by_id (workspaces, target);
-            if (!tws || tws->is_locked || tws->has_maximized_state || tws->is_excluded_ws
-                || tws->available_space <= 0)
-                target = lookup_or_create_ws (m);
+            if (!tws || tws->monitor_id != mon || tws->is_locked
+                || tws->has_maximized_state || tws->is_excluded_ws
+                || workspace_monitor_window_count (m, target, mon)
+                       >= m->config->max_windows_per_workspace)
+                target = lookup_or_create_ws_for_monitor (m, mon);
 
             move_window_to_workspace (m, win, target);
             if (platform->window_unminimize)
@@ -242,6 +245,13 @@ void
 minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id,
                             gf_monitor_id_t active_monitor)
 {
+    if (active_monitor >= GF_MAX_MONITORS)
+        return;
+
+    gf_ws_info_t *workspace = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
+    if (!workspace || workspace->monitor_id != active_monitor)
+        return;
+
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
     gf_win_list_t *windows = wm_windows (m);
@@ -250,15 +260,27 @@ minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t exclude_id
     {
         gf_win_info_t *win = &windows->items[i];
 
-        if (win->workspace_id != ws_id || win->id == exclude_id)
+        if (!win->is_valid || win->workspace_id != ws_id || win->id == exclude_id)
             continue;
         if (wm_is_excluded (m, win->id))
             continue;
-        if (active_monitor != (gf_monitor_id_t)-1 && win->monitor_id != active_monitor)
+
+        if (platform->monitor_from_window && !win->mode_wait
+            && (!platform->window_is_minimized
+                || !platform->window_is_minimized (display, win->id)))
+        {
+            gf_monitor_id_t actual_monitor
+                = platform->monitor_from_window (platform, win->id);
+            if (actual_monitor < GF_MAX_MONITORS && actual_monitor != win->monitor_id)
+                move_window_to_monitor (m, win, actual_monitor);
+        }
+
+        if (win->workspace_id != ws_id || win->monitor_id != active_monitor)
             continue;
 
-        platform->window_minimize (display, win->id);
-        win->is_minimized = true;
+        gf_wm_request_visibility (m, win, true);
+        if (platform->border_remove)
+            platform->border_remove (platform, win->id);
     }
 }
 
@@ -266,6 +288,13 @@ static void
 restore_non_active_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
                             gf_monitor_id_t active_monitor, bool is_maximized_ws)
 {
+    if (active_monitor >= GF_MAX_MONITORS)
+        return;
+
+    gf_ws_info_t *workspace = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
+    if (!workspace || workspace->monitor_id != active_monitor)
+        return;
+
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
     gf_win_list_t *windows = wm_windows (m);
@@ -278,17 +307,19 @@ restore_non_active_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_win
             continue;
         if (wm_is_excluded (m, win->id))
             continue;
-        if (active_monitor != (gf_monitor_id_t)-1 && win->monitor_id != active_monitor)
+        if (win->monitor_id != active_monitor)
             continue;
         if (platform->window_is_hidden && platform->window_is_hidden (display, win->id))
             continue;
         if (active_window != 0 && win->id == active_window)
             continue;
+        if (!win->monitor_suspended)
+            continue;
 
-        platform->window_unminimize (display, win->id);
-        win->is_minimized = false;
-
+        if (gf_wm_request_visibility (m, win, false) != GF_SUCCESS)
+            continue;
         if (m->config->enable_borders && !win->is_maximized && platform->border_add
+            && !platform->window_is_minimized (display, win->id)
             && !wm_is_excluded (m, win->id))
             platform->border_add (platform, win->id, m->config->border_color,
                                   GF_BORDER_WIDTH);
@@ -299,6 +330,9 @@ static void
 restore_active_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
                        gf_monitor_id_t active_monitor)
 {
+    if (active_monitor >= GF_MAX_MONITORS)
+        return;
+
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
     gf_win_list_t *windows = wm_windows (m);
@@ -309,13 +343,15 @@ restore_active_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
 
         if (win->workspace_id != ws_id || win->id != active_window)
             continue;
-        if (active_monitor != (gf_monitor_id_t)-1 && win->monitor_id != active_monitor)
+        if (win->monitor_id != active_monitor)
             continue;
 
-        platform->window_unminimize (display, win->id);
-        win->is_minimized = false;
-
+        if (!win->is_minimized && !win->monitor_suspended)
+            break;
+        if (gf_wm_request_visibility (m, win, false) != GF_SUCCESS)
+            break;
         if (m->config->enable_borders && !win->is_maximized && platform->border_add
+            && !platform->window_is_minimized (display, win->id)
             && !wm_is_excluded (m, win->id))
             platform->border_add (platform, win->id, m->config->border_color,
                                   GF_BORDER_WIDTH);
@@ -326,6 +362,9 @@ restore_active_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_window,
 static void
 restore_fallback_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_monitor_id_t active_monitor)
 {
+    if (active_monitor >= GF_MAX_MONITORS)
+        return;
+
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
     gf_win_list_t *windows = wm_windows (m);
@@ -335,11 +374,13 @@ restore_fallback_window (gf_wm_t *m, gf_ws_id_t ws_id, gf_monitor_id_t active_mo
         gf_win_info_t *win = &windows->items[i];
         if (win->workspace_id != ws_id || wm_is_excluded (m, win->id))
             continue;
-        if (active_monitor != (gf_monitor_id_t)-1 && win->monitor_id != active_monitor)
+        if (win->monitor_id != active_monitor)
             continue;
 
-        platform->window_unminimize (display, win->id);
-        win->is_minimized = false;
+        if (!win->is_minimized && !win->monitor_suspended)
+            break;
+        if (gf_wm_request_visibility (m, win, false) != GF_SUCCESS)
+            break;
         break;
     }
 }
@@ -349,19 +390,33 @@ restore_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t active_wind
                            gf_monitor_id_t active_monitor)
 {
     gf_ws_info_t *ws = gf_workspace_list_find_by_id (wm_workspaces (m), ws_id);
+    if (!ws || ws->monitor_id != active_monitor)
+        return;
     bool is_maximized_ws = (ws && ws->has_maximized_state);
 
     restore_non_active_windows (m, ws_id, active_window, active_monitor, is_maximized_ws);
 
-    if (active_window != 0)
+    gf_win_info_t *active
+        = active_window ? gf_window_list_find_by_window_id (wm_windows (m), active_window)
+                        : NULL;
+    bool active_belongs_to_target
+        = active && active->workspace_id == ws_id && active->monitor_id == active_monitor;
+
+    if (active_belongs_to_target)
         restore_active_window (m, ws_id, active_window, active_monitor);
     else if (is_maximized_ws)
         restore_fallback_window (m, ws_id, active_monitor);
+    else if (active_window != 0)
+        restore_active_window (m, ws_id, active_window, active_monitor);
 }
 
 void
-detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace)
+detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace,
+                         gf_monitor_id_t monitor_id)
 {
+    if (monitor_id >= GF_MAX_MONITORS)
+        return;
+
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
     gf_win_list_t *windows = wm_windows (m);
@@ -373,6 +428,10 @@ detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace)
         if (!win->is_valid || wm_is_excluded (m, win->id))
             continue;
         if (win->workspace_id != current_workspace)
+            continue;
+        if (win->monitor_id != monitor_id)
+            continue;
+        if (win->visibility_request)
             continue;
 
         bool currently_minimized = platform->window_is_minimized (display, win->id);
@@ -419,6 +478,7 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
                                         ? platform->window_is_minimized (display, window)
                                         : false);
     bool is_max_state = existing ? existing->is_maximized : false;
+    gf_ws_id_t restore_workspace_id = existing ? existing->restore_workspace_id : 0;
 
     gf_monitor_id_t mon_id = 0;
     if (existing)
@@ -429,7 +489,14 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
     gf_win_info_t info = {
         .id = window,
         .workspace_id = workspace_id,
+        .restore_workspace_id = restore_workspace_id,
         .monitor_id = mon_id,
+        .monitor_suspended = existing ? existing->monitor_suspended : false,
+        .visibility_request = existing ? existing->visibility_request : 0,
+        .visibility_wait = existing ? existing->visibility_wait : 0,
+        .visibility_attempts = existing ? existing->visibility_attempts : 0,
+        .visibility_settle = existing ? existing->visibility_settle : 0,
+        .mode_wait = existing ? existing->mode_wait : 0,
         .geometry = geom,
         .is_minimized = is_min_state,
         .is_maximized = is_max_state,
@@ -489,20 +556,46 @@ gf_wm_window_move (gf_wm_t *m, gf_handle_t window_id, gf_ws_id_t target_workspac
     if (!win)
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (target_workspace < GF_FIRST_WORKSPACE_ID
-        || target_workspace >= m->config->max_workspaces + GF_FIRST_WORKSPACE_ID)
+    if (target_workspace < GF_FIRST_WORKSPACE_ID)
         return GF_ERROR_INVALID_PARAMETER;
 
-    gf_workspace_list_ensure (workspaces, target_workspace,
-                              m->config->max_windows_per_workspace);
-
     gf_ws_info_t *target_ws = gf_workspace_list_find_by_id (workspaces, target_workspace);
+    if (target_ws && target_ws->monitor_id != win->monitor_id
+        && target_workspace <= GF_MAX_WORKSPACES && win->monitor_id < GF_MAX_MONITORS)
+    {
+        gf_ws_id_t monitor_local_id
+            = gf_workspace_id_for_monitor_local (win->monitor_id, target_workspace);
+        gf_ws_info_t *monitor_local_ws
+            = gf_workspace_list_find_by_id (workspaces, monitor_local_id);
+        if (monitor_local_ws && monitor_local_ws->monitor_id == win->monitor_id)
+        {
+            target_workspace = monitor_local_id;
+            target_ws = monitor_local_ws;
+        }
+    }
+    if (!target_ws)
+    {
+        // Preserve the local-number form for older clients, while resolving it
+        // within the destination window's monitor instead of globally.
+        if (target_workspace > GF_MAX_WORKSPACES || win->monitor_id >= GF_MAX_MONITORS)
+            return GF_ERROR_INVALID_PARAMETER;
+        gf_ws_id_t actual_id
+            = gf_workspace_id_for_monitor_local (win->monitor_id, target_workspace);
+        gf_workspace_list_ensure (workspaces, actual_id,
+                                  m->config->max_windows_per_workspace, win->monitor_id,
+                                  target_workspace);
+        target_workspace = actual_id;
+        target_ws = gf_workspace_list_find_by_id (workspaces, target_workspace);
+    }
+    if (!target_ws || target_ws->monitor_id != win->monitor_id)
+        return GF_ERROR_INVALID_PARAMETER;
 
     if (target_ws->is_locked)
         return GF_ERROR_WORKSPACE_LOCKED;
     if (target_ws->has_maximized_state && !win->is_maximized)
         return GF_ERROR_WORKSPACE_MAXIMIZED;
-    if (target_ws->window_count >= m->config->max_windows_per_workspace)
+    if (workspace_monitor_window_count (m, target_workspace, win->monitor_id)
+        >= m->config->max_windows_per_workspace)
         return GF_ERROR_WORKSPACE_FULL;
 
     win->workspace_id = target_workspace;

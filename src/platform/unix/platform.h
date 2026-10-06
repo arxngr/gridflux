@@ -91,6 +91,9 @@ void gf_border_cleanup (gf_platform_t *platform);
 void gf_border_remove (gf_platform_t *platform, gf_handle_t window);
 bool gf_window_is_fullscreen (gf_display_t display, gf_handle_t window);
 bool gf_window_is_maximized (gf_display_t display, gf_handle_t window);
+gf_err_t gf_window_focus (gf_display_t display, gf_handle_t window);
+gf_err_t gf_window_set_maximized (gf_display_t display, gf_handle_t window,
+                                  bool maximized);
 
 void gf_dock_hide (gf_platform_t *platform);
 void gf_dock_restore (gf_platform_t *platform);

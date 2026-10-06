@@ -17,6 +17,7 @@ a.out
 
 # Build system (CMake)
 build/
+build-vs/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
@@ -44,4 +45,5 @@ gridflux-cli
 gridflux-gui
 packages/
 GridFlux-*
+!gridflux-tray.desktop.in
 .desktop

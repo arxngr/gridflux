@@ -2,6 +2,7 @@
 #include "internal.h"
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <string.h>
 #include <unistd.h>
 
 // Merge a strut array {left, right, top, bottom} into the running maximums.
@@ -270,7 +271,7 @@ gf_monitor_get_count (gf_platform_t *platform)
 gf_err_t
 gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors, uint32_t *count)
 {
-    if (!platform || !monitors || !count)
+    if (!platform || !monitors || !count || *count == 0)
         return GF_ERROR_INVALID_PARAMETER;
 
     gf_linux_platform_data_t *data = (gf_linux_platform_data_t *)platform->platform_data;
@@ -286,14 +287,17 @@ gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors, uint32_t 
         {
             uint32_t n
                 = (*count < (uint32_t)screen_count) ? *count : (uint32_t)screen_count;
+            if (n > GF_MAX_MONITORS)
+                n = GF_MAX_MONITORS;
             for (uint32_t i = 0; i < n; i++)
             {
-                monitors[i].id = screens[i].screen_number;
+                monitors[i].id = i;
                 monitors[i].bounds.x = screens[i].x_org;
                 monitors[i].bounds.y = screens[i].y_org;
                 monitors[i].bounds.width = screens[i].width;
                 monitors[i].bounds.height = screens[i].height;
                 monitors[i].full_bounds = monitors[i].bounds;
+                gf_screen_get_bounds_for_monitor (dpy, i, &monitors[i].bounds);
                 monitors[i].is_primary = (i == 0); // Simplification: first is primary
 
                 if (i < GF_MAX_MONITORS)
@@ -333,21 +337,37 @@ gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window)
     {
         int x, y;
         Window child;
-        XTranslateCoordinates (dpy, (Window)window, DefaultRootWindow (dpy), 0, 0, &x, &y,
-                               &child);
+        if (!XTranslateCoordinates (dpy, (Window)window, DefaultRootWindow (dpy), 0, 0,
+                                    &x, &y, &child))
+            return 0;
 
         // Center point check
         int cx = x + attrs.width / 2;
         int cy = y + attrs.height / 2;
 
+        gf_monitor_id_t best = 0;
+        int64_t best_area = -1;
+        int64_t best_distance = INT64_MAX;
         for (uint32_t i = 0; i < data->enumerated_monitor_count; i++)
         {
             gf_rect_t *b = &data->monitors[i].full_bounds;
-            if (cx >= b->x && cx < b->x + b->width && cy >= b->y && cy < b->y + b->height)
+            int right = b->x + (int)b->width, bottom = b->y + (int)b->height;
+            int left = x > b->x ? x : b->x;
+            int top = y > b->y ? y : b->y;
+            int r = x + attrs.width < right ? x + attrs.width : right;
+            int bot = y + attrs.height < bottom ? y + attrs.height : bottom;
+            int64_t area = r > left && bot > top ? (int64_t)(r - left) * (bot - top) : 0;
+            int64_t dx = cx < b->x ? b->x - cx : (cx > right ? cx - right : 0);
+            int64_t dy = cy < b->y ? b->y - cy : (cy > bottom ? cy - bottom : 0);
+            int64_t distance = dx * dx + dy * dy;
+            if (area > best_area || (area == best_area && distance < best_distance))
             {
-                return data->monitors[i].id;
+                best = data->monitors[i].id;
+                best_area = area;
+                best_distance = distance;
             }
         }
+        return best;
     }
 
     return 0;
@@ -367,7 +387,7 @@ _xinerama_monitor_bounds (gf_display_t display, gf_monitor_id_t monitor_id,
     bool found = false;
     for (int i = 0; i < screen_count; i++)
     {
-        if (screens[i].screen_number == (int)monitor_id)
+        if (i == (int)monitor_id)
         {
             bounds->x = screens[i].x_org;
             bounds->y = screens[i].y_org;
@@ -499,6 +519,74 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
 
     Window root = DefaultRootWindow (display);
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+
+    // A global work area loses per-panel ranges and can describe only the
+    // primary screen. On extended desktops use each dock's partial strut.
+    int screen_count = 0;
+    XineramaScreenInfo *screens = XineramaQueryScreens (display, &screen_count);
+    if (screens)
+        XFree (screens);
+    if (screen_count > 1)
+    {
+        unsigned char *clients = NULL;
+        unsigned long count = 0;
+        if (gf_platform_get_window_property (display, root, atoms->net_client_list,
+                                             XA_WINDOW, &clients, &count)
+            == GF_SUCCESS)
+        {
+            int sw = DisplayWidth (display, DefaultScreen (display));
+            int sh = DisplayHeight (display, DefaultScreen (display));
+            gf_rect_t physical = *bounds;
+            int left = physical.x, top = physical.y;
+            int right = left + (int)physical.width;
+            int bottom = top + (int)physical.height;
+            for (unsigned long i = 0; i < count; i++)
+            {
+                unsigned char *data = NULL;
+                unsigned long n = 0;
+                long strut[12]
+                    = { 0, 0, 0, 0, 0, sh - 1, 0, sh - 1, 0, sw - 1, 0, sw - 1 };
+                if (gf_platform_get_window_property (display, ((Window *)clients)[i],
+                                                     atoms->net_wm_strut_partial,
+                                                     XA_CARDINAL, &data, &n)
+                        == GF_SUCCESS
+                    && n >= 12)
+                    memcpy (strut, data, sizeof (strut));
+                else
+                {
+                    if (data)
+                        XFree (data);
+                    data = NULL;
+                    if (gf_platform_get_window_property (display, ((Window *)clients)[i],
+                                                         atoms->net_wm_strut, XA_CARDINAL,
+                                                         &data, &n)
+                            == GF_SUCCESS
+                        && n >= 4)
+                        memcpy (strut, data, 4 * sizeof (long));
+                }
+                if (data)
+                    XFree (data);
+                int px = physical.x, py = physical.y;
+                int pr = px + (int)physical.width, pb = py + (int)physical.height;
+                if (strut[0] > 0 && py <= strut[5] && pb > strut[4] && px < strut[0]
+                    && pr > 0 && strut[0] > left)
+                    left = strut[0] < pr ? (int)strut[0] : pr;
+                if (strut[1] > 0 && py <= strut[7] && pb > strut[6] && pr > sw - strut[1]
+                    && px < sw && sw - strut[1] < right)
+                    right = sw - strut[1] > px ? sw - (int)strut[1] : px;
+                if (strut[2] > 0 && px <= strut[9] && pr > strut[8] && py < strut[2]
+                    && pb > 0 && strut[2] > top)
+                    top = strut[2] < pb ? (int)strut[2] : pb;
+                if (strut[3] > 0 && px <= strut[11] && pr > strut[10]
+                    && pb > sh - strut[3] && py < sh && sh - strut[3] < bottom)
+                    bottom = sh - strut[3] > py ? sh - (int)strut[3] : py;
+            }
+            XFree (clients);
+            _clip_bounds_to_safe (bounds, left, top, right > left ? right - left : 0,
+                                  bottom > top ? bottom - top : 0);
+        }
+        return GF_SUCCESS;
+    }
 
     int safe_x, safe_y, safe_w, safe_h;
     _workarea_safe_zone (display, root, atoms, &safe_x, &safe_y, &safe_w, &safe_h);

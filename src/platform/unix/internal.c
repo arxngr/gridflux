@@ -238,6 +238,7 @@ query_window_info (Display *display, Window window, gf_platform_atoms_t *atoms,
                              .workspace_id = resolved_workspace,
                              .geometry = geometry,
                              .is_maximized = is_maximized,
+                             .is_minimized = gf_window_is_minimized (display, window),
                              .needs_update = false,
                              .is_valid = !is_excluded,
                              .last_modified = time (NULL) };

@@ -26,11 +26,13 @@ LowLevelKeyboardProc (int nCode, WPARAM wParam, LPARAM lParam)
             {
                 if (p->vkCode == VK_LEFT)
                 {
+                    g_pending_window = GetForegroundWindow ();
                     g_pending_action = GF_KEY_WORKSPACE_PREV;
                     return 1; // Consume key to prevent Windows Virtual Desktop switch
                 }
                 else if (p->vkCode == VK_RIGHT)
                 {
+                    g_pending_window = GetForegroundWindow ();
                     g_pending_action = GF_KEY_WORKSPACE_NEXT;
                     return 1; // Consume key
                 }

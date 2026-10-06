@@ -12,9 +12,18 @@ extern void gf_resize_hook_uninstall (gf_platform_t *platform);
 extern bool gf_resize_poll (gf_platform_t *platform, gf_resize_event_t *event);
 
 // Bind the window enumeration, info, geometry and state operations.
+static bool
+window_is_interacting (gf_display_t display)
+{
+    (void)display;
+    GUITHREADINFO info = { .cbSize = sizeof (info) };
+    return GetGUIThreadInfo (0, &info) && (info.flags & GUI_INMOVESIZE);
+}
+
 static void
 _platform_bind_window_ops (gf_platform_t *p)
 {
+    p->window_is_interacting = window_is_interacting;
     // --- Window Enumeration & Info ---
     p->window_enumerate = gf_platform_get_windows;
     p->window_get_focused = gf_window_get_focused;
@@ -31,6 +40,9 @@ _platform_bind_window_ops (gf_platform_t *p)
     p->window_minimize = gf_window_minimize;
     p->window_set_geometry = gf_window_set_geometry;
     p->window_unminimize = gf_window_unminimize;
+    p->window_focus = gf_window_focus;
+    p->window_set_maximized = gf_window_set_maximized;
+    p->window_fill_maximized = gf_window_fill_maximized;
 }
 
 // Bind lifecycle, screen, border, dock, monitor, keymap and resize operations.
@@ -54,6 +66,7 @@ _platform_bind_system_ops (gf_platform_t *p)
     // --- Dock Management ---
     p->dock_hide = gf_dock_hide;
     p->dock_restore = gf_dock_restore;
+    p->dock_sync = gf_dock_sync;
 
     // --- Monitor Management ---
     p->monitor_get_count = gf_monitor_get_count;
@@ -134,16 +147,6 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    // Capture original dock (taskbar) state before we start managing it
-    APPBARDATA abd = { .cbSize = sizeof (abd) };
-    abd.hWnd = FindWindowA ("Shell_TrayWnd", NULL);
-    if (abd.hWnd)
-    {
-        data->original_dock_state = (UINT)SHAppBarMessage (ABM_GETSTATE, &abd);
-        data->dock_state_saved = true;
-        GF_LOG_INFO ("Captured original dock state: %u", data->original_dock_state);
-    }
-
     data->monitor_count = GetSystemMetrics (SM_CMONITORS);
 
     // Enumerate monitors and cache their bounds
@@ -165,21 +168,7 @@ gf_platform_cleanup (gf_display_t display, gf_platform_t *platform)
     if (!platform || !platform->platform_data)
         return;
 
-    gf_windows_platform_data_t *data
-        = (gf_windows_platform_data_t *)platform->platform_data;
-
-    // Restore original dock state on exit
-    if (data->dock_state_saved)
-    {
-        APPBARDATA abd = { .cbSize = sizeof (abd) };
-        abd.hWnd = FindWindowA ("Shell_TrayWnd", NULL);
-        if (abd.hWnd)
-        {
-            abd.lParam = data->original_dock_state;
-            SHAppBarMessage (ABM_SETSTATE, &abd);
-            GF_LOG_INFO ("Restored original dock state: %u", data->original_dock_state);
-        }
-    }
+    gf_dock_restore (platform);
 
     if (platform->resize_hook_uninstall)
         platform->resize_hook_uninstall (platform);

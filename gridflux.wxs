@@ -3,6 +3,10 @@
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
+  <?ifndef PackageRoot ?>
+    <?define PackageRoot="build" ?>
+  <?endif?>
+
   <Package Name="GridFlux Window Manager" Manufacturer="Ardi Nugraha"
            Version="$(var.Version)" Language="1033"
            UpgradeCode="f47ac10b-58cc-4372-a567-0e02b2c3d479"
@@ -21,11 +25,17 @@
 
     <CustomAction Id="InstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --install-task" Execute="deferred" Impersonate="no" Return="check" />
     <CustomAction Id="UninstallTask" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --uninstall-task" Execute="deferred" Impersonate="no" Return="check" />
+    <!-- Recover the interactive desktop separately from elevated task removal. -->
+    <CustomAction Id="RestoreDesktop" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot; --restore-desktop" Execute="deferred" Impersonate="yes" Return="check" />
     <CustomAction Id="LaunchAfterRepair" Directory="INSTALLDIR" ExeCommand="&quot;[INSTALLDIR]gridflux-launcher.exe&quot;" Execute="immediate" Impersonate="yes" Return="asyncNoWait" />
 
     <InstallExecuteSequence>
+      <!-- WiX defaults to closing apps before InstallFiles, which is after
+           RemoveFiles. Stop them before scheduling uninstall recovery. -->
+      <Custom Action="Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="UninstallTask" Condition="VersionNT &gt; 400" />
       <Custom Action="InstallTask" After="InstallFiles" Condition="NOT REMOVE=&quot;ALL&quot;" />
-      <Custom Action="UninstallTask" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
+      <Custom Action="UninstallTask" Before="RestoreDesktop" Condition="REMOVE=&quot;ALL&quot;" />
+      <Custom Action="RestoreDesktop" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
       <Custom Action="LaunchAfterRepair" After="InstallFinalize" Condition="REINSTALL" />
     </InstallExecuteSequence>
 
@@ -40,16 +50,19 @@
          would be blocked by UIPI, causing the installer to hang forever. -->
     <util:CloseApplication Id="CloseGridFlux"
                            Target="gridflux.exe"
+                           Sequence="2"
                            CloseMessage="no"
                            RebootPrompt="no"
                            TerminateProcess="3" />
     <util:CloseApplication Id="CloseGridFluxGui"
                            Target="gridflux-gui.exe"
+                           Sequence="3"
                            CloseMessage="no"
                            RebootPrompt="no"
                            TerminateProcess="3" />
     <util:CloseApplication Id="CloseGridFluxLauncher"
                            Target="gridflux-launcher.exe"
+                           Sequence="1"
                            CloseMessage="no"
                            RebootPrompt="no"
                            TerminateProcess="3" />
@@ -95,24 +108,24 @@
   <Fragment>
     <DirectoryRef Id="INSTALLDIR">
       <Component Id="GridFluxExe" Guid="{12222222-2222-2222-2222-222222222222}" Bitness="always64" KeyPath="yes">
-        <File Source="build\gridflux.exe" />
+        <File Source="$(var.PackageRoot)\gridflux.exe" />
       </Component>
 
       <Component Id="GridFluxGui" Guid="{22222222-2222-2222-2222-222222222222}" Bitness="always64">
-        <File Source="build\gridflux-gui.exe" />
+        <File Source="$(var.PackageRoot)\gridflux-gui.exe" />
       </Component>
 
       <Component Id="GridFluxCli" Guid="{33333333-3333-3333-3333-333333333333}" Bitness="always64">
-        <File Source="build\gridflux-cli.exe" />
+        <File Source="$(var.PackageRoot)\gridflux-cli.exe" />
       </Component>
 
       <Component Id="LauncherExe" Guid="{44444444-4444-4444-4444-444444444444}" Bitness="always64">
-        <File Source="build\gridflux-launcher.exe" />
+        <File Source="$(var.PackageRoot)\gridflux-launcher.exe" />
       </Component>
 
       <Component Id="Registry" Guid="{88888888-8888-8888-8888-888888888888}" Bitness="always64">
         <RegistryValue Root="HKLM" Key="Software\GridFlux" Name="Install_Dir" Value="[INSTALLDIR]" Type="string" KeyPath="yes"/>
-        <RegistryValue Root="HKLM" Key="Software\GridFlux" Name="Version" Value="1.0.0" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\GridFlux" Name="Version" Value="$(var.Version)" Type="string" />
       </Component>
     </DirectoryRef>
 
@@ -134,7 +147,7 @@
 
     <DirectoryRef Id="SchemasDir">
       <Component Id="GSchemaCompiled" Guid="{99999999-9999-9999-9999-999999999999}" Bitness="always64">
-        <File Source="build\share\glib-2.0\schemas\gschemas.compiled" KeyPath="yes" />
+        <File Source="$(var.PackageRoot)\share\glib-2.0\schemas\gschemas.compiled" KeyPath="yes" />
       </Component>
     </DirectoryRef>
 

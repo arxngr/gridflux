@@ -15,6 +15,7 @@
 #include <tlhelp32.h>
 #include <sddl.h>
 // clang-format on
+#include "../platform/windows/taskbar_recovery.h"
 
 #include <stdio.h>
 #include <wchar.h>
@@ -57,6 +58,26 @@ get_self_dir (wchar_t *buf, DWORD buf_len)
     wchar_t *last_sep = wcsrchr (buf, L'\\');
     if (last_sep)
         *(last_sep + 1) = L'\0';
+}
+
+static void
+launch_tray (const wchar_t *dir)
+{
+    if (is_process_running (L"gridflux-gui.exe"))
+        return;
+    wchar_t path[MAX_PATH], cmd[MAX_PATH + 32];
+    _snwprintf (path, MAX_PATH, L"%sgridflux-gui.exe", dir);
+    _snwprintf (cmd, MAX_PATH + 32, L"\"%s\" --minimized", path);
+    STARTUPINFOW si = { .cb = sizeof (si) };
+    PROCESS_INFORMATION pi = { 0 };
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    if (CreateProcessW (path, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, dir, &si,
+                        &pi))
+    {
+        CloseHandle (pi.hThread);
+        CloseHandle (pi.hProcess);
+    }
 }
 
 static BOOL
@@ -281,30 +302,9 @@ install_task (const wchar_t *launcher_path, const wchar_t *dir)
 static void
 uninstall_task (void)
 {
-    // Restore the Windows taskbar to its normal state.
-    // When gridflux.exe is force-terminated during uninstall,
-    // gf_platform_cleanup never runs, so the taskbar may be stuck
-    // in auto-hide mode.  Restore it here before files are removed.
-    HWND taskbar = FindWindowA ("Shell_TrayWnd", NULL);
-    if (taskbar)
-    {
-        APPBARDATA abd = { .cbSize = sizeof (abd), .hWnd = taskbar };
-        abd.lParam = ABS_ALWAYSONTOP;
-        SHAppBarMessage (ABM_SETSTATE, &abd);
-
-        ShowWindow (taskbar, SW_SHOW);
-        SetWindowPos (taskbar, HWND_TOPMOST, 0, 0, 0, 0,
-                      SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
-
-        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
-    }
-
-    // Restore secondary taskbars (multi-monitor)
-    HWND secondary = NULL;
-    while ((secondary = FindWindowExA (NULL, secondary, "Shell_SecondaryTrayWnd", NULL)))
-    {
-        ShowWindow (secondary, SW_SHOW);
-    }
+    // Recover managed bars after forced termination without changing the
+    // user's Explorer auto-hide preference.
+    gf_taskbar_restore_all ();
 
     // Remove the scheduled task
     wchar_t sys_dir[MAX_PATH];
@@ -365,6 +365,7 @@ run_restart_loop (const wchar_t *exe_path, const wchar_t *dir, BOOL elevated)
         DWORD exit_code = 0;
         GetExitCodeProcess (hProcess, &exit_code);
         CloseHandle (hProcess);
+        gf_taskbar_restore_all ();
 
         if (exit_code == 0)
             break;
@@ -382,6 +383,13 @@ WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd
 
     // Detect MSI commands
     const wchar_t *cmdline = GetCommandLineW ();
+    if (wcsstr (cmdline, L"--restore-desktop"))
+    {
+        // MSI invokes this separately in the interactive user's context.
+        // Task removal can run as SYSTEM, outside that user's desktop.
+        gf_taskbar_restore_all ();
+        return 0;
+    }
     if (wcsstr (cmdline, L"--install-task"))
     {
         wchar_t dir[MAX_PATH] = { 0 };
@@ -412,6 +420,8 @@ WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd
 
     get_self_dir (dir, MAX_PATH);
     _snwprintf (exe_path, MAX_PATH, L"%s" EXE_NAME, dir);
+
+    launch_tray (dir);
 
     // If gridflux.exe is already running, nothing to do
     if (is_process_running (EXE_NAME))

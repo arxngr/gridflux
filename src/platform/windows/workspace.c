@@ -91,7 +91,9 @@ gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors, uint32_t 
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    _enum_mon_ctx_t ctx = { .monitors = monitors, .count = 0, .max = *count };
+    _enum_mon_ctx_t ctx = { .monitors = monitors,
+                            .count = 0,
+                            .max = *count < GF_MAX_MONITORS ? *count : GF_MAX_MONITORS };
 
     EnumDisplayMonitors (NULL, NULL, _monitor_enum_proc, (LPARAM)&ctx);
 
@@ -102,13 +104,13 @@ gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors, uint32_t 
         data->monitors[i] = monitors[i];
     data->enumerated_monitor_count = ctx.count;
 
-    GF_LOG_INFO ("Enumerated %u monitors", ctx.count);
+    GF_LOG_DEBUG ("Enumerated %u monitors", ctx.count);
     for (uint32_t i = 0; i < ctx.count; i++)
     {
-        GF_LOG_INFO ("  Monitor %u: %dx%d at (%d,%d)%s", monitors[i].id,
-                     monitors[i].bounds.width, monitors[i].bounds.height,
-                     monitors[i].bounds.x, monitors[i].bounds.y,
-                     monitors[i].is_primary ? " [PRIMARY]" : "");
+        GF_LOG_DEBUG ("  Monitor %u: %dx%d at (%d,%d)%s", monitors[i].id,
+                      monitors[i].bounds.width, monitors[i].bounds.height,
+                      monitors[i].bounds.x, monitors[i].bounds.y,
+                      monitors[i].is_primary ? " [PRIMARY]" : "");
     }
 
     return GF_SUCCESS;
@@ -166,6 +168,6 @@ gf_screen_get_bounds_for_monitor (gf_display_t display, gf_monitor_id_t monitor_
         }
     }
 
-    // Fallback: return primary or virtual screen
-    return gf_screen_get_bounds (display, bounds);
+    // An unknown monitor must not arrange windows onto the primary display.
+    return GF_ERROR_INVALID_PARAMETER;
 }

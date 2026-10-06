@@ -70,15 +70,14 @@ _resize_on_end (gf_resize_state_t *rs, HWND hwnd)
     _dwm_get_rect (hwnd, &rs->current_rect);
 
     // If width and height are unchanged, this was a MOVE, not a resize.
-    // Reset to idle without emitting a resize event.
+    // Emit completion so the core releases its interaction guard.
     if (rs->current_rect.width == rs->initial_rect.width
         && rs->current_rect.height == rs->initial_rect.height)
     {
-        GF_LOG_DEBUG ("[RESIZE] Move detected (not resize), ignoring end event");
-        rs->phase = GF_RESIZE_IDLE;
-        rs->window = 0;
+        GF_LOG_DEBUG ("[RESIZE] Move complete");
+        rs->phase = GF_RESIZE_COMPLETE;
         rs->direction = GF_RESIZE_NONE;
-        rs->pending = false;
+        rs->pending = true;
         return;
     }
 
@@ -218,7 +217,8 @@ gf_resize_poll (gf_platform_t *platform, gf_resize_event_t *event)
 
     // Pump messages so WinEventHook callbacks fire
     MSG msg;
-    while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
+    for (int processed = 0; processed < 32 && PeekMessage (&msg, NULL, 0, 0, PM_REMOVE);
+         processed++)
     {
         TranslateMessage (&msg);
         DispatchMessage (&msg);

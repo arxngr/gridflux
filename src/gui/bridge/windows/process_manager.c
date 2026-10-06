@@ -9,6 +9,7 @@
 #include <shellapi.h>
 #include <tlhelp32.h>
 // clang-format on
+#include "../../../platform/windows/taskbar_recovery.h"
 
 #define GF_SERVER_EXE_W L"gridflux.exe"
 #define GF_LAUNCHER_EXE_W L"gridflux-launcher.exe"
@@ -201,7 +202,10 @@ gf_server_stop (void)
 
     DWORD pid = find_server_pid ();
     if (pid == 0)
+    {
+        gf_taskbar_restore_all ();
         return false; // not running
+    }
 
     HANDLE proc = OpenProcess (PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
     if (!proc)
@@ -215,5 +219,7 @@ gf_server_stop (void)
     }
 
     CloseHandle (proc);
+    if (ok)
+        gf_taskbar_restore_all ();
     return ok != 0;
 }
