@@ -37,6 +37,8 @@ static void
 reset_monitor_state (gf_wm_t *m)
 {
     m->state.monitor_count = 0;
+    m->state.monitors_paused = false;
+    m->state.monitors_recovering = false;
     for (int i = 0; i < GF_MAX_MONITORS; i++)
     {
         m->state.last_active_window[i] = 0;
@@ -52,6 +54,13 @@ tick (gf_wm_t *m)
 {
     gf_wm_load_cfg (m);
     gf_wm_watch (m);
+
+    if (m->state.monitors_paused)
+    {
+        if (m->ipc_handle >= 0)
+            gf_ipc_server_process (m->ipc_handle, m);
+        return;
+    }
 
     gf_wm_resize_event (m);
     gf_wm_event (m);
@@ -268,7 +277,7 @@ gf_wm_run (gf_wm_t *m)
 
         tick (m);
 
-        if (time (NULL) - m->state.last_cleanup_time >= 1)
+        if (!m->state.monitors_paused && time (NULL) - m->state.last_cleanup_time >= 1)
         {
             gf_wm_prune (m);
             m->state.last_cleanup_time = time (NULL);

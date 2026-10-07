@@ -184,6 +184,8 @@ wm_win_has_assigned_workspace (gf_win_info_t *win, gf_ws_list_t *workspaces)
 void
 wm_sync_dock_visibility (gf_wm_t *m)
 {
+    if (m && m->state.monitors_paused)
+        return;
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
     gf_win_list_t *windows = wm_windows (m);

@@ -117,6 +117,7 @@ typedef struct
     bool needs_update;
     uint8_t arrange_failures; // Bounded retries until the next observed state change
     uint8_t maximize_fill_failures;
+    uint8_t monitor_restore_failures;
     bool is_valid;
     time_t last_modified;
     char name[256];

@@ -62,6 +62,11 @@ struct gf_platform
     gf_err_t (*monitor_enumerate) (gf_platform_t *platform, gf_monitor_t *monitors,
                                    uint32_t *count);
     gf_monitor_id_t (*monitor_from_window) (gf_platform_t *platform, gf_handle_t window);
+    // Suspend window reconciliation while the native display topology settles.
+    bool (*monitor_poll) (gf_platform_t *platform);
+    gf_err_t (*window_restore_monitor) (gf_platform_t *platform,
+                                        const gf_win_info_t *window,
+                                        const gf_rect_t *previous_bounds);
     gf_err_t (*screen_get_bounds_for_monitor) (gf_display_t display,
                                                gf_monitor_id_t monitor_id,
                                                gf_rect_t *bounds);

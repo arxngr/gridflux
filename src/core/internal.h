@@ -103,6 +103,7 @@ uint32_t wm_find_maximized_windows (gf_wm_t *m, gf_win_info_t **out_windows);
 gf_monitor_id_t wm_find_active_monitor (gf_wm_t *m);
 void wm_enforce_fullscreen (gf_wm_t *m);
 void wm_sync_monitor_activity (gf_wm_t *m, gf_monitor_id_t active_monitor);
+bool wm_poll_monitors (gf_wm_t *m);
 gf_err_t wm_request_visibility (gf_wm_t *m, gf_win_info_t *win, bool minimized);
 void wm_observe_window_state (gf_wm_t *m, gf_win_info_t *win, bool *minimized,
                               bool *maximized);

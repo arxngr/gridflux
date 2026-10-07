@@ -997,6 +997,8 @@ commit_move (gf_wm_t *m, gf_resize_event_t *ev)
 void
 gf_wm_resize_event (gf_wm_t *m)
 {
+    if (m && m->state.monitors_paused)
+        return;
     if (!m)
         return;
 

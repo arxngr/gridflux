@@ -242,6 +242,8 @@ apply_layout_to_workspace (gf_wm_t *m, gf_ws_info_t *ws, gf_monitor_t *monitors,
 gf_err_t
 gf_wm_layout_apply (gf_wm_t *m)
 {
+    if (m && m->state.monitors_paused)
+        return GF_SUCCESS;
     if (!m)
         return GF_ERROR_INVALID_PARAMETER;
 
@@ -373,6 +375,8 @@ rebalance_workspace (gf_wm_t *m, gf_ws_id_t source_id, gf_monitor_id_t monitor_i
 gf_err_t
 gf_wm_layout_rebalance (gf_wm_t *m)
 {
+    if (m && m->state.monitors_paused)
+        return GF_SUCCESS;
     if (!m)
         return GF_ERROR_INVALID_PARAMETER;
 

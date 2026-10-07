@@ -22,6 +22,31 @@ static gf_handle_t focused, rejected;
 static gf_handle_t rejected_visibility;
 static bool dragging, missing_external, fourth_window;
 static gf_key_action_t key_action;
+static bool displays_ready = true;
+static unsigned recovery_requests[5];
+static gf_handle_t rejected_recovery;
+
+static bool
+poll_monitors (gf_platform_t *platform)
+{
+    (void)platform;
+    return displays_ready;
+}
+static gf_err_t
+recover_monitor (gf_platform_t *platform, const gf_win_info_t *window,
+                 const gf_rect_t *previous_bounds)
+{
+    (void)platform;
+    (void)previous_bounds;
+    unsigned i = (unsigned)(uintptr_t)window->id;
+    recovery_requests[i]++;
+    if (window->id == rejected_recovery)
+        return GF_ERROR_PLATFORM_ERROR;
+    physical[i] = window->monitor_id;
+    actual[i] = window->geometry;
+    return GF_SUCCESS;
+}
+
 static unsigned
 index_of (gf_handle_t window)
 {
@@ -303,6 +328,8 @@ static void
 tick (gf_wm_t *m)
 {
     gf_wm_watch (m);
+    if (m->state.monitors_paused)
+        return;
     gf_wm_event (m);
     wm_sync_dock_visibility (m);
     gf_wm_layout_rebalance (m);
@@ -321,6 +348,128 @@ tick (gf_wm_t *m)
             assert (ws && ws->monitor_id == w->monitor_id && !ws->has_maximized_state);
         }
     }
+}
+static void
+test_sleep_resume (gf_wm_t *template)
+{
+    gf_wm_t m = { .platform = template->platform,
+                  .layout = template->layout,
+                  .config = template->config };
+    gf_platform_t *ops = m.platform;
+    gf_platform_t platform = *ops;
+    m.platform = &platform;
+    assert (gf_window_list_init (&m.state.windows, 16) == GF_SUCCESS);
+    assert (gf_workspace_list_init (&m.state.workspaces, 16) == GF_SUCCESS);
+    tick (&m);
+    // Sleep/wake temporarily moves windows in both directions. Preserve the
+    // original normal/maximized/minimized workspace IDs until recovery runs.
+    platform.monitor_poll = poll_monitors;
+    platform.window_restore_monitor = recover_monitor;
+    maximized[1] = true;
+    tick (&m);
+    gf_ws_id_t saved_workspace[4], saved_restore[4], saved_active[2];
+    bool saved_minimized[4];
+    for (unsigned i = 1; i <= 3; i++)
+    {
+        saved_workspace[i] = win (&m, i)->workspace_id;
+        saved_restore[i] = win (&m, i)->restore_workspace_id;
+        saved_minimized[i] = minimized[i];
+    }
+    memcpy (saved_active, m.state.workspaces.active_workspace, sizeof (saved_active));
+    unsigned saved_writes = writes[1] + writes[2] + writes[3];
+    unsigned saved_minimizes = minimizes[1] + minimizes[2] + minimizes[3];
+    displays_ready = false;
+    physical[1] = 1;
+    physical[3] = 0;
+    for (unsigned step = 0; step < 12; step++)
+    {
+        tick (&m);
+        gf_wm_event (&m);
+        gf_wm_keymap_event (&m);
+        wm_sync_dock_visibility (&m);
+        gf_wm_layout_apply (&m);
+        gf_wm_layout_rebalance (&m);
+        assert (m.state.monitors_paused);
+        assert (writes[1] + writes[2] + writes[3] == saved_writes);
+        assert (minimizes[1] + minimizes[2] + minimizes[3] == saved_minimizes);
+        for (unsigned i = 1; i <= 3; i++)
+        {
+            assert (win (&m, i)->workspace_id == saved_workspace[i]);
+            assert (win (&m, i)->restore_workspace_id == saved_restore[i]);
+            assert (win (&m, i)->monitor_id == (i == 3 ? 1u : 0u));
+        }
+    }
+    displays_ready = true;
+    tick (&m);
+    assert (!m.state.monitors_paused && !m.state.monitors_recovering);
+    assert (physical[1] == 0 && physical[3] == 1 && maximized[1]);
+    for (unsigned i = 1; i <= 3; i++)
+    {
+        assert (recovery_requests[i] == 1);
+        assert (win (&m, i)->workspace_id == saved_workspace[i]);
+        assert (win (&m, i)->restore_workspace_id == saved_restore[i]);
+        assert (minimized[i] == saved_minimized[i]);
+    }
+    assert (
+        memcmp (saved_active, m.state.workspaces.active_workspace, sizeof (saved_active))
+        == 0);
+    // Recovery failures are bounded; they must never cause another arrange loop.
+    displays_ready = false;
+    tick (&m);
+    displays_ready = true;
+    rejected_recovery = handle (3);
+    for (unsigned step = 0; step < 3; step++)
+        tick (&m);
+    assert (!m.state.monitors_paused && recovery_requests[3] == 4);
+    rejected_recovery = 0;
+    // A real move after recovery still transfers to the destination workspace.
+    physical[1] = 1;
+    tick (&m);
+    assert (win (&m, 1)->monitor_id == 1 && win (&m, 1)->is_maximized);
+    physical[1] = 0;
+    tick (&m);
+    maximized[1] = false;
+    tick (&m);
+    // The shared excluded workspace keeps the same ID on both monitors after
+    // wake; recovery preserves native maximize without adding a managed mode.
+    assert (gf_excludes_add (m.config, "test-app-2") == GF_SUCCESS);
+    assert (gf_excludes_add (m.config, "test-app-3") == GF_SUCCESS);
+    focused = handle (2);
+    minimized[2] = false;
+    tick (&m);
+    focused = handle (3);
+    minimized[3] = false;
+    maximized[3] = true;
+    tick (&m);
+    gf_ws_id_t shared = win (&m, 2)->workspace_id;
+    assert (shared == win (&m, 3)->workspace_id);
+    displays_ready = false;
+    physical[2] = 1;
+    physical[3] = 0;
+    tick (&m);
+    displays_ready = true;
+    tick (&m);
+    assert (physical[2] == 0 && physical[3] == 1);
+    assert (win (&m, 2)->workspace_id == shared && win (&m, 3)->workspace_id == shared);
+    assert (maximized[3] && !win (&m, 3)->is_maximized);
+    assert (!bordered[2] && !bordered[3] && !dock_hidden[0] && !dock_hidden[1]);
+    assert (gf_excludes_remove (m.config, "test-app-2") == GF_SUCCESS);
+    assert (gf_excludes_remove (m.config, "test-app-3") == GF_SUCCESS);
+    focused = handle (1);
+    platform.monitor_poll = NULL;
+    platform.window_restore_monitor = NULL;
+
+    gf_window_list_cleanup (&m.state.windows);
+    gf_workspace_list_cleanup (&m.state.workspaces);
+    memset (minimized, 0, sizeof (minimized));
+    memset (maximized, 0, sizeof (maximized));
+    memset (writes, 0, sizeof (writes));
+    memset (minimizes, 0, sizeof (minimizes));
+    memset (restores, 0, sizeof (restores));
+    memset (mode_requests, 0, sizeof (mode_requests));
+    memset (recovery_requests, 0, sizeof (recovery_requests));
+    for (unsigned i = 1; i <= 3; i++)
+        bounds (NULL, physical[i], &actual[i]);
 }
 int
 main (void)
@@ -356,6 +505,7 @@ main (void)
     physical[3] = 1;
     for (unsigned i = 1; i <= 3; i++)
         bounds (NULL, physical[i], &actual[i]);
+    test_sleep_resume (&m);
     tick (&m);
 
     // A briefly stale foreground handle cannot restore a user-minimized app.

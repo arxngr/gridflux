@@ -25,6 +25,8 @@ typedef struct
     bool resize_active;
     gf_monitor_t monitors[GF_MAX_MONITORS];
     uint32_t monitor_count;
+    bool monitors_paused;
+    bool monitors_recovering;
 } gf_wm_state_t;
 
 typedef struct

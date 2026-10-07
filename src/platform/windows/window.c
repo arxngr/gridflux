@@ -722,6 +722,72 @@ gf_window_fill_maximized (gf_display_t display, gf_handle_t window, bool fill_mo
                                                         : GF_ERROR_PLATFORM_ERROR;
 }
 
+gf_err_t
+gf_window_restore_monitor (gf_platform_t *platform, const gf_win_info_t *win,
+                           const gf_rect_t *previous_bounds)
+{
+    if (!platform || !platform->platform_data || !win || !previous_bounds
+        || !gf_window_validate (win->id))
+        return GF_ERROR_INVALID_PARAMETER;
+    gf_windows_platform_data_t *data = platform->platform_data;
+    if (win->monitor_id >= data->monitor_snapshot.count)
+        return GF_ERROR_DISPLAY_CONNECTION;
+    HMONITOR destination = data->monitor_snapshot.handles[win->monitor_id];
+    MONITORINFO monitor = { .cbSize = sizeof (monitor) };
+    if (!destination || !GetMonitorInfo (destination, &monitor))
+        return GF_ERROR_DISPLAY_CONNECTION;
+    bool iconic = IsIconic (win->id) != FALSE;
+    gf_rect_t bounds = data->monitors[win->monitor_id].bounds;
+    if (!iconic && MonitorFromWindow (win->id, MONITOR_DEFAULTTONEAREST) == destination
+        && memcmp (&bounds, previous_bounds, sizeof (bounds)) == 0)
+        return GF_SUCCESS;
+
+    gf_rect_t target = win->geometry;
+    target.x += bounds.x - previous_bounds->x;
+    target.y += bounds.y - previous_bounds->y;
+    if (!target.width || target.width > bounds.width)
+        target.width = bounds.width;
+    if (!target.height || target.height > bounds.height)
+        target.height = bounds.height;
+    if (target.x < bounds.x)
+        target.x = bounds.x;
+    if (target.y < bounds.y)
+        target.y = bounds.y;
+    if (target.x + (int32_t)target.width > bounds.x + (int32_t)bounds.width)
+        target.x = bounds.x + (int32_t)(bounds.width - target.width);
+    if (target.y + (int32_t)target.height > bounds.y + (int32_t)bounds.height)
+        target.y = bounds.y + (int32_t)(bounds.height - target.height);
+
+    if (iconic)
+    {
+        WINDOWPLACEMENT placement = { .length = sizeof (placement) };
+        if (!GetWindowPlacement (win->id, &placement))
+            return GF_ERROR_PLATFORM_ERROR;
+        placement.rcNormalPosition
+            = (RECT){ target.x, target.y, target.x + (int32_t)target.width,
+                      target.y + (int32_t)target.height };
+        // WINDOWPLACEMENT uses workspace coordinates for ordinary app windows.
+        if (!(GetWindowLongPtr (win->id, GWL_EXSTYLE) & WS_EX_TOOLWINDOW))
+            OffsetRect (&placement.rcNormalPosition,
+                        monitor.rcMonitor.left - monitor.rcWork.left,
+                        monitor.rcMonitor.top - monitor.rcWork.top);
+        placement.showCmd = SW_SHOWMINNOACTIVE;
+        return SetWindowPlacement (win->id, &placement) ? GF_SUCCESS
+                                                        : GF_ERROR_PLATFORM_ERROR;
+    }
+    if (IsZoomed (win->id))
+    {
+        // Move a native maximized window without a restore/maximize sequence
+        // that can activate it or overwrite the saved workspace selection.
+        gf_window_state_reset (win->id);
+        return SetWindowPos (win->id, NULL, bounds.x, bounds.y, (int)bounds.width,
+                             (int)bounds.height, SWP_NOZORDER | SWP_NOACTIVATE)
+                   ? GF_SUCCESS
+                   : GF_ERROR_PLATFORM_ERROR;
+    }
+    return gf_window_set_geometry (NULL, win->id, &target, GF_GEOMETRY_CHANGE_ALL, NULL);
+}
+
 // Resolve the owning process id for a window. UWP host windows
 // (ApplicationFrameWindow) proxy a child process, so dig into the child.
 static DWORD

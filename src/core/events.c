@@ -69,6 +69,8 @@ exclude_focused_window (gf_wm_t *m)
 void
 gf_wm_keymap_event (gf_wm_t *m)
 {
+    if (m->state.monitors_paused)
+        return;
     gf_platform_t *platform = wm_platform (m);
 
     if (!m->state.keymap_initialized || !platform->keymap_poll)
@@ -347,27 +349,10 @@ gf_wm_watch (gf_wm_t *m)
     gf_win_list_t *windows = wm_windows (m);
     gf_display_t display = *wm_display (m);
 
-    // Refresh the platform cache before assigning windows to monitors, including
-    // the first scan and display connection/disconnection or work-area changes.
-    if (platform->monitor_enumerate)
-    {
-        gf_monitor_t monitors[GF_MAX_MONITORS] = { 0 };
-        uint32_t count = GF_MAX_MONITORS;
-        if (platform->monitor_enumerate (platform, monitors, &count) == GF_SUCCESS
-            && count > 0 && count <= GF_MAX_MONITORS)
-        {
-            if (count != m->state.monitor_count
-                || memcmp (monitors, m->state.monitors, count * sizeof (gf_monitor_t))
-                       != 0)
-            {
-                gf_window_list_mark_all_needs_update (windows, NULL);
-                for (uint32_t i = 0; i < workspaces->count; i++)
-                    workspaces->items[i].is_custom_layout = false;
-                memcpy (m->state.monitors, monitors, count * sizeof (gf_monitor_t));
-                m->state.monitor_count = count;
-            }
-        }
-    }
+    // Restore saved monitor placement before native relocation can be mistaken
+    // for a user transfer. Workspace IDs and selections stay untouched.
+    if (!wm_poll_monitors (m))
+        return;
 
     wm_sync_workspaces (m);
     wm_enforce_fullscreen (m);
@@ -412,6 +397,8 @@ gf_wm_watch (gf_wm_t *m)
 
             if (platform->monitor_from_window)
                 win->monitor_id = platform->monitor_from_window (platform, win->id);
+            if (win->monitor_id >= GF_MAX_MONITORS)
+                continue;
 
             gf_win_info_t *existing = gf_window_list_find_by_window_id (windows, win->id);
 
@@ -559,6 +546,8 @@ exit_maximized_mode (gf_wm_t *m, gf_win_info_t *focused)
 void
 gf_wm_event (gf_wm_t *m)
 {
+    if (m->state.monitors_paused)
+        return;
     gf_platform_t *platform = wm_platform (m);
     gf_display_t display = *wm_display (m);
     gf_win_list_t *windows = wm_windows (m);

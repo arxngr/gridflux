@@ -98,6 +98,66 @@ restore_with_launcher (const char *launcher, char *desktop_name)
     CloseHandle (process.hProcess);
 }
 
+static void
+test_monitor_recovery (HWND target, HWND selected)
+{
+    gf_windows_platform_data_t data = { 0 };
+    gf_platform_t platform = { .platform_data = &data };
+    assert (gf_monitor_init (&platform) == GF_SUCCESS);
+    for (uint32_t id = 0; id < data.enumerated_monitor_count; id++)
+    {
+        gf_rect_t destination = data.monitors[id].bounds;
+        gf_rect_t source = data.monitors[(id + 1) % data.enumerated_monitor_count].bounds;
+        gf_win_info_t saved
+            = { .id = target,
+                .monitor_id = id,
+                .geometry = { destination.x + 50, destination.y + 50, 320, 240 } };
+        gf_rect_t previous = destination;
+        previous.x -= 10; // Force the same recovery path on a single-monitor host.
+        ShowWindow (target, SW_SHOWNOACTIVATE);
+        assert (SetWindowPos (target, NULL, source.x + 100, source.y + 100, 320, 240,
+                              SWP_NOACTIVATE | SWP_NOZORDER));
+        SetActiveWindow (selected);
+        assert (gf_window_restore_monitor (&platform, &saved, &previous) == GF_SUCCESS);
+        assert (!IsIconic (target) && !IsZoomed (target));
+        assert (MonitorFromWindow (target, MONITOR_DEFAULTTONEAREST)
+                == data.monitor_snapshot.handles[id]);
+        assert (GetActiveWindow () == selected);
+
+        // Native maximize is preserved for both managed and excluded apps.
+        ShowWindow (target, SW_SHOWMAXIMIZED);
+        assert (SetWindowPos (target, NULL, source.x, source.y, (int)source.width,
+                              (int)source.height, SWP_NOACTIVATE | SWP_NOZORDER));
+        SetActiveWindow (selected);
+        assert (gf_window_restore_monitor (&platform, &saved, &previous) == GF_SUCCESS);
+        assert (IsZoomed (target) && !IsIconic (target));
+        assert (MonitorFromWindow (target, MONITOR_DEFAULTTONEAREST)
+                == data.monitor_snapshot.handles[id]);
+        assert (GetActiveWindow () == selected);
+
+        ShowWindow (target, SW_SHOWMINNOACTIVE);
+        SetActiveWindow (selected);
+        assert (gf_window_restore_monitor (&platform, &saved, &previous) == GF_SUCCESS);
+        WINDOWPLACEMENT placement = { .length = sizeof (placement) };
+        assert (GetWindowPlacement (target, &placement));
+        assert (IsIconic (target) && (placement.flags & WPF_RESTORETOMAXIMIZED));
+        assert (GetActiveWindow () == selected);
+        assert (gf_window_unminimize (NULL, target) == GF_SUCCESS);
+        assert (IsZoomed (target) && !IsIconic (target));
+        assert (MonitorFromWindow (target, MONITOR_DEFAULTTONEAREST)
+                == data.monitor_snapshot.handles[id]);
+        assert (GetActiveWindow () == selected);
+        ShowWindow (target, SW_SHOWNOACTIVATE);
+        ShowWindow (target, SW_SHOWMINNOACTIVE);
+        SetActiveWindow (selected);
+        assert (gf_window_restore_monitor (&platform, &saved, &previous) == GF_SUCCESS);
+        assert (IsIconic (target));
+        assert (gf_window_unminimize (NULL, target) == GF_SUCCESS);
+        assert (!IsZoomed (target) && GetActiveWindow () == selected);
+    }
+    gf_monitor_cleanup (&platform);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -140,6 +200,7 @@ main (int argc, char **argv)
     assert (gf_window_unminimize (NULL, restore_target) == GF_SUCCESS);
     assert (!IsIconic (restore_target) && !IsZoomed (restore_target));
     assert (GetActiveWindow () == selected);
+    test_monitor_recovery (restore_target, selected);
     DestroyWindow (restore_target);
     DestroyWindow (selected);
     // WS_MAXIMIZE sets native maximize state without displaying the test window.

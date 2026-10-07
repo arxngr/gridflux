@@ -1,6 +1,96 @@
 #include "../utils/logger.h"
 #include "internal.h"
 #include "types.h"
+#include <string.h>
+
+static void
+pause_monitors (gf_wm_t *m)
+{
+    gf_platform_t *platform = wm_platform (m);
+    if (!m->state.monitors_paused)
+    {
+        if (platform->border_cleanup)
+            platform->border_cleanup (platform);
+        if (platform->dock_restore)
+            platform->dock_restore (platform);
+        m->state.dock_hidden = false;
+        for (uint32_t i = 0; i < wm_windows (m)->count; i++)
+            wm_windows (m)->items[i].monitor_restore_failures = 0;
+    }
+    m->state.monitors_paused = m->state.monitors_recovering = true;
+}
+
+bool
+wm_poll_monitors (gf_wm_t *m)
+{
+    gf_platform_t *platform = wm_platform (m);
+    gf_win_list_t *windows = wm_windows (m);
+    gf_ws_list_t *workspaces = wm_workspaces (m);
+    if (platform->monitor_poll && !platform->monitor_poll (platform))
+    {
+        pause_monitors (m);
+        return false;
+    }
+    if (!platform->monitor_enumerate)
+        return true;
+
+    gf_monitor_t monitors[GF_MAX_MONITORS] = { 0 };
+    uint32_t count = GF_MAX_MONITORS;
+    if (platform->monitor_enumerate (platform, monitors, &count) != GF_SUCCESS || !count
+        || count > GF_MAX_MONITORS)
+    {
+        pause_monitors (m);
+        return false;
+    }
+
+    if (m->state.monitors_recovering && platform->window_restore_monitor)
+    {
+        bool pending = false;
+        for (uint32_t i = 0; i < windows->count; i++)
+        {
+            gf_win_info_t *win = &windows->items[i];
+            if (!win->is_valid || win->monitor_id >= count
+                || !monitors[win->monitor_id].full_bounds.width
+                || !monitors[win->monitor_id].full_bounds.height
+                || win->monitor_restore_failures >= 3
+                || wm_is_system_excluded (m, win->id))
+                continue;
+            if (platform->window_restore_monitor (
+                    platform, win, &m->state.monitors[win->monitor_id].bounds)
+                != GF_SUCCESS)
+            {
+                pending |= ++win->monitor_restore_failures < 3;
+                GF_LOG_WARN ("Window %p monitor recovery failed (attempt %u/3)",
+                             (void *)win->id, win->monitor_restore_failures);
+            }
+        }
+        if (pending)
+        {
+            m->state.monitors_paused = true;
+            return false;
+        }
+    }
+    bool changed = m->state.monitors_recovering || count != m->state.monitor_count;
+    for (uint32_t i = 0; !changed && i < count; i++)
+        changed = monitors[i].id != m->state.monitors[i].id
+                  || monitors[i].is_primary != m->state.monitors[i].is_primary
+                  || memcmp (&monitors[i].bounds, &m->state.monitors[i].bounds,
+                             sizeof (gf_rect_t))
+                         != 0
+                  || memcmp (&monitors[i].full_bounds, &m->state.monitors[i].full_bounds,
+                             sizeof (gf_rect_t))
+                         != 0;
+    m->state.monitors_paused = m->state.monitors_recovering = false;
+    if (changed)
+    {
+        gf_window_list_mark_all_needs_update (windows, NULL);
+        for (uint32_t i = 0; i < workspaces->count; i++)
+            workspaces->items[i].is_custom_layout = false;
+        memcpy (m->state.monitors, monitors, count * sizeof (gf_monitor_t));
+        m->state.monitor_count = count;
+    }
+    return true;
+}
 
 static bool
 window_is_minimized (gf_wm_t *m, gf_win_info_t *win)

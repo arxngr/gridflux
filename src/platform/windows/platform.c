@@ -72,6 +72,8 @@ platform_bind_system_ops (gf_platform_t *p)
     p->monitor_get_count = gf_monitor_get_count;
     p->monitor_enumerate = gf_monitor_enumerate;
     p->monitor_from_window = gf_monitor_from_window;
+    p->monitor_poll = gf_monitor_poll;
+    p->window_restore_monitor = gf_window_restore_monitor;
     p->screen_get_bounds_for_monitor = gf_screen_get_bounds_for_monitor;
 
     // --- Keymap Support ---
@@ -149,9 +151,8 @@ gf_platform_init (gf_platform_t *platform, gf_display_t *display)
 
     data->monitor_count = GetSystemMetrics (SM_CMONITORS);
 
-    // Enumerate monitors and cache their bounds
-    uint32_t mon_count = GF_MAX_MONITORS;
-    gf_monitor_enumerate (platform, data->monitors, &mon_count);
+    if (gf_monitor_init (platform) != GF_SUCCESS)
+        return GF_ERROR_INITIALIZATION_FAILED;
 
     if (platform->resize_hook_install)
         platform->resize_hook_install (platform);
@@ -169,6 +170,7 @@ gf_platform_cleanup (gf_display_t display, gf_platform_t *platform)
         return;
 
     gf_dock_restore (platform);
+    gf_monitor_cleanup (platform);
 
     if (platform->resize_hook_uninstall)
         platform->resize_hook_uninstall (platform);

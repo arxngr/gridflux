@@ -412,6 +412,15 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME monitor-state COMMAND gridflux-monitor-state-test)
     if(WIN32)
+        add_executable(gridflux-windows-monitor-test tests/test_windows_monitor.c)
+        target_include_directories(gridflux-windows-monitor-test PRIVATE ${PLATFORM_INCLUDES})
+        target_link_libraries(gridflux-windows-monitor-test PRIVATE user32)
+        if(MSVC)
+            target_compile_options(gridflux-windows-monitor-test PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(gridflux-windows-monitor-test PRIVATE -UNDEBUG)
+        endif()
+        add_test(NAME windows-monitor COMMAND gridflux-windows-monitor-test)
         add_executable(gridflux-windows-border-test
             tests/test_windows_border.c src/platform/windows/border.c
             src/config/excludes.c src/config/rules.c
@@ -446,7 +455,8 @@ if(BUILD_TESTING)
                 target_compile_options(gridflux-${test_name}-test PRIVATE -UNDEBUG)
             endif()
             if(test_name STREQUAL "windows-maximized-native")
-                target_sources(gridflux-${test_name}-test PRIVATE src/platform/windows/window.c)
+                target_sources(gridflux-${test_name}-test PRIVATE
+                    src/platform/windows/window.c src/platform/windows/workspace.c)
                 add_dependencies(gridflux-${test_name}-test gridflux-launcher)
                 add_test(NAME ${test_name} COMMAND gridflux-${test_name}-test
                     $<TARGET_FILE:gridflux-launcher>)
