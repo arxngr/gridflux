@@ -1,5 +1,6 @@
 #include "bridge/ipc_client.h"
 #include "bridge/refresh.h"
+#include "platform/async.h"
 #include "platform/gui_platform.h"
 #include "window/main_window.h"
 #include "window/tray.h"
@@ -15,7 +16,7 @@ gtk_activate (GtkApplication *app, gpointer user_data)
 
     if (g_widgets)
     {
-        gtk_window_present (GTK_WINDOW (g_widgets->window));
+        gf_gui_main_window_present (g_widgets);
         return;
     }
 
@@ -28,13 +29,14 @@ gtk_activate (GtkApplication *app, gpointer user_data)
         g_widgets->platform->init (g_widgets->platform);
 
     gf_gui_main_window_init (g_widgets, app);
-    gf_refresh_workspaces (g_widgets);
 
     gf_gui_tray_init (g_widgets);
     if (g_widgets->tray_data)
         g_application_hold (G_APPLICATION (app));
     else
-        gtk_window_present (GTK_WINDOW (g_widgets->window));
+        gf_gui_main_window_present (g_widgets);
+
+    gf_gui_platform_run_refresh (g_widgets);
 
     // if started with --minimized, hide window and keep only tray icon
     if (g_start_minimized && g_widgets->tray_data)
@@ -64,7 +66,12 @@ main (int argc, char **argv)
     if (tray)
     {
         if (!g_start_minimized)
+        {
+            DWORD owner;
+            GetWindowThreadProcessId (tray, &owner);
+            AllowSetForegroundWindow (owner);
             PostMessageW (tray, GF_TRAY_SHOW_MESSAGE, 0, 0);
+        }
         return 0;
     }
 #endif

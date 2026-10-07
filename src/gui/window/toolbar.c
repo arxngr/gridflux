@@ -29,7 +29,7 @@ update_server_button (gf_app_state_t *app)
 static gboolean
 refresh_once (gpointer user_data)
 {
-    gf_refresh_workspaces ((gf_app_state_t *)user_data);
+    gf_gui_platform_run_refresh ((gf_app_state_t *)user_data);
     return G_SOURCE_REMOVE;
 }
 

@@ -2,6 +2,7 @@
 
 #include "tray.h"
 #include "../bridge/process_manager.h"
+#include "main_window.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -27,6 +28,7 @@ typedef struct
     HWND msg_hwnd;
     gf_app_state_t *app;
     guint pump_timer;
+    guint show_source;
     gboolean server_running;
     UINT taskbar_created;
     gboolean icon_added;
@@ -69,22 +71,20 @@ tray_show_context_menu (gf_tray_data_t *tray)
     DestroyMenu (menu);
 }
 
-static void
-tray_toggle_window (gf_tray_data_t *tray)
+static gboolean
+tray_present_window (gpointer user_data)
 {
-    if (!tray->app || !tray->app->window)
-        return;
+    gf_tray_data_t *tray = user_data;
+    tray->show_source = 0;
+    gf_gui_main_window_present (tray->app);
+    return G_SOURCE_REMOVE;
+}
 
-    gboolean visible = gtk_widget_get_visible (tray->app->window);
-    if (visible)
-    {
-        gtk_widget_set_visible (tray->app->window, FALSE);
-    }
-    else
-    {
-        gtk_widget_set_visible (tray->app->window, TRUE);
-        gtk_window_present (GTK_WINDOW (tray->app->window));
-    }
+static void
+tray_request_show (gf_tray_data_t *tray)
+{
+    if (tray && !tray->show_source)
+        tray->show_source = g_idle_add (tray_present_window, tray);
 }
 
 static void
@@ -111,7 +111,7 @@ tray_wndproc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     if (g_tray && msg == GF_TRAY_SHOW_MESSAGE)
     {
-        gtk_window_present (GTK_WINDOW (g_tray->app->window));
+        tray_request_show (g_tray);
         return 0;
     }
     if (msg == WM_TRAY_ICON)
@@ -119,7 +119,7 @@ tray_wndproc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         switch (LOWORD (lParam))
         {
         case WM_LBUTTONUP:
-            tray_toggle_window (g_tray);
+            tray_request_show (g_tray);
             break;
         case WM_RBUTTONUP:
             tray_show_context_menu (g_tray);
@@ -141,11 +141,7 @@ tray_wndproc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             tray_update_tooltip (g_tray);
             break;
         case ID_TRAY_SHOW:
-            if (g_tray && g_tray->app && g_tray->app->window)
-            {
-                gtk_widget_set_visible (g_tray->app->window, TRUE);
-                gtk_window_present (GTK_WINDOW (g_tray->app->window));
-            }
+            tray_request_show (g_tray);
             break;
         case ID_TRAY_QUIT:
             gf_server_stop ();
@@ -167,9 +163,10 @@ tray_wndproc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 static gboolean
 tray_pump_messages (gpointer user_data)
 {
-    (void)user_data;
+    gf_tray_data_t *tray = user_data;
     MSG msg;
-    while (PeekMessage (&msg, NULL, 0, 0, PM_REMOVE))
+    for (int count = 0; count < 32 && PeekMessage (&msg, tray->msg_hwnd, 0, 0, PM_REMOVE);
+         count++)
     {
         TranslateMessage (&msg);
         DispatchMessage (&msg);
@@ -234,7 +231,7 @@ gf_gui_tray_init (gf_app_state_t *app)
     tray_update_tooltip (tray);
 
     // pump Win32 messages periodically to handle tray events
-    tray->pump_timer = g_timeout_add (200, tray_pump_messages, NULL);
+    tray->pump_timer = g_timeout_add (200, tray_pump_messages, tray);
 
     app->tray_data = tray;
 }
@@ -248,6 +245,8 @@ gf_gui_tray_destroy (gf_app_state_t *app)
 
     if (tray->pump_timer)
         g_source_remove (tray->pump_timer);
+    if (tray->show_source)
+        g_source_remove (tray->show_source);
 
     Shell_NotifyIconW (NIM_DELETE, &tray->nid);
 

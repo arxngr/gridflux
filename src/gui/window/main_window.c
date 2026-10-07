@@ -252,3 +252,12 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
     if (!g_object_get_data (G_OBJECT (app), "start-minimized"))
         gtk_window_present (GTK_WINDOW (widgets->window));
 }
+
+void
+gf_gui_main_window_present (gf_app_state_t *app)
+{
+    if (!app || !app->window)
+        return;
+    gtk_window_unminimize (GTK_WINDOW (app->window));
+    gtk_window_present (GTK_WINDOW (app->window));
+}

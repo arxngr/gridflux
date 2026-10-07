@@ -81,6 +81,12 @@ static gboolean
 handle_refresh_response (gpointer user_data)
 {
     gf_refresh_task_t *data = (gf_refresh_task_t *)user_data;
+    data->app->refresh_in_progress = FALSE;
+    g_object_set_data_full (G_OBJECT (data->app->window), "ws_response",
+                            g_memdup2 (&data->workspaces, sizeof (data->workspaces)),
+                            g_free);
+    g_object_set_data_full (G_OBJECT (data->app->window), "win_response",
+                            g_memdup2 (&data->windows, sizeof (data->windows)), g_free);
     gf_refresh_workspaces (data->app);
     g_free (data);
     return G_SOURCE_REMOVE;
@@ -92,19 +98,9 @@ run_refresh_thread (gpointer user_data)
     gf_refresh_task_t *data = (gf_refresh_task_t *)user_data;
     g_usleep (200000);
 
-    gf_ipc_response_t ws_resp = gf_run_client_command ("query workspaces");
-    gf_ipc_response_t win_resp = gf_run_client_command ("query windows");
-
-    g_object_set_data_full (G_OBJECT (data->app->window), "ws_response",
-                            g_memdup2 (&ws_resp, sizeof (ws_resp)), g_free);
-    g_object_set_data_full (G_OBJECT (data->app->window), "win_response",
-                            g_memdup2 (&win_resp, sizeof (win_resp)), g_free);
-
-    gf_refresh_task_t *res = g_new0 (gf_refresh_task_t, 1);
-    res->app = data->app;
-    g_idle_add ((GSourceFunc)handle_refresh_response, res);
-
-    g_free (data);
+    data->workspaces = gf_run_client_command ("query workspaces");
+    data->windows = gf_run_client_command ("query windows");
+    g_idle_add (handle_refresh_response, data);
     return NULL;
 }
 #endif
@@ -124,7 +120,7 @@ gf_gui_platform_run_command (gf_app_state_t *app, const char *command, gboolean 
     task->should_refresh = refresh;
     task->show_dialog = dialog;
 
-    g_thread_new ("ipc-command", run_command_thread, task);
+    g_thread_unref (g_thread_new ("ipc-command", run_command_thread, task));
 #else
     gf_ipc_response_t resp = gf_run_client_command (command);
     if (dialog)
@@ -151,9 +147,12 @@ void
 gf_gui_platform_run_refresh (gf_app_state_t *app)
 {
 #ifdef _WIN32
+    if (app->refresh_in_progress)
+        return;
+    app->refresh_in_progress = TRUE;
     gf_refresh_task_t *task = g_new0 (gf_refresh_task_t, 1);
     task->app = app;
-    g_thread_new ("ipc-refresh", run_refresh_thread, task);
+    g_thread_unref (g_thread_new ("ipc-refresh", run_refresh_thread, task));
 #else
     gf_refresh_workspaces (app);
 #endif

@@ -18,6 +18,7 @@ typedef struct
     void *tray_data;
 #ifdef _WIN32
     gboolean operation_in_progress;
+    gboolean refresh_in_progress;
 #endif
 } gf_app_state_t;
 
@@ -41,6 +42,8 @@ typedef struct
 typedef struct
 {
     gf_app_state_t *app;
+    gf_ipc_response_t workspaces;
+    gf_ipc_response_t windows;
 } gf_refresh_task_t;
 #endif
 

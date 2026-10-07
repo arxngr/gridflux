@@ -3,6 +3,7 @@
 
 #include "../app_state.h"
 
+void gf_gui_main_window_present (gf_app_state_t *app);
 void gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app);
 
 #endif // GF_GUI_MAIN_WINDOW_H

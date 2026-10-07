@@ -31,11 +31,11 @@ gf_run_client_command (const char *command)
         return err;
     }
 
-    gf_ipc_response_t response;
+    gf_ipc_response_t response = { .status = GF_IPC_ERROR_CONNECTION };
     if (!gf_ipc_client_send (handle, command, &response))
     {
         gf_ipc_client_disconnect (handle);
-        gf_ipc_response_t err = { .status = GF_IPC_ERROR_INVALID_COMMAND };
+        gf_ipc_response_t err = { .status = response.status };
         gf_command_response_t resp = { .type = 1 };
         snprintf (resp.message, sizeof (resp.message), "IPC send failed");
         memcpy (err.message, &resp, sizeof (resp));
