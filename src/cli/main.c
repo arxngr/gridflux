@@ -11,6 +11,7 @@ print_usage (const char *prog)
     printf ("Commands:\n");
     printf ("  query windows [WORKSPACE_ID]    List windows\n");
     printf ("  query workspaces                List workspaces\n");
+    printf ("  query monitors                  List connected monitor IDs\n");
     printf ("  query count [WORKSPACE_ID]      Count windows\n");
     printf ("  query apps                      List running application classes\n");
     printf ("  move <WINDOW_ID> <WORKSPACE_ID> Move window to workspace\n");
@@ -144,6 +145,24 @@ main (int argc, char **argv)
         }
 
         gf_window_list_cleanup (windows);
+    }
+    else if (strncmp (command, "query monitors", 14) == 0)
+    {
+        uint32_t count;
+        memcpy (&count, response.message, sizeof (count));
+        if (count > GF_MAX_MONITORS)
+        {
+            fprintf (stderr, "Error: Invalid monitor list\n");
+            return 1;
+        }
+        printf ("Connected monitors:\n");
+        for (uint32_t i = 0; i < count; i++)
+        {
+            gf_monitor_t monitor;
+            memcpy (&monitor, response.message + sizeof (count) + i * sizeof (monitor),
+                    sizeof (monitor));
+            printf ("M%u%s\n", monitor.id, monitor.is_primary ? " (primary)" : "");
+        }
     }
     else
     {

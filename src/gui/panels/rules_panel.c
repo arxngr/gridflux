@@ -15,10 +15,59 @@ typedef struct
     GtkStringList *app_model;
     GtkWidget *ws_spin;
     GtkWidget *monitor_dropdown;
+    gf_monitor_id_t monitor_ids[GF_MAX_MONITORS];
+    uint32_t monitor_count;
+    guint monitor_timer;
     GtkWidget *list_box; // vertical box holding the grouped rules
 } rules_ctx_t;
 
 static void refresh_rules_list (rules_ctx_t *ctx);
+
+static void
+free_rules_context (gpointer data)
+{
+    rules_ctx_t *ctx = data;
+    if (ctx->monitor_timer)
+        g_source_remove (ctx->monitor_timer);
+    g_free (ctx);
+}
+
+static gboolean
+refresh_monitors (gpointer data)
+{
+    rules_ctx_t *ctx = data;
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    uint32_t count = GF_MAX_MONITORS;
+    if (!gf_gui_get_monitors (monitors, &count))
+        return G_SOURCE_CONTINUE;
+    bool changed = count != ctx->monitor_count;
+    for (uint32_t i = 0; !changed && i < count; i++)
+        changed = monitors[i].id != ctx->monitor_ids[i];
+    if (!changed)
+        return G_SOURCE_CONTINUE;
+
+    guint selected = gtk_drop_down_get_selected (GTK_DROP_DOWN (ctx->monitor_dropdown));
+    gf_monitor_id_t previous = selected > 0 && selected <= ctx->monitor_count
+                                   ? ctx->monitor_ids[selected - 1]
+                                   : GF_MONITOR_SHARED;
+    GtkStringList *model = gtk_string_list_new (NULL);
+    gtk_string_list_append (model, "Current monitor");
+    guint next = 0;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        ctx->monitor_ids[i] = monitors[i].id;
+        char label[16];
+        snprintf (label, sizeof (label), "M%u", monitors[i].id);
+        gtk_string_list_append (model, label);
+        if (monitors[i].id == previous)
+            next = i + 1;
+    }
+    ctx->monitor_count = count;
+    gtk_drop_down_set_model (GTK_DROP_DOWN (ctx->monitor_dropdown), G_LIST_MODEL (model));
+    g_object_unref (model);
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (ctx->monitor_dropdown), next);
+    return G_SOURCE_CONTINUE;
+}
 
 static void
 on_remove_rule (GtkButton *btn, gpointer user_data)
@@ -48,11 +97,11 @@ on_add_rule (GtkButton *btn, gpointer user_data)
 
     char command[256];
     guint monitor = gtk_drop_down_get_selected (GTK_DROP_DOWN (ctx->monitor_dropdown));
-    if (monitor == 0)
+    if (monitor == 0 || monitor == GTK_INVALID_LIST_POSITION)
         snprintf (command, sizeof (command), "rule add %s %d", wm_class, ws);
     else
         snprintf (command, sizeof (command), "rule add %s %d %u", wm_class, ws,
-                  monitor - 1);
+                  ctx->monitor_ids[monitor - 1]);
     gf_ipc_response_t resp = gf_run_client_command (command);
     gf_command_response_t *cmd_resp = (gf_command_response_t *)resp.message;
 
@@ -202,13 +251,9 @@ build_add_form (rules_ctx_t *ctx)
     gtk_box_append (GTK_BOX (monitor_field), gtk_label_new ("Monitor ID"));
     GtkStringList *monitor_model = gtk_string_list_new (NULL);
     gtk_string_list_append (monitor_model, "Current monitor");
-    for (uint32_t i = 0; i < GF_MAX_MONITORS; i++)
-    {
-        char label[16];
-        snprintf (label, sizeof (label), "M%u", i);
-        gtk_string_list_append (monitor_model, label);
-    }
     ctx->monitor_dropdown = gtk_drop_down_new (G_LIST_MODEL (monitor_model), NULL);
+    refresh_monitors (ctx);
+    ctx->monitor_timer = g_timeout_add_seconds (2, refresh_monitors, ctx);
     gtk_widget_set_tooltip_text (ctx->monitor_dropdown,
                                  "Optional: keep this app on a specific monitor");
     gtk_box_append (GTK_BOX (monitor_field), ctx->monitor_dropdown);
@@ -234,7 +279,7 @@ gf_gui_on_rules_button_clicked (GtkButton *btn, gpointer data)
     gtk_window_set_default_size (GTK_WINDOW (window), 560, 460);
     gtk_window_set_modal (GTK_WINDOW (window), TRUE);
     gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (app->window));
-    g_object_set_data_full (G_OBJECT (window), "ctx", ctx, g_free);
+    g_object_set_data_full (G_OBJECT (window), "ctx", ctx, free_rules_context);
     ctx->window = window;
 
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);

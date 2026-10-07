@@ -3,6 +3,7 @@
 #include "../../utils/memory.h"
 #include "internal.h"
 #include <ctype.h>
+#include <limits.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -387,12 +388,48 @@ gf_window_is_installer (HWND window)
 }
 
 static bool
+window_frame_rect (HWND window, RECT *visible, int *insets)
+{
+    RECT native, frame;
+    memset (insets, 0, 4 * sizeof (*insets));
+    if (!GetWindowRect (window, &native) || native.right <= native.left
+        || native.bottom <= native.top)
+        return false;
+    *visible = native;
+    if (FAILED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &frame,
+                                       sizeof (frame)))
+        || frame.right <= frame.left || frame.bottom <= frame.top)
+        return true;
+    UINT dpi = GetDpiForWindow (window);
+    if (!dpi)
+        dpi = 96;
+    int limit_x = 2
+                      * (GetSystemMetricsForDpi (SM_CXSIZEFRAME, dpi)
+                         + GetSystemMetricsForDpi (SM_CXPADDEDBORDER, dpi))
+                  + 8;
+    int limit_y = 2
+                      * (GetSystemMetricsForDpi (SM_CYSIZEFRAME, dpi)
+                         + GetSystemMetricsForDpi (SM_CXPADDEDBORDER, dpi))
+                  + 8;
+    int observed[4] = { frame.left - native.left, frame.top - native.top,
+                        native.right - frame.right, native.bottom - frame.bottom };
+    // DWM can retain the previous monitor's frame after wake or a move. Such
+    // differences are not frame padding: using them can double a tile's width
+    // or collapse its client area. Use the current HWND until DWM catches up.
+    for (int i = 0; i < 4; i++)
+        if (observed[i] < 0 || observed[i] > (i % 2 ? limit_y : limit_x))
+            return true;
+    *visible = frame;
+    memcpy (insets, observed, sizeof (observed));
+    return true;
+}
+
+static bool
 window_fill_info (HWND hwnd, gf_win_info_t *info)
 {
     RECT rect;
-    if (FAILED (DwmGetWindowAttribute (hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rect,
-                                       sizeof (rect)))
-        && !GetWindowRect (hwnd, &rect))
+    int insets[4];
+    if (!window_frame_rect (hwnd, &rect, insets))
         return false;
 
     // Enumeration allocates an uninitialised array; clear every tracked field
@@ -459,9 +496,8 @@ gf_window_get_geometry (gf_display_t display, gf_handle_t window, gf_rect_t *geo
         return GF_ERROR_INVALID_PARAMETER;
 
     RECT rect;
-    if (SUCCEEDED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &rect,
-                                          sizeof (rect)))
-        || GetWindowRect (window, &rect))
+    int insets[4];
+    if (window_frame_rect (window, &rect, insets))
     {
         geometry->x = rect.left;
         geometry->y = rect.top;
@@ -482,7 +518,8 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
     (void)flags;
     (void)cfg;
 
-    if (!gf_window_validate (window) || !geometry)
+    if (!gf_window_validate (window) || !geometry || !geometry->width || !geometry->height
+        || geometry->width > INT_MAX || geometry->height > INT_MAX)
         return GF_ERROR_INVALID_PARAMETER;
 
     // A maximize can occur between the core's state check and this write.
@@ -495,30 +532,16 @@ gf_window_set_geometry (gf_display_t display, gf_handle_t window,
     int new_w = geometry->width;
     int new_h = geometry->height;
 
-    // Compensate for the invisible DWM shadow/border that shifts the window rect.
-    // NOTE (DPI): DWMWA_EXTENDED_FRAME_BOUNDS is always in physical pixels, while
-    // GetWindowRect is DPI-virtualized under system-DPI awareness. The delta below
-    // is only correct when both are in the SAME coordinate space, which holds under
-    // Per-Monitor-V2 awareness (enable via the app manifest <dpiAwareness> /
-    // SetProcessDpiAwarenessContext in the server entry point — outside this file).
-    // Until then, on monitors whose DPI differs from the system DPI this
-    // subtraction mixes physical and virtualized coordinates and needs per-monitor
-    // DPI conversion.
-    RECT d_rect, w_rect;
-    if (SUCCEEDED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &d_rect,
-                                          sizeof (d_rect)))
-        && GetWindowRect (window, &w_rect))
-    {
-        int left_border = d_rect.left - w_rect.left;
-        int top_border = d_rect.top - w_rect.top;
-        int right_border = w_rect.right - d_rect.right;
-        int bottom_border = w_rect.bottom - d_rect.bottom;
-
-        new_x -= left_border;
-        new_y -= top_border;
-        new_w += left_border + right_border;
-        new_h += top_border + bottom_border;
-    }
+    // The server uses Per-Monitor-V2 awareness, so native and DWM coordinates
+    // are physical pixels. Only compensate for a coherent, bounded frame.
+    RECT visible;
+    int insets[4];
+    if (!window_frame_rect (window, &visible, insets))
+        return GF_ERROR_PLATFORM_ERROR;
+    new_x -= insets[0];
+    new_y -= insets[1];
+    new_w += insets[0] + insets[2];
+    new_h += insets[1] + insets[3];
 
     // Use SetWindowPos with SWP_NOSENDCHANGING so that apps like Discord
     // (CEF/Electron) cannot intercept the resize via WM_WINDOWPOSCHANGING

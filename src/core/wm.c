@@ -230,7 +230,9 @@ gf_wm_load_cfg (gf_wm_t *m)
         return;
     }
 
-    if (st.st_mtime <= m->config->last_modified)
+    // CRT timestamps have one-second resolution. A second settings save in
+    // that same second must still be observed; periodically compare contents.
+    if (st.st_mtime == m->config->last_modified && m->state.loop_counter % 30 != 0)
         return;
 
     gf_config_t new_cfg = gf_config_load_or_create (path);

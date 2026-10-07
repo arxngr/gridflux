@@ -112,7 +112,10 @@ main (void)
         assert (bounds.x == areas[i].x && bounds.width == areas[i].width);
     }
     // Power events preserve the accepted topology while a display reconnects.
+    data.resize_state.phase = GF_RESIZE_ACTIVE;
+    data.resize_state.pending = true;
     SendMessage (data.monitor_window, WM_POWERBROADCAST, PBT_APMSUSPEND, 0);
+    assert (data.resize_state.phase == GF_RESIZE_IDLE && !data.resize_state.pending);
     assert (!gf_monitor_poll (&platform));
     connected[1] = false;
     SendMessage (data.monitor_window, WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC, 0);
@@ -125,9 +128,12 @@ main (void)
     }
     connected[1] = true;
     generation++;
+    data.resize_state.phase = GF_RESIZE_COMPLETE;
+    data.resize_state.pending = true;
     assert (!gf_monitor_poll (&platform));
     now += 1001;
     assert (gf_monitor_poll (&platform));
+    assert (data.resize_state.phase == GF_RESIZE_IDLE && !data.resize_state.pending);
     assert (data.monitor_snapshot.handles[1] == monitor_handle (1));
     // Coordinate changes keep identity, including negative monitor origins.
     areas[0].x = -1920;

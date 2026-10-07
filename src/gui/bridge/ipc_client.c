@@ -2,6 +2,22 @@
 #include <stdio.h>
 #include <string.h>
 
+bool
+gf_gui_get_monitors (gf_monitor_t *monitors, uint32_t *count)
+{
+    gf_ipc_response_t response = gf_run_client_command ("query monitors");
+    if (response.status != GF_IPC_SUCCESS)
+        return false;
+    uint32_t connected;
+    memcpy (&connected, response.message, sizeof (connected));
+    if (connected > *count || connected > GF_MAX_MONITORS)
+        return false;
+    memcpy (monitors, response.message + sizeof (connected),
+            connected * sizeof (*monitors));
+    *count = connected;
+    return true;
+}
+
 gf_ipc_response_t
 gf_run_client_command (const char *command)
 {

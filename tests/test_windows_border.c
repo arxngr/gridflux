@@ -146,6 +146,23 @@ main (void)
     gf_border_update (&platform, &config);
     check_overlay (&data);
 
+    HWND overlay = data.borders[0]->overlay;
+    const uint32_t colors[] = { 0x00FF0000, 0x000000FF, 0x00000000 };
+    for (unsigned i = 0; i < 3; i++)
+    {
+        config.border_color = colors[i];
+        gf_border_update (&platform, &config);
+        assert (data.borders[0]->overlay == overlay);
+        assert (data.borders[0]->color == colors[i]);
+        assert ((uint32_t)(UINT_PTR)GetPropA (overlay, "BorderColor") == colors[i]);
+        check_overlay (&data);
+    }
+    gf_border_add (&platform, target, 0x0000FF00, 3);
+    assert (data.border_count == 1 && data.borders[0]->overlay == overlay);
+    assert (data.borders[0]->color == 0x0000FF00);
+    assert ((uint32_t)(UINT_PTR)GetPropA (overlay, "BorderColor") == 0x0000FF00);
+    config.border_color = 0x0000FF00;
+
     // A destroyed native overlay must be recreated rather than kept as an
     // existing border with an invalid HWND.
     assert (DestroyWindow (data.borders[0]->overlay));

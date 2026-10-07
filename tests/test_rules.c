@@ -6,6 +6,30 @@
 #include <json-c/json.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#include <sys/utime.h>
+#else
+#include <utime.h>
+#endif
+
+// Configuration reload uses the real core; no IPC server is opened by tests.
+gf_ipc_handle_t
+gf_ipc_server_create (void)
+{
+    return -1;
+}
+void
+gf_ipc_server_destroy (gf_ipc_handle_t handle)
+{
+    (void)handle;
+}
+bool
+gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
+{
+    (void)handle;
+    (void)user_data;
+    return false;
+}
 
 void
 gf_log (gf_log_level_t level, const char *format, ...)
@@ -109,9 +133,72 @@ test_commands (void)
     gf_ws_info_t *external = gf_workspace_list_find_by_id (&m.state.workspaces, 35);
     assert (primary && external && primary->has_rule && external->has_rule);
     assert (primary->monitor_id == 0 && external->monitor_id == 1);
+    // Connected IDs need not be contiguous. Never expose reserved offline slots.
+    m.state.monitor_count = 4;
+    for (unsigned i = 0; i < 4; i++)
+        m.state.monitors[i]
+            = (gf_monitor_t){ .id = i, .full_bounds = { 0, 0, 1920, 1080 } };
+    m.state.monitors[1].full_bounds.width = 0;
+    gf_ipc_response_t response = { 0 };
+    gf_handle_client_message ("query monitors", &response, &m);
+    uint32_t connected;
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    memcpy (&connected, response.message, sizeof (connected));
+    assert (response.status == GF_IPC_SUCCESS && connected == 3);
+    memcpy (monitors, response.message + sizeof (connected),
+            connected * sizeof (*monitors));
+    assert (monitors[0].id == 0 && monitors[1].id == 2 && monitors[2].id == 3);
+    m.state.monitors[3].full_bounds.height = 0;
+    gf_handle_client_message ("query monitors", &response, &m);
+    memcpy (&connected, response.message, sizeof (connected));
+    assert (connected == 2);
+    m.state.monitors[1].full_bounds.width = 1920;
+    gf_handle_client_message ("query monitors", &response, &m);
+    memcpy (&connected, response.message, sizeof (connected));
+    memcpy (monitors, response.message + sizeof (connected),
+            connected * sizeof (*monitors));
+    assert (connected == 3 && monitors[1].id == 1 && monitors[2].id == 2);
     gf_config_t loaded = gf_config_load_or_create (gf_config_get_path ());
     assert (!gf_config_changed (&cfg, &loaded));
     gf_config_release (&loaded);
+    gf_config_release (&cfg);
+    gf_window_list_cleanup (&m.state.windows);
+    gf_workspace_list_cleanup (&m.state.workspaces);
+}
+
+static void
+test_color_reload (void)
+{
+    const char *path = gf_config_get_path ();
+    gf_config_t cfg = gf_config_load_or_create (path);
+    gf_platform_t platform = { .workspace_get_count = workspace_count };
+    gf_wm_t m = { .config = &cfg, .platform = &platform };
+    assert (gf_window_list_init (&m.state.windows, 8) == GF_SUCCESS);
+    assert (gf_workspace_list_init (&m.state.workspaces, 8) == GF_SUCCESS);
+    struct stat metadata;
+    assert (stat (path, &metadata) == 0);
+    cfg.last_modified = metadata.st_mtime;
+    gf_config_t updated;
+    assert (gf_config_dup (&updated, &cfg) == GF_SUCCESS);
+    const uint32_t colors[] = { 0x00FF0000, 0x000000FF, 0x00000000 };
+    for (unsigned i = 0; i < 3; i++)
+    {
+        updated.border_color = colors[i];
+        gf_config_save (path, &updated);
+        // Force every edit to share the original second-resolution timestamp.
+#ifdef _WIN32
+        struct _utimbuf timestamp = { metadata.st_mtime, metadata.st_mtime };
+        assert (_utime (path, &timestamp) == 0);
+#else
+        struct utimbuf timestamp = { metadata.st_mtime, metadata.st_mtime };
+        assert (utime (path, &timestamp) == 0);
+#endif
+        m.state.loop_counter = 30 * (i + 1);
+        gf_wm_load_cfg (&m);
+        assert (cfg.border_color == colors[i]);
+        assert (cfg.last_modified == metadata.st_mtime);
+    }
+    gf_config_release (&updated);
     gf_config_release (&cfg);
     gf_window_list_cleanup (&m.state.windows);
     gf_workspace_list_cleanup (&m.state.workspaces);
@@ -125,6 +212,7 @@ main (void)
     assert (strcmp (gf_config_get_path (), "config.json") == 0);
     test_persistence ();
     test_commands ();
+    test_color_reload ();
     assert (remove (gf_config_get_path ()) == 0);
     puts ("Monitor rule persistence and command regressions passed");
     return 0;

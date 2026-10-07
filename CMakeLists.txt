@@ -415,6 +415,7 @@ if(BUILD_TESTING)
         tests/test_rules.c src/config/config.c src/config/excludes.c src/config/rules.c
         src/ipc/ipc_command.c src/core/events.c src/core/workspace.c
         src/core/window.c src/core/arrange.c src/core/monitor.c
+        src/core/wm.c src/core/border.c src/core/debug.c src/core/resize.c src/core/layout.c
         src/utils/list.c src/utils/memory.c)
     target_include_directories(gridflux-rules-test PRIVATE ${PLATFORM_INCLUDES})
     target_compile_definitions(gridflux-rules-test PRIVATE GF_DEV_MODE)

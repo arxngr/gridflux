@@ -19,6 +19,7 @@ static RECT clips[4];
 static int clip_kind[4];
 static uint32_t clip_writes[4];
 static bool browser_clip;
+static bool frame_failed;
 
 static unsigned
 index_of (HWND window)
@@ -105,6 +106,8 @@ static HRESULT
 fake_frame (HWND window, DWORD attribute, PVOID out, DWORD size)
 {
     assert (attribute == DWMWA_EXTENDED_FRAME_BOUNDS && size == sizeof (RECT));
+    if (frame_failed)
+        return E_FAIL;
     *(RECT *)out = frame[index_of (window)];
     return S_OK;
 }
@@ -119,7 +122,7 @@ fake_position (HWND window, HWND after, int x, int y, int width, int height, UIN
     (void)after;
     assert (flags == (SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING));
     unsigned i = index_of (window);
-    assert (maximized[i] && !minimized[i]);
+    assert (!minimized[i] && width > 0 && height > 0);
     writes[i]++;
     if (reject_write)
     {
@@ -168,6 +171,7 @@ fake_enum_windows (WNDENUMPROC callback, LPARAM context)
 #define SetPropA fake_set_prop
 #define RemovePropA fake_remove_prop
 #define IsWindow fake_window
+#define gf_window_validate fake_window
 #define IsZoomed fake_zoomed
 #define IsIconic fake_iconic
 #define GetDpiForWindow fake_dpi
@@ -187,6 +191,62 @@ expect_rect (unsigned i, LONG left, LONG top, LONG right, LONG bottom)
 {
     RECT expected = { left, top, right, bottom };
     assert (EqualRect (&actual[i], &expected));
+}
+
+static void
+test_normal_wake_geometry (void)
+{
+    HWND window = (HWND)(uintptr_t)3;
+    gf_rect_t tile = { 8, 8, 944, 1016 }, observed;
+    // Windows has expanded the HWND while DWM still describes the old tile.
+    actual[3] = (RECT){ 0, 0, 1920, 1040 };
+    frame[3] = (RECT){ 0, 0, 960, 1040 };
+    assert (gf_window_get_geometry (NULL, window, &observed) == GF_SUCCESS);
+    assert (observed.width == 1920);
+    assert (gf_window_set_geometry (NULL, window, &tile, GF_GEOMETRY_CHANGE_ALL, NULL)
+            == GF_SUCCESS);
+    expect_rect (3, 8, 8, 952, 1024);
+    for (unsigned step = 0; step < 20; step++)
+    {
+        assert (gf_window_set_geometry (NULL, window, &tile, GF_GEOMETRY_CHANGE_ALL, NULL)
+                == GF_SUCCESS);
+        expect_rect (3, 8, 8, 952, 1024);
+    }
+    // A reconnect can leave only a title bar, with the old full-height DWM frame.
+    actual[3] = (RECT){ 1920, 0, 3200, 30 };
+    frame[3] = (RECT){ 0, 0, 1920, 1080 };
+    dpi[3] = 144;
+    tile = (gf_rect_t){ 1928, 8, 1264, 1008 };
+    assert (gf_window_get_geometry (NULL, window, &observed) == GF_SUCCESS);
+    assert (observed.x == 1920 && observed.height == 30);
+    assert (gf_window_set_geometry (NULL, window, &tile, GF_GEOMETRY_CHANGE_ALL, NULL)
+            == GF_SUCCESS);
+    expect_rect (3, 1928, 8, 3192, 1016);
+    // Once DWM is coherent, compensate the genuine invisible frame normally.
+    frame[3] = (RECT){ 1935, 8, 3185, 1009 };
+    assert (gf_window_set_geometry (NULL, window, &tile, GF_GEOMETRY_CHANGE_ALL, NULL)
+            == GF_SUCCESS);
+    expect_rect (3, 1921, 8, 3199, 1023);
+    frame_failed = true;
+    assert (gf_window_get_geometry (NULL, window, &observed) == GF_SUCCESS);
+    assert (observed.x == 1921 && observed.width == 1278);
+    assert (gf_window_set_geometry (NULL, window, &tile, GF_GEOMETRY_CHANGE_ALL, NULL)
+            == GF_SUCCESS);
+    expect_rect (3, 1928, 8, 3192, 1016);
+    frame_failed = false;
+    unsigned previous = writes[3];
+    minimized[3] = true;
+    assert (gf_window_set_geometry (NULL, window, &tile, GF_GEOMETRY_CHANGE_ALL, NULL)
+            == GF_SUCCESS);
+    minimized[3] = false;
+    maximized[3] = true;
+    assert (gf_window_set_geometry (NULL, window, &tile, GF_GEOMETRY_CHANGE_ALL, NULL)
+            == GF_SUCCESS);
+    assert (writes[3] == previous);
+    maximized[3] = false;
+    tile.height = 0;
+    assert (gf_window_set_geometry (NULL, window, &tile, GF_GEOMETRY_CHANGE_ALL, NULL)
+            == GF_ERROR_INVALID_PARAMETER);
 }
 int
 main (void)
@@ -282,6 +342,7 @@ main (void)
     assert (gf_window_state_apply (main, TRUE));
     assert (clip_writes[1] == region_writes);
     gf_window_state_restore ();
+    test_normal_wake_geometry ();
     puts ("Maximized gap fill, DPI, monitor isolation, and Stop recovery passed");
     return 0;
 }

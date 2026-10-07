@@ -792,6 +792,8 @@ void
 wm_return_window_to_monitor (gf_wm_t *m, gf_win_info_t *win)
 {
     gf_monitor_return_t home = win->monitor_return;
+    bool was_active
+        = wm_workspaces (m)->active_workspace[home.monitor_id] == home.workspace_id;
     move_window_to_monitor (m, win, home.monitor_id, true);
     gf_ws_list_t *workspaces = wm_workspaces (m);
     gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, home.workspace_id);
@@ -809,8 +811,12 @@ wm_return_window_to_monitor (gf_wm_t *m, gf_win_info_t *win)
         && ws->has_maximized_state == win->is_maximized
         && ws->is_excluded_ws == wm_user_excluded (m, win->id))
     {
+        gf_ws_id_t temporary = win->workspace_id;
         wm_move_window_to_workspace (m, win, ws->id);
-        if (wm_workspaces (m)->active_workspace[home.monitor_id] == ws->id
+        gf_window_list_mark_all_needs_update (wm_windows (m), &temporary);
+        gf_window_list_mark_all_needs_update (wm_windows (m), &ws->id);
+        ws->is_custom_layout = false;
+        if (was_active || wm_workspaces (m)->active_workspace[home.monitor_id] == ws->id
             || (!win->is_minimized
                 && (win->is_maximized
                     || (wm_platform (m)->window_get_focused

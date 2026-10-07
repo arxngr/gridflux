@@ -107,6 +107,23 @@ cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *user_
 }
 
 static void
+cmd_query_monitors (const char *args, gf_ipc_response_t *response, void *user_data)
+{
+    (void)args;
+    gf_wm_t *m = user_data;
+    gf_monitor_t connected[GF_MAX_MONITORS];
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < m->state.monitor_count && i < GF_MAX_MONITORS; i++)
+    {
+        const gf_monitor_t *monitor = &m->state.monitors[i];
+        if (monitor->full_bounds.width && monitor->full_bounds.height)
+            connected[count++] = *monitor;
+    }
+    memcpy (response->message, &count, sizeof (count));
+    memcpy (response->message + sizeof (count), connected, count * sizeof (*connected));
+}
+
+static void
 cmd_query_count (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
@@ -631,6 +648,10 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
         else if (strcmp (subcommand, "apps") == 0)
         {
             cmd_query_apps (subargs, response, user_data);
+        }
+        else if (strcmp (subcommand, "monitors") == 0)
+        {
+            cmd_query_monitors (subargs, response, user_data);
         }
         else
         {

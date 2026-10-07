@@ -78,24 +78,16 @@ border_target_visible (gf_border_t *b)
            && !IsZoomed (b->target);
 }
 
-// Compute the overlay rect from the target's DWM and Win32 bounds. The shadow
-// inset converts DWM coords (visible frame) into Win32 coords (incl. shadow).
-// NOTE (DPI): DWMWA_EXTENDED_FRAME_BOUNDS is always physical pixels while
-// GetWindowRect is DPI-virtualized under system-DPI awareness. Mixing d_rect and
-// w_rect below is only correct when both share one coordinate space, which holds
-// under Per-Monitor-V2 awareness (enable via the app manifest <dpiAwareness> /
-// SetProcessDpiAwarenessContext in the server entry point — outside this file).
-// On monitors whose DPI differs from the system DPI this still needs per-monitor
-// DPI conversion.
+// Use the same validated visible bounds as layout while DWM catches up after
+// wake or a monitor move.
 static bool
 border_compute_layout (gf_border_t *b, border_layout_t *out)
 {
-    RECT d_rect, w_rect;
-    if (!SUCCEEDED (DwmGetWindowAttribute (b->target, DWMWA_EXTENDED_FRAME_BOUNDS,
-                                           &d_rect, sizeof (d_rect))))
+    gf_rect_t geometry;
+    if (gf_window_get_geometry (NULL, b->target, &geometry) != GF_SUCCESS)
         return false;
-    if (!GetWindowRect (b->target, &w_rect))
-        return false;
+    RECT d_rect = { geometry.x, geometry.y, geometry.x + (LONG)geometry.width,
+                    geometry.y + (LONG)geometry.height };
 
     int t = b->thickness;
     out->x = d_rect.left - t;
@@ -275,9 +267,9 @@ border_wnd_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
     return DefWindowProc (hwnd, msg, wparam, lparam);
 }
 
-// True if a border is already tracked for this target window.
-static bool
-border_exists (gf_windows_platform_data_t *data, gf_handle_t window)
+// Find an existing border, dropping a stale native overlay before recreating it.
+static gf_border_t *
+border_find (gf_windows_platform_data_t *data, gf_handle_t window)
 {
     for (int i = 0; i < data->border_count; i++)
         if (data->borders[i] && data->borders[i]->target == window)
@@ -288,11 +280,25 @@ border_exists (gf_windows_platform_data_t *data, gf_handle_t window)
                 for (int j = i; j < data->border_count - 1; j++)
                     data->borders[j] = data->borders[j + 1];
                 data->border_count--;
-                return false;
+                return NULL;
             }
-            return true;
+            return data->borders[i];
         }
-    return false;
+    return NULL;
+}
+
+static void
+border_update_color (gf_border_t *border, gf_color_t color)
+{
+    if (border->color == color)
+        return;
+    border->color = color;
+    if (border->overlay && IsWindow (border->overlay))
+    {
+        SetPropA (border->overlay, "BorderColor", (HANDLE)(INT_PTR)color);
+        InvalidateRect (border->overlay, NULL, FALSE);
+        UpdateWindow (border->overlay);
+    }
 }
 
 // Allocate and initialise a border, stashing its props on the overlay window.
@@ -328,15 +334,16 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     gf_windows_platform_data_t *data
         = (gf_windows_platform_data_t *)platform->platform_data;
 
-    if (border_exists (data, window))
+    gf_border_t *existing = border_find (data, window);
+    if (existing)
     {
+        border_update_color (existing, color);
         GF_LOG_DEBUG ("Border already exists for window %p", window);
         return;
     }
 
-    RECT rect;
-    if (!SUCCEEDED (DwmGetWindowAttribute (window, DWMWA_EXTENDED_FRAME_BOUNDS, &rect,
-                                           sizeof (rect))))
+    gf_rect_t geometry;
+    if (gf_window_get_geometry (NULL, window, &geometry) != GF_SUCCESS)
     {
         GF_LOG_WARN ("Failed to get window rect for border");
         return;
@@ -477,15 +484,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
         if (IsWindow (b->target) && !IsIconic (b->target))
             b->monitor_id = gf_monitor_from_window (platform, b->target);
 
-        if (b->color != config->border_color)
-        {
-            b->color = config->border_color;
-            if (b->overlay && IsWindow (b->overlay))
-            {
-                SetPropA (b->overlay, "BorderColor", (HANDLE)(INT_PTR)b->color);
-                InvalidateRect (b->overlay, NULL, FALSE);
-            }
-        }
+        border_update_color (b, config->border_color);
         border_update_overlay (b, gui_rects, gui_count);
         i++;
     }
@@ -516,9 +515,7 @@ gf_border_set_color (gf_platform_t *platform, gf_color_t color)
         gf_border_t *b = data->borders[i];
         if (b && b->overlay && IsWindow (b->overlay))
         {
-            b->color = color;
-            SetPropA (b->overlay, "BorderColor", (HANDLE)(INT_PTR)color);
-            InvalidateRect (b->overlay, NULL, FALSE);
+            border_update_color (b, color);
         }
     }
 }

@@ -14,6 +14,7 @@ pause_monitors (gf_wm_t *m)
         if (platform->dock_restore)
             platform->dock_restore (platform);
         m->state.dock_hidden = false;
+        m->state.resize_active = false;
         for (uint32_t i = 0; i < wm_windows (m)->count; i++)
             wm_windows (m)->items[i].monitor_restore_failures = 0;
     }
@@ -112,6 +113,7 @@ wm_poll_monitors (gf_wm_t *m)
     m->state.monitors_paused = m->state.monitors_recovering = false;
     if (changed)
     {
+        m->state.resize_active = false;
         for (uint32_t i = 0; i < windows->count; i++)
         {
             windows->items[i].rule_move_failures = 0;

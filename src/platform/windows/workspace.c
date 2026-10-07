@@ -151,6 +151,7 @@ monitor_window_proc (HWND window, UINT message, WPARAM wparam, LPARAM lparam)
         }
         else if (wparam == PBT_APMSUSPEND)
         {
+            memset (&data->resize_state, 0, sizeof (data->resize_state));
             data->monitor_suspended = true;
             data->monitor_pending = true;
         }
@@ -254,6 +255,9 @@ gf_monitor_poll (gf_platform_t *platform)
     if (now < data->monitor_settle_until
         || (missing && now < data->monitor_reconnect_until))
         return false;
+    GUITHREADINFO interaction = { .cbSize = sizeof (interaction) };
+    if (!GetGUIThreadInfo (0, &interaction) || !(interaction.flags & GUI_INMOVESIZE))
+        memset (&data->resize_state, 0, sizeof (data->resize_state));
     monitor_commit (data, &snapshot);
     data->monitor_pending = false;
     data->monitor_reconnect_until = 0;

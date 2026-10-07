@@ -390,6 +390,7 @@ test_sleep_resume (gf_wm_t *template)
     unsigned saved_writes = writes[1] + writes[2] + writes[3];
     unsigned saved_minimizes = minimizes[1] + minimizes[2] + minimizes[3];
     displays_ready = false;
+    m.state.resize_active = true;
     physical[1] = 1;
     physical[3] = 0;
     for (unsigned step = 0; step < 12; step++)
@@ -401,6 +402,7 @@ test_sleep_resume (gf_wm_t *template)
         gf_wm_layout_apply (&m);
         gf_wm_layout_rebalance (&m);
         assert (m.state.monitors_paused);
+        assert (!m.state.resize_active);
         assert (writes[1] + writes[2] + writes[3] == saved_writes);
         assert (minimizes[1] + minimizes[2] + minimizes[3] == saved_minimizes);
         for (unsigned i = 1; i <= 3; i++)
@@ -666,6 +668,47 @@ test_monitor_rules (gf_wm_t *template)
     reset_desktop ();
 }
 
+static void
+test_reconnect_retile (gf_wm_t *template)
+{
+    reset_desktop ();
+    fourth_window = true;
+    physical[4] = 1;
+    bounds (NULL, 1, &actual[4]);
+    gf_config_t cfg = *template->config;
+    gf_platform_t platform = *template->platform;
+    gf_wm_t m = { .platform = &platform, .config = &cfg, .layout = template->layout };
+    assert (gf_window_list_init (&m.state.windows, 16) == GF_SUCCESS);
+    assert (gf_workspace_list_init (&m.state.workspaces, 16) == GF_SUCCESS);
+    tick (&m);
+    gf_workspace_list_ensure (&m.state.workspaces, 35, 10, 1, 3);
+    wm_move_window_to_workspace (&m, win (&m, 4), 35);
+    wm_switch_workspace (&m, 35, 1);
+    wm_place_window_on_monitor (&m, win (&m, 3), 0);
+    physical[3] = 0;
+    gf_ws_info_t *original = gf_workspace_list_find_by_id (&m.state.workspaces, 35);
+    original->is_locked = original->is_custom_layout = true;
+    win (&m, 3)->monitor_return
+        = (gf_monitor_return_t){ .pending = true, .monitor_id = 1, .workspace_id = 35 };
+    // A resident window is already settled; a later return must retile it too.
+    for (unsigned i = 1; i <= 4; i++)
+        win (&m, i)->needs_update = false;
+    actual[4].height = 30;
+    physical[3] = 1;
+    unsigned resident_writes = writes[4];
+    wm_return_window_to_monitor (&m, win (&m, 3));
+    assert (m.state.workspaces.active_workspace[1] == 35);
+    assert (win (&m, 3)->workspace_id == 35 && win (&m, 4)->workspace_id == 35);
+    assert (win (&m, 4)->needs_update && !original->is_custom_layout);
+    assert (gf_wm_layout_apply (&m) == GF_SUCCESS);
+    assert (writes[4] > resident_writes && actual[4].height == 1080);
+    assert (actual[3].width == 640 && actual[4].width == 640);
+    assert (!minimized[1] && !minimized[2]);
+    gf_window_list_cleanup (&m.state.windows);
+    gf_workspace_list_cleanup (&m.state.workspaces);
+    reset_desktop ();
+}
+
 int
 main (void)
 {
@@ -703,6 +746,7 @@ main (void)
     test_sleep_resume (&m);
     test_monitor_reconnect (&m);
     test_monitor_rules (&m);
+    test_reconnect_retile (&m);
     tick (&m);
 
     // A briefly stale foreground handle cannot restore a user-minimized app.
