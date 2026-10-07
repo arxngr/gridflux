@@ -221,6 +221,11 @@ window_live_minimized (gf_wm_t *m, gf_handle_t window, bool fallback)
 static void
 sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *existing)
 {
+    if (existing->monitor_return.pending && wm_platform (m)->window_is_interacting
+        && wm_platform (m)->window_is_interacting (*wm_display (m))
+        && (live->geometry.x != existing->geometry.x
+            || live->geometry.y != existing->geometry.y))
+        existing->monitor_return.pending = false;
     bool live_minimized = window_live_minimized (m, live->id, live->is_minimized);
     gf_ws_info_t *workspace
         = gf_workspace_list_find_by_id (wm_workspaces (m), existing->workspace_id);
@@ -241,6 +246,8 @@ sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *exis
             && (!wm_platform (m)->window_is_interacting
                 || !wm_platform (m)->window_is_interacting (*wm_display (m))))
             wm_move_window_to_monitor (m, existing, live->monitor_id);
+        live->monitor_return = existing->monitor_return;
+        live->rule_move_failures = existing->rule_move_failures;
         live->workspace_id = existing->workspace_id;
         live->restore_workspace_id = existing->restore_workspace_id;
         live->monitor_id = existing->monitor_id;
@@ -319,6 +326,8 @@ sync_existing_window_state (gf_wm_t *m, gf_win_info_t *live, gf_win_info_t *exis
     else if (!live_maximized && existing->is_maximized && !live_minimized)
         exit_maximized_mode (m, existing);
 
+    live->monitor_return = existing->monitor_return;
+    live->rule_move_failures = existing->rule_move_failures;
     live->workspace_id = existing->workspace_id;
     live->restore_workspace_id = existing->restore_workspace_id;
     live->monitor_id = existing->monitor_id;
@@ -436,6 +445,7 @@ gf_wm_watch (gf_wm_t *m)
     }
 
     wm_reconcile_excluded_windows (m);
+    wm_reconcile_rules (m);
 }
 
 static void

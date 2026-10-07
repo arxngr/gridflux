@@ -527,6 +527,9 @@ gf_wm_window_sync (gf_wm_t *m, gf_handle_t window, gf_ws_id_t workspace_id)
         .visibility_attempts = existing ? existing->visibility_attempts : 0,
         .visibility_settle = existing ? existing->visibility_settle : 0,
         .mode_wait = existing ? existing->mode_wait : 0,
+        .monitor_return
+        = existing ? existing->monitor_return : (gf_monitor_return_t){ 0 },
+        .rule_move_failures = existing ? existing->rule_move_failures : 0,
         .geometry = geom,
         .is_minimized = is_min_state,
         .is_maximized = is_max_state,

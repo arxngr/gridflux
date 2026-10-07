@@ -275,6 +275,59 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
                                             5);
 }
 
+gf_err_t
+gf_window_restore_monitor (gf_platform_t *platform, const gf_win_info_t *window,
+                           const gf_rect_t *previous_bounds)
+{
+    if (!platform || !platform->platform_data || !window || !previous_bounds)
+        return GF_ERROR_INVALID_PARAMETER;
+    gf_linux_platform_data_t *data = platform->platform_data;
+    if (window->monitor_id >= data->enumerated_monitor_count)
+        return GF_ERROR_DISPLAY_CONNECTION;
+    gf_rect_t bounds = data->monitors[window->monitor_id].bounds;
+    if (!bounds.width || !bounds.height)
+        return GF_ERROR_DISPLAY_CONNECTION;
+    gf_rect_t target = window->geometry;
+    target.x += bounds.x - previous_bounds->x;
+    target.y += bounds.y - previous_bounds->y;
+    if (!target.width || target.width > bounds.width)
+        target.width = bounds.width;
+    if (!target.height || target.height > bounds.height)
+        target.height = bounds.height;
+    if (target.x < bounds.x)
+        target.x = bounds.x;
+    if (target.y < bounds.y)
+        target.y = bounds.y;
+    if (target.x + (int32_t)target.width > bounds.x + (int32_t)bounds.width)
+        target.x = bounds.x + (int32_t)(bounds.width - target.width);
+    if (target.y + (int32_t)target.height > bounds.y + (int32_t)bounds.height)
+        target.y = bounds.y + (int32_t)(bounds.height - target.height);
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    bool maximized = window->is_maximized && !window->is_minimized;
+    if (!atoms)
+        return GF_ERROR_PLATFORM_ERROR;
+    long mode[5] = { 0, atoms->net_wm_state_maximized_vert,
+                     atoms->net_wm_state_maximized_horz, 2, 0 };
+    if (maximized)
+    {
+        gf_err_t result = gf_platform_send_client_message (data->display, window->id,
+                                                           atoms->net_wm_state, mode, 5);
+        if (result != GF_SUCCESS)
+            return result;
+    }
+    gf_err_t result = gf_window_set_geometry (data->display, window->id, &target,
+                                              GF_GEOMETRY_CHANGE_ALL, NULL);
+    if (maximized)
+    {
+        mode[0] = 1;
+        gf_err_t restored = gf_platform_send_client_message (
+            data->display, window->id, atoms->net_wm_state, mode, 5);
+        if (result == GF_SUCCESS)
+            result = restored;
+    }
+    return result;
+}
+
 gf_handle_t
 gf_window_get_focused (Display *dpy)
 {

@@ -109,6 +109,19 @@ wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t monit
             m->state.workspaces.items[i].is_custom_layout = false;
 }
 
+void
+wm_place_window_on_monitor (gf_wm_t *m, gf_win_info_t *win, gf_monitor_id_t monitor_id)
+{
+    wm_move_window_to_monitor (m, win, monitor_id);
+}
+
+void
+wm_return_window_to_monitor (gf_wm_t *m, gf_win_info_t *win)
+{
+    wm_move_window_to_monitor (m, win, win->monitor_return.monitor_id);
+    win->monitor_return.pending = false;
+}
+
 static gf_err_t
 get_geometry (gf_display_t display, gf_handle_t window, gf_rect_t *out)
 {

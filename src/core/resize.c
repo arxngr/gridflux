@@ -1010,6 +1010,12 @@ gf_wm_resize_event (gf_wm_t *m)
     if (!platform->resize_poll (platform, &ev))
         return;
 
+    gf_win_info_t *moved = gf_window_list_find_by_window_id (wm_windows (m), ev.window);
+    if (moved && ev.phase == GF_RESIZE_COMPLETE
+        && (ev.current_rect.x != ev.initial_rect.x
+            || ev.current_rect.y != ev.initial_rect.y))
+        moved->monitor_return.pending = false;
+
     if (!gf_window_list_find_by_window_id (wm_windows (m), ev.window)
         || wm_is_excluded (m, ev.window))
     {

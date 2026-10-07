@@ -98,6 +98,18 @@ typedef struct
 
 typedef struct
 {
+    bool pending;
+    bool cancelled;
+    uint8_t failures;
+    gf_monitor_id_t monitor_id;
+    gf_ws_id_t workspace_id;
+    gf_ws_id_t restore_workspace_id;
+    gf_rect_t geometry;
+    gf_rect_t bounds;
+} gf_monitor_return_t;
+
+typedef struct
+{
     gf_handle_t id;
     gf_ws_id_t workspace_id;
     gf_ws_id_t restore_workspace_id;
@@ -118,6 +130,8 @@ typedef struct
     uint8_t arrange_failures; // Bounded retries until the next observed state change
     uint8_t maximize_fill_failures;
     uint8_t monitor_restore_failures;
+    uint8_t rule_move_failures;
+    gf_monitor_return_t monitor_return;
     bool is_valid;
     time_t last_modified;
     char name[256];

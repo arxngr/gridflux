@@ -25,6 +25,17 @@ static gf_key_action_t key_action;
 static bool displays_ready = true;
 static unsigned recovery_requests[5];
 static gf_handle_t rejected_recovery;
+static bool manually_moved[5];
+
+static bool
+was_moved (gf_display_t display, gf_handle_t window)
+{
+    (void)display;
+    unsigned i = (unsigned)(uintptr_t)window;
+    bool moved = manually_moved[i];
+    manually_moved[i] = false;
+    return moved;
+}
 
 static bool
 poll_monitors (gf_platform_t *platform)
@@ -37,13 +48,13 @@ recover_monitor (gf_platform_t *platform, const gf_win_info_t *window,
                  const gf_rect_t *previous_bounds)
 {
     (void)platform;
-    (void)previous_bounds;
     unsigned i = (unsigned)(uintptr_t)window->id;
     recovery_requests[i]++;
     if (window->id == rejected_recovery)
         return GF_ERROR_PLATFORM_ERROR;
     physical[i] = window->monitor_id;
     actual[i] = window->geometry;
+    actual[i].x += (window->monitor_id == 1 ? 1920 : 0) - previous_bounds->x;
     return GF_SUCCESS;
 }
 
@@ -471,6 +482,190 @@ test_sleep_resume (gf_wm_t *template)
     for (unsigned i = 1; i <= 3; i++)
         bounds (NULL, physical[i], &actual[i]);
 }
+static void
+reset_desktop (void)
+{
+    memset (minimized, 0, sizeof (minimized));
+    memset (maximized, 0, sizeof (maximized));
+    memset (bordered, 0, sizeof (bordered));
+    memset (filled, 0, sizeof (filled));
+    memset (writes, 0, sizeof (writes));
+    memset (minimizes, 0, sizeof (minimizes));
+    memset (restores, 0, sizeof (restores));
+    memset (mode_requests, 0, sizeof (mode_requests));
+    memset (recovery_requests, 0, sizeof (recovery_requests));
+    memset (manually_moved, 0, sizeof (manually_moved));
+    missing_external = dragging = fourth_window = false;
+    displays_ready = true;
+    focused = handle (1);
+    physical[1] = physical[2] = 0;
+    physical[3] = 1;
+    for (unsigned i = 1; i <= 3; i++)
+        bounds (NULL, physical[i], &actual[i]);
+}
+
+static void
+test_monitor_reconnect (gf_wm_t *template)
+{
+    for (unsigned scenario = 0; scenario < 7; scenario++)
+    {
+        reset_desktop ();
+        gf_config_t cfg = *template->config;
+        gf_platform_t platform = *template->platform;
+        platform.monitor_poll = poll_monitors;
+        platform.window_restore_monitor = recover_monitor;
+        platform.window_was_moved = was_moved;
+        gf_wm_t m = { .platform = &platform, .layout = template->layout, .config = &cfg };
+        assert (gf_window_list_init (&m.state.windows, 16) == GF_SUCCESS);
+        assert (gf_workspace_list_init (&m.state.workspaces, 16) == GF_SUCCESS);
+        focused = handle (3);
+        if (scenario == 1)
+            maximized[3] = true;
+        if (scenario == 3)
+            assert (gf_excludes_add (&cfg, "test-app-3") == GF_SUCCESS);
+        tick (&m);
+        gf_ws_id_t original = win (&m, 3)->workspace_id;
+        gf_ws_id_t restore_id = win (&m, 3)->restore_workspace_id;
+        if (scenario == 2)
+        {
+            minimized[3] = true;
+            focused = handle (1);
+            tick (&m);
+        }
+        // Accept a real unplug, after Windows has relocated visible apps.
+        displays_ready = false;
+        physical[3] = 0;
+        tick (&m);
+        missing_external = true;
+        displays_ready = true;
+        tick (&m);
+        assert (win (&m, 3)->monitor_return.pending);
+        assert (win (&m, 3)->monitor_return.monitor_id == 1);
+        assert (win (&m, 3)->monitor_return.workspace_id == original);
+        assert (win (&m, 3)->monitor_id == 0 && physical[3] == 0);
+        for (unsigned step = 0; step < 20; step++)
+            tick (&m);
+        assert (win (&m, 3)->monitor_return.pending);
+        if (scenario == 4)
+        {
+            // A title-bar move within the temporary monitor cancels return.
+            actual[3].x += 30;
+            manually_moved[3] = true;
+            tick (&m);
+            assert (!win (&m, 3)->monitor_return.pending);
+        }
+        if (scenario == 5)
+        {
+            // A manual move during the unsettled reconnect must win as well.
+            displays_ready = false;
+            manually_moved[3] = true;
+            tick (&m);
+            assert (!win (&m, 3)->monitor_return.pending);
+        }
+        missing_external = false;
+        displays_ready = true;
+        if (scenario == 6)
+            rejected_recovery = handle (3);
+        tick (&m);
+        for (unsigned step = 0; step < 10; step++)
+            tick (&m);
+        if (scenario == 6)
+        {
+            assert (win (&m, 3)->monitor_return.pending);
+            assert (win (&m, 3)->monitor_return.failures == 3);
+            assert (physical[3] == 0 && recovery_requests[3] == 4);
+            rejected_recovery = 0;
+            // A later topology transition starts a fresh, bounded attempt.
+            missing_external = true;
+            tick (&m);
+            missing_external = false;
+            tick (&m);
+            assert (physical[3] == 1 && !win (&m, 3)->monitor_return.pending);
+        }
+        assert (!win (&m, 3)->monitor_return.pending);
+        if (scenario == 4 || scenario == 5)
+            assert (physical[3] == 0 && win (&m, 3)->monitor_id == 0);
+        else
+        {
+            assert (physical[3] == 1 && win (&m, 3)->monitor_id == 1);
+            assert (win (&m, 3)->workspace_id == original);
+            assert (win (&m, 3)->restore_workspace_id == restore_id);
+            assert (maximized[3] == (scenario == 1));
+            if (scenario == 2)
+                assert (minimized[3]);
+            if (scenario == 3)
+                assert (!bordered[3] && !dock_hidden[1]);
+        }
+        if (scenario == 3)
+            assert (gf_excludes_remove (&cfg, "test-app-3") == GF_SUCCESS);
+        gf_window_list_cleanup (&m.state.windows);
+        gf_workspace_list_cleanup (&m.state.workspaces);
+    }
+    reset_desktop ();
+}
+
+static void
+test_monitor_rules (gf_wm_t *template)
+{
+    reset_desktop ();
+    gf_config_t cfg = *template->config;
+    gf_platform_t platform = *template->platform;
+    platform.window_restore_monitor = recover_monitor;
+    gf_wm_t m = { .platform = &platform, .layout = template->layout, .config = &cfg };
+    assert (gf_window_list_init (&m.state.windows, 16) == GF_SUCCESS);
+    assert (gf_workspace_list_init (&m.state.workspaces, 16) == GF_SUCCESS);
+    tick (&m);
+    assert (gf_rules_add (&cfg, "test-app-1", 3, 1) == GF_SUCCESS);
+    assert (gf_rules_add (&cfg, "test-app-3", 3, -1) == GF_SUCCESS);
+    tick (&m);
+    assert (win (&m, 1)->monitor_id == 1 && physical[1] == 1);
+    assert (win (&m, 1)->workspace_id == 35);
+    assert (win (&m, 3)->monitor_id == 1 && win (&m, 3)->workspace_id == 35);
+    unsigned saved_requests = recovery_requests[1];
+    for (unsigned step = 0; step < 20; step++)
+        tick (&m);
+    assert (recovery_requests[1] == saved_requests);
+    assert (wm_workspace_monitor_window_count (&m, 35, 1) == 2);
+    // Editing a rule moves an existing app and uses the monitor-local number.
+    assert (gf_rules_add (&cfg, "test-app-1", 2, 0) == GF_SUCCESS);
+    focused = handle (1);
+    minimized[1] = false;
+    tick (&m);
+    assert (win (&m, 1)->monitor_id == 0 && win (&m, 1)->workspace_id == 2);
+    maximized[1] = true;
+    tick (&m);
+    bool main_minimized = minimized[2];
+    assert (gf_rules_add (&cfg, "test-app-1", 3, 1) == GF_SUCCESS);
+    tick (&m);
+    assert (maximized[1] && win (&m, 1)->is_maximized);
+    assert (win (&m, 1)->monitor_id == 1 && win (&m, 1)->restore_workspace_id == 35);
+    assert (minimized[2] == main_minimized);
+    // A disconnected rule target is deferred, then enforced on reconnect.
+    missing_external = true;
+    tick (&m);
+    assert (win (&m, 1)->monitor_id == 0 && win (&m, 1)->monitor_return.pending);
+    unsigned requests = recovery_requests[1];
+    for (unsigned step = 0; step < 20; step++)
+        tick (&m);
+    assert (recovery_requests[1] == requests);
+    missing_external = false;
+    tick (&m);
+    assert (win (&m, 1)->monitor_id == 1 && maximized[1]);
+    assert (win (&m, 1)->restore_workspace_id == 35);
+    // Exclusion continues to own the shared workspace, ahead of pinning rules.
+    assert (gf_excludes_add (&cfg, "test-app-1") == GF_SUCCESS);
+    assert (gf_rules_add (&cfg, "test-app-1", 2, 0) == GF_SUCCESS);
+    tick (&m);
+    assert (win (&m, 1)->monitor_id == 1);
+    gf_ws_info_t *ws
+        = gf_workspace_list_find_by_id (&m.state.workspaces, win (&m, 1)->workspace_id);
+    assert (ws && ws->is_excluded_ws && !bordered[1]);
+    assert (gf_excludes_remove (&cfg, "test-app-1") == GF_SUCCESS);
+    gf_window_list_cleanup (&m.state.windows);
+    gf_workspace_list_cleanup (&m.state.workspaces);
+    reset_desktop ();
+}
+
 int
 main (void)
 {
@@ -506,6 +701,8 @@ main (void)
     for (unsigned i = 1; i <= 3; i++)
         bounds (NULL, physical[i], &actual[i]);
     test_sleep_resume (&m);
+    test_monitor_reconnect (&m);
+    test_monitor_rules (&m);
     tick (&m);
 
     // A briefly stale foreground handle cannot restore a user-minimized app.

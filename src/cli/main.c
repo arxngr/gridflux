@@ -16,7 +16,7 @@ print_usage (const char *prog)
     printf ("  move <WINDOW_ID> <WORKSPACE_ID> Move window to workspace\n");
     printf ("  lock <WORKSPACE_ID>             Lock workspace (prevent new windows)\n");
     printf ("  unlock <WORKSPACE_ID>           Unlock workspace\n");
-    printf ("  rule add <WM_CLASS> <WS_ID>     Add a window rule\n");
+    printf ("  rule add <WM_CLASS> <WS_ID> [MONITOR_ID]  Add a window rule\n");
     printf ("  rule remove <WM_CLASS>          Remove a window rule\n");
     printf ("  rule list                       List all window rules\n");
     printf ("  exclude add <WM_CLASS>          Exclude an app from arrangement\n");

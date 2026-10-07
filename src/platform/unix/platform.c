@@ -80,6 +80,7 @@ platform_bind_system_ops (gf_platform_t *p)
     p->monitor_get_count = gf_monitor_get_count;
     p->monitor_enumerate = gf_monitor_enumerate;
     p->monitor_from_window = gf_monitor_from_window;
+    p->window_restore_monitor = gf_window_restore_monitor;
     p->screen_get_bounds_for_monitor = gf_screen_get_bounds_for_monitor;
 
     // --- Border Management ---

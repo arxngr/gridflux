@@ -64,6 +64,7 @@ struct gf_platform
     gf_monitor_id_t (*monitor_from_window) (gf_platform_t *platform, gf_handle_t window);
     // Suspend window reconciliation while the native display topology settles.
     bool (*monitor_poll) (gf_platform_t *platform);
+    bool (*window_was_moved) (gf_display_t display, gf_handle_t window);
     gf_err_t (*window_restore_monitor) (gf_platform_t *platform,
                                         const gf_win_info_t *window,
                                         const gf_rect_t *previous_bounds);

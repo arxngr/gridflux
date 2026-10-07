@@ -112,6 +112,7 @@ gf_monitor_id_t gf_monitor_from_window (gf_platform_t *platform, gf_handle_t win
 gf_err_t gf_monitor_init (gf_platform_t *platform);
 void gf_monitor_cleanup (gf_platform_t *platform);
 bool gf_monitor_poll (gf_platform_t *platform);
+bool gf_window_was_moved (gf_display_t display, gf_handle_t window);
 gf_err_t gf_window_restore_monitor (gf_platform_t *platform, const gf_win_info_t *window,
                                     const gf_rect_t *previous_bounds);
 gf_err_t gf_screen_get_bounds_for_monitor (gf_display_t display,

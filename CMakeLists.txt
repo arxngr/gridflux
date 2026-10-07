@@ -411,6 +411,26 @@ if(BUILD_TESTING)
         target_compile_options(gridflux-monitor-state-test PRIVATE -UNDEBUG)
     endif()
     add_test(NAME monitor-state COMMAND gridflux-monitor-state-test)
+    add_executable(gridflux-rules-test
+        tests/test_rules.c src/config/config.c src/config/excludes.c src/config/rules.c
+        src/ipc/ipc_command.c src/core/events.c src/core/workspace.c
+        src/core/window.c src/core/arrange.c src/core/monitor.c
+        src/utils/list.c src/utils/memory.c)
+    target_include_directories(gridflux-rules-test PRIVATE ${PLATFORM_INCLUDES})
+    target_compile_definitions(gridflux-rules-test PRIVATE GF_DEV_MODE)
+    target_link_libraries(gridflux-rules-test PRIVATE ${JSONC_LIBRARIES})
+    if(JSONC_LIBRARY_DIRS)
+        target_link_directories(gridflux-rules-test PRIVATE ${JSONC_LIBRARY_DIRS})
+    endif()
+    if(MSVC)
+        target_compile_options(gridflux-rules-test PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(gridflux-rules-test PRIVATE -UNDEBUG)
+    endif()
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-rules")
+    add_test(NAME rules COMMAND gridflux-rules-test)
+    set_tests_properties(rules PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-rules")
     if(WIN32)
         add_executable(gridflux-windows-monitor-test tests/test_windows_monitor.c)
         target_include_directories(gridflux-windows-monitor-test PRIVATE ${PLATFORM_INCLUDES})

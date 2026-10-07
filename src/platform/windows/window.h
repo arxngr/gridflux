@@ -6,6 +6,7 @@
 #define GF_WINDOW_STATE_FILL_PROP "GridFlux.ExpandedMaximized"
 #define GF_WINDOW_STATE_DPI_PROP "GridFlux.MaximizedDpi"
 #define GF_WINDOW_STATE_REGION_PROP "GridFlux.MaximizedRegion"
+#define GF_WINDOW_MOVED_PROP "GridFlux.UserMoved"
 
 void gf_window_state_reset (HWND window);
 BOOL gf_window_state_apply (HWND window, BOOL fill_monitor);

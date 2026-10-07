@@ -93,6 +93,7 @@ bool wm_ws_has_capacity (gf_ws_info_t *ws, uint32_t max_per_ws);
 bool wm_ws_is_valid (gf_ws_list_t *workspaces, gf_ws_id_t id);
 gf_ws_id_t wm_lookup_or_create_excluded_ws (gf_wm_t *m);
 void wm_reconcile_excluded_windows (gf_wm_t *m);
+void wm_reconcile_rules (gf_wm_t *m);
 
 /* --- Window Management --- */
 void wm_detect_minimize_changes (gf_wm_t *m, gf_ws_id_t current_workspace,
@@ -114,6 +115,9 @@ void wm_minimize_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id, gf_handle_t ex
 void wm_move_window_to_workspace (gf_wm_t *m, gf_win_info_t *win, gf_ws_id_t new_ws_id);
 void wm_move_window_to_monitor (gf_wm_t *m, gf_win_info_t *win,
                                 gf_monitor_id_t new_monitor);
+void wm_return_window_to_monitor (gf_wm_t *m, gf_win_info_t *win);
+void wm_place_window_on_monitor (gf_wm_t *m, gf_win_info_t *win,
+                                 gf_monitor_id_t monitor_id);
 void wm_restore_workspace_windows (gf_wm_t *m, gf_ws_id_t ws_id,
                                    gf_handle_t active_window,
                                    gf_monitor_id_t active_monitor);

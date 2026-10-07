@@ -252,36 +252,27 @@ build_chips (gf_app_state_t *app, const gf_ws_info_t *ws, const gf_win_list_t *w
 static void
 compose_status (const gf_ws_info_t *ws, char *buf, size_t n)
 {
-    if (ws->is_excluded_ws)
-        snprintf (buf, n, "All monitors · %u excluded app%s", ws->window_count,
-                  ws->window_count == 1 ? "" : "s");
-    else if (ws->has_maximized_state)
-        snprintf (buf, n, "Monitor %u · %u window%s · maximized", ws->monitor_id,
-                  ws->window_count, ws->window_count == 1 ? "" : "s");
-    else if (ws->window_count == 0)
-        snprintf (buf, n, "Monitor %u · Empty · %d slots free", ws->monitor_id,
-                  ws->available_space);
-    else
-        snprintf (buf, n, "Monitor %u · %u window%s · %d slot%s free", ws->monitor_id,
-                  ws->window_count, ws->window_count == 1 ? "" : "s", ws->available_space,
-                  ws->available_space == 1 ? "" : "s");
+    int32_t free_slots = ws->is_excluded_ws || ws->has_maximized_state
+                             ? 0
+                             : (ws->available_space > 0 ? ws->available_space : 0);
+    snprintf (buf, n, "%u Windows - %d slots free", ws->window_count, free_slots);
 }
 
 static GtkWidget *
-build_number (const gf_ws_info_t *ws)
+build_number (const gf_ws_info_t *ws, uint32_t number)
 {
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_valign (box, GTK_ALIGN_CENTER);
 
     char idbuf[16];
-    snprintf (idbuf, sizeof (idbuf), "%d", ws->local_id > 0 ? ws->local_id : ws->id);
+    snprintf (idbuf, sizeof (idbuf), "%u", number);
     GtkWidget *num = gtk_label_new (idbuf);
     gtk_widget_add_css_class (num, "gf-wsnum");
     char cap_text[24];
     if (ws->is_excluded_ws)
-        snprintf (cap_text, sizeof (cap_text), "Shared · WS");
+        snprintf (cap_text, sizeof (cap_text), "Shared");
     else
-        snprintf (cap_text, sizeof (cap_text), "M%u · WS", ws->monitor_id);
+        snprintf (cap_text, sizeof (cap_text), "M%u", ws->monitor_id);
     GtkWidget *cap = gtk_label_new (cap_text);
     gtk_widget_add_css_class (cap, "gf-wsnum-cap");
 
@@ -370,7 +361,7 @@ build_right_column (const gf_ws_info_t *ws, ws_ctx_t *ctx)
 
 GtkWidget *
 gf_gui_workspace_card_new (const gf_ws_info_t *ws, const gf_win_list_t *windows,
-                           gf_app_state_t *app)
+                           gf_app_state_t *app, uint32_t number)
 {
     ws_ctx_t *ctx = g_new0 (ws_ctx_t, 1);
     ctx->app = app;
@@ -381,14 +372,14 @@ gf_gui_workspace_card_new (const gf_ws_info_t *ws, const gf_win_list_t *windows,
     GtkWidget *card = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 14);
     gtk_widget_add_css_class (card, "gf-wscard");
     g_object_set_data_full (G_OBJECT (card), "ctx", ctx, g_free);
-    gtk_box_append (GTK_BOX (card), build_number (ws));
+    gtk_box_append (GTK_BOX (card), build_number (ws, number));
     char tooltip[96];
     if (ws->is_excluded_ws)
         snprintf (tooltip, sizeof (tooltip),
-                  "Excluded workspace shared across monitors (ID %d)", ws->id);
+                  "Excluded apps share this workspace across monitors");
     else
-        snprintf (tooltip, sizeof (tooltip), "Monitor %u, local workspace %d (ID %d)",
-                  ws->monitor_id, ws->local_id, ws->id);
+        snprintf (tooltip, sizeof (tooltip), "M%u, Workspace %d", ws->monitor_id,
+                  ws->local_id);
     gtk_widget_set_tooltip_text (card, tooltip);
 
     GtkWidget *info = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);

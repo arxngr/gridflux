@@ -241,7 +241,8 @@ gridflux-cli query windows 2        # list windows in workspace 2
 gridflux-cli move 0x1a2b3c 2        # move a window (by ID) to workspace 2
 
 # Rules
-gridflux-cli rule add firefox 1     # pin an application to a workspace
+gridflux-cli rule add firefox 1     # pin to workspace 1 on the app's current monitor
+gridflux-cli rule add firefox 3 1   # pin to workspace 3 on M1 (create it if missing)
 gridflux-cli rule remove firefox    # remove a rule
 ```
 
@@ -277,7 +278,7 @@ gridflux-cli rule remove firefox    # remove a rule
 | `border_color` | orange | Managed-window border colour (RGB integer) |
 | `enable_borders` | `true` | Draw coloured borders on managed windows |
 | `locked_workspaces` | `[]` | Workspace IDs to lock on startup |
-| `window_rules` | `[]` | Rules of the form `{ "wm_class": "...", "workspace_id": N }` |
+| `window_rules` | `[]` | Rules of the form `{ "wm_class": "...", "workspace_id": N, "monitor_id": M }`; Monitor ID is optional and starts at 0 |
 
 The daemon watches this file and applies changes immediately — no restart needed.
 The same options are available from the control panel's Settings and Rules

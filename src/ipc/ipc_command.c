@@ -7,6 +7,7 @@
 #include "../utils/memory.h"
 #include "ipc.h"
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -283,6 +284,18 @@ cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *user_
     memcpy (response->message, &resp, sizeof (resp));
 }
 
+static bool
+parse_rule_number (const char *token, int maximum, int *value)
+{
+    char *end;
+    errno = 0;
+    long parsed = strtol (token, &end, 10);
+    if (errno || end == token || *end || parsed < 0 || parsed > maximum)
+        return false;
+    *value = (int)parsed;
+    return true;
+}
+
 static void
 cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
 {
@@ -292,57 +305,72 @@ cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
     char wm_class[128] = { 0 };
     int workspace_id = -1;
 
-    if (!args || sscanf (args, "%127s %d", wm_class, &workspace_id) != 2)
+    int monitor_id = -1;
+    char workspace_token[32], monitor_token[32];
+    char extra[2];
+    int fields = args ? sscanf (args, "%127s %31s %31s %1s", wm_class, workspace_token,
+                                monitor_token, extra)
+                      : 0;
+    if (fields < 2 || fields > 3
+        || !parse_rule_number (workspace_token, GF_MAX_WORKSPACES, &workspace_id)
+        || workspace_id < GF_FIRST_WORKSPACE_ID
+        || (fields == 3
+            && !parse_rule_number (monitor_token, GF_MAX_MONITORS - 1, &monitor_id)))
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
         snprintf (resp.message, sizeof (resp.message),
-                  "Usage: rule add <wm_class> <workspace_id>");
+                  "Usage: rule add <wm_class> <workspace_id> [monitor_id]");
         memcpy (response->message, &resp, sizeof (resp));
         return;
     }
 
-    gf_ws_info_t *target_ws
-        = gf_workspace_list_find_by_id (wm_workspaces (m), workspace_id);
-    if (target_ws && target_ws->has_maximized_state)
+    // Unset rules overlap every monitor; explicit rules only reserve their
+    // selected monitor. Updating a rule never counts its old target twice.
+    const gf_window_rule_t *existing = gf_rules_find (m->config, wm_class);
+    uint32_t first = monitor_id >= 0 ? (uint32_t)monitor_id : 0;
+    uint32_t end = monitor_id >= 0 ? first + 1 : GF_MAX_MONITORS;
+    for (uint32_t monitor = first; monitor < end; monitor++)
     {
-        response->status = GF_IPC_ERROR_INVALID_COMMAND;
-        resp.type = 1;
-        snprintf (resp.message, sizeof (resp.message),
-                  "Cannot add rule to a maximized workspace");
-        memcpy (response->message, &resp, sizeof (resp));
-        return;
-    }
-
-    // Check if adding this rule would exceed max_windows_per_workspace
-    uint32_t rule_count_for_ws = 0;
-    for (uint32_t i = 0; i < m->config->window_rules_count; i++)
-    {
-        if (m->config->window_rules[i].workspace_id == workspace_id)
-            rule_count_for_ws++;
-    }
-
-    if (rule_count_for_ws >= m->config->max_windows_per_workspace)
-    {
-        const gf_window_rule_t *existing_rule = gf_rules_find (m->config, wm_class);
-        if (!existing_rule || existing_rule->workspace_id != workspace_id)
+        uint32_t count = 0;
+        for (uint32_t i = 0; i < m->config->window_rules_count; i++)
+        {
+            const gf_window_rule_t *rule = &m->config->window_rules[i];
+            if (rule != existing && rule->workspace_id == workspace_id
+                && (!rule->has_monitor_id || rule->monitor_id == monitor))
+                count++;
+        }
+        if (count >= m->config->max_windows_per_workspace)
         {
             response->status = GF_IPC_ERROR_INVALID_COMMAND;
             resp.type = 1;
             snprintf (resp.message, sizeof (resp.message),
-                      "Cannot add rule: Workspace %d would exceed max windows limit (%d)",
-                      workspace_id, m->config->max_windows_per_workspace);
+                      "Cannot add rule: M%u workspace %d would exceed %u windows",
+                      monitor, workspace_id, m->config->max_windows_per_workspace);
             memcpy (response->message, &resp, sizeof (resp));
             return;
         }
     }
-
-    gf_err_t result = gf_rules_add (m->config, wm_class, workspace_id);
+    gf_err_t result = gf_rules_add (m->config, wm_class, workspace_id, monitor_id);
+    if (result == GF_SUCCESS)
+    {
+        for (uint32_t i = 0; i < wm_windows (m)->count; i++)
+            wm_windows (m)->items[i].rule_move_failures = 0;
+        wm_sync_workspaces (m);
+    }
     resp.type = (result == GF_SUCCESS) ? 0 : 1;
 
     if (result == GF_SUCCESS)
-        snprintf (resp.message, sizeof (resp.message), "Rule added: %s -> workspace %d",
-                  wm_class, workspace_id);
+    {
+        if (monitor_id >= 0)
+            snprintf (resp.message, sizeof (resp.message),
+                      "Rule added: %s -> M%d workspace %d", wm_class, monitor_id,
+                      workspace_id);
+        else
+            snprintf (resp.message, sizeof (resp.message),
+                      "Rule added: %s -> current monitor workspace %d", wm_class,
+                      workspace_id);
+    }
     else
         snprintf (resp.message, sizeof (resp.message), "Failed to add rule (error %d)",
                   result);
@@ -397,16 +425,19 @@ cmd_rule_list (const char *args, gf_ipc_response_t *response, void *user_data)
     size_t pos = 0;
     pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
                      "Window Rules (%u):\n", count);
-    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %s\n",
-                     "WM Class", "Workspace");
-    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %s\n",
-                     "------------------------------", "---------");
+    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %-10s %s\n",
+                     "WM Class", "Workspace", "Monitor ID");
+    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %-10s %s\n",
+                     "------------------------------", "---------", "----------");
 
     for (uint32_t i = 0; i < count && pos < sizeof (resp.message) - 50; i++)
     {
-        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %d\n",
-                         m->config->window_rules[i].wm_class,
-                         m->config->window_rules[i].workspace_id);
+        const gf_window_rule_t *rule = &m->config->window_rules[i];
+        char monitor[24] = "Current";
+        if (rule->has_monitor_id)
+            snprintf (monitor, sizeof (monitor), "M%u", rule->monitor_id);
+        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
+                         "%-30s %-10d %s\n", rule->wm_class, rule->workspace_id, monitor);
     }
 
     memcpy (response->message, &resp, sizeof (resp));

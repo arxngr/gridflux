@@ -73,6 +73,7 @@ platform_bind_system_ops (gf_platform_t *p)
     p->monitor_enumerate = gf_monitor_enumerate;
     p->monitor_from_window = gf_monitor_from_window;
     p->monitor_poll = gf_monitor_poll;
+    p->window_was_moved = gf_window_was_moved;
     p->window_restore_monitor = gf_window_restore_monitor;
     p->screen_get_bounds_for_monitor = gf_screen_get_bounds_for_monitor;
 

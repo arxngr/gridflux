@@ -1,6 +1,7 @@
 #include "../../utils/logger.h"
 #include "internal.h"
 #include "platform.h"
+#include "window.h"
 #include <stdbool.h>
 #include <windows.h>
 
@@ -21,6 +22,11 @@ low_level_keyboard_proc (int nCode, WPARAM wParam, LPARAM lParam)
             bool win_pressed = (GetAsyncKeyState (VK_LWIN) & 0x8000) != 0
                                || (GetAsyncKeyState (VK_RWIN) & 0x8000) != 0;
             bool alt_pressed = (GetAsyncKeyState (VK_MENU) & 0x8000) != 0;
+
+            if (win_pressed && (GetAsyncKeyState (VK_SHIFT) & 0x8000)
+                && (p->vkCode == VK_LEFT || p->vkCode == VK_RIGHT))
+                SetPropA (GetForegroundWindow (), GF_WINDOW_MOVED_PROP,
+                          (HANDLE)(INT_PTR)1);
 
             if (ctrl_pressed && win_pressed)
             {

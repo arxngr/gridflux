@@ -26,7 +26,15 @@ wm_poll_monitors (gf_wm_t *m)
     gf_platform_t *platform = wm_platform (m);
     gf_win_list_t *windows = wm_windows (m);
     gf_ws_list_t *workspaces = wm_workspaces (m);
-    if (platform->monitor_poll && !platform->monitor_poll (platform))
+    bool ready = !platform->monitor_poll || platform->monitor_poll (platform);
+    for (uint32_t i = 0; i < windows->count; i++)
+        if (platform->window_was_moved
+            && platform->window_was_moved (*wm_display (m), windows->items[i].id))
+        {
+            windows->items[i].monitor_return.pending = false;
+            windows->items[i].monitor_return.cancelled = true;
+        }
+    if (!ready)
     {
         pause_monitors (m);
         return false;
@@ -43,6 +51,24 @@ wm_poll_monitors (gf_wm_t *m)
         return false;
     }
 
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        gf_win_info_t *win = &windows->items[i];
+        gf_monitor_return_t *home = &win->monitor_return;
+        gf_monitor_id_t id = win->monitor_id;
+        if (!home->pending && !home->cancelled && id < m->state.monitor_count
+            && m->state.monitors[id].full_bounds.width
+            && (id >= count || !monitors[id].full_bounds.width))
+            *home = (gf_monitor_return_t){ .pending = true,
+                                           .monitor_id = id,
+                                           .workspace_id = win->workspace_id,
+                                           .restore_workspace_id
+                                           = win->restore_workspace_id,
+                                           .geometry = win->geometry,
+                                           .bounds = m->state.monitors[id].bounds };
+        home->cancelled = false;
+    }
+
     if (m->state.monitors_recovering && platform->window_restore_monitor)
     {
         bool pending = false;
@@ -54,6 +80,9 @@ wm_poll_monitors (gf_wm_t *m)
                 || !monitors[win->monitor_id].full_bounds.height
                 || win->monitor_restore_failures >= 3
                 || wm_is_system_excluded (m, win->id))
+                continue;
+            if (win->monitor_return.pending && win->monitor_return.monitor_id < count
+                && monitors[win->monitor_return.monitor_id].full_bounds.width)
                 continue;
             if (platform->window_restore_monitor (
                     platform, win, &m->state.monitors[win->monitor_id].bounds)
@@ -83,12 +112,62 @@ wm_poll_monitors (gf_wm_t *m)
     m->state.monitors_paused = m->state.monitors_recovering = false;
     if (changed)
     {
+        for (uint32_t i = 0; i < windows->count; i++)
+        {
+            windows->items[i].rule_move_failures = 0;
+            windows->items[i].monitor_return.failures = 0;
+        }
         gf_window_list_mark_all_needs_update (windows, NULL);
         for (uint32_t i = 0; i < workspaces->count; i++)
             workspaces->items[i].is_custom_layout = false;
         memcpy (m->state.monitors, monitors, count * sizeof (gf_monitor_t));
         m->state.monitor_count = count;
     }
+    // A long-lived disconnect is a temporary placement, not a new home. Keep
+    // its remembered workspace until reconnect or an explicit user move.
+    if (platform->window_restore_monitor
+        && (!platform->window_is_interacting
+            || !platform->window_is_interacting (*wm_display (m))))
+        for (uint32_t i = 0; i < windows->count; i++)
+        {
+            gf_win_info_t *win = &windows->items[i];
+            gf_monitor_return_t *home = &win->monitor_return;
+            if (!home->pending || home->failures >= 3
+                || wm_is_system_excluded (m, win->id))
+                continue;
+            gf_monitor_id_t target = home->monitor_id;
+            bool returning = target < count && monitors[target].full_bounds.width;
+            if (!returning)
+            {
+                if (win->monitor_id < count
+                    && monitors[win->monitor_id].full_bounds.width)
+                    continue;
+                target = GF_MONITOR_SHARED;
+                for (uint32_t j = 0; j < count; j++)
+                    if (monitors[j].full_bounds.width
+                        && (target == GF_MONITOR_SHARED || monitors[j].is_primary))
+                        target = j;
+                if (target == GF_MONITOR_SHARED)
+                    continue;
+            }
+            gf_win_info_t placed = *win;
+            placed.monitor_id = target;
+            placed.geometry = home->geometry;
+            if (platform->window_restore_monitor (platform, &placed, &home->bounds)
+                    != GF_SUCCESS
+                || (platform->monitor_from_window && !win->is_minimized
+                    && platform->monitor_from_window (platform, win->id) != target))
+            {
+                home->failures++;
+                continue;
+            }
+            if (returning)
+                wm_return_window_to_monitor (m, win);
+            else
+                wm_place_window_on_monitor (m, win, target);
+            if (platform->window_get_geometry && !win->is_minimized)
+                platform->window_get_geometry (*wm_display (m), win->id, &win->geometry);
+        }
     return true;
 }
 

@@ -788,6 +788,16 @@ gf_window_restore_monitor (gf_platform_t *platform, const gf_win_info_t *win,
     return gf_window_set_geometry (NULL, win->id, &target, GF_GEOMETRY_CHANGE_ALL, NULL);
 }
 
+bool
+gf_window_was_moved (gf_display_t display, gf_handle_t window)
+{
+    (void)display;
+    bool moved = GetPropA (window, GF_WINDOW_MOVED_PROP) != NULL;
+    if (moved)
+        RemovePropA (window, GF_WINDOW_MOVED_PROP);
+    return moved;
+}
+
 // Resolve the owning process id for a window. UWP host windows
 // (ApplicationFrameWindow) proxy a child process, so dig into the child.
 static DWORD

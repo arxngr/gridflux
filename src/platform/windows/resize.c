@@ -1,5 +1,6 @@
 #include "../../utils/logger.h"
 #include "internal.h"
+#include "window.h"
 #include <string.h>
 #include <windows.h>
 
@@ -68,6 +69,9 @@ resize_on_end (gf_resize_state_t *rs, HWND hwnd)
         return;
 
     dwm_get_rect (hwnd, &rs->current_rect);
+    if (rs->current_rect.x != rs->initial_rect.x
+        || rs->current_rect.y != rs->initial_rect.y)
+        SetPropA (hwnd, GF_WINDOW_MOVED_PROP, (HANDLE)(INT_PTR)1);
 
     // If width and height are unchanged, this was a MOVE, not a resize.
     // Emit completion so the core releases its interaction guard.

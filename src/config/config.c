@@ -184,6 +184,10 @@ gf_config_save (const char *filename, const gf_config_t *cfg)
                                 json_object_new_string (cfg->window_rules[i].wm_class));
         json_object_object_add (rule_obj, "workspace_id",
                                 json_object_new_int (cfg->window_rules[i].workspace_id));
+        if (cfg->window_rules[i].has_monitor_id)
+            json_object_object_add (
+                rule_obj, "monitor_id",
+                json_object_new_int (cfg->window_rules[i].monitor_id));
         json_object_array_add (rules_arr, rule_obj);
     }
     json_object_object_add (json, "window_rules", rules_arr);
@@ -238,6 +242,17 @@ gf_config_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
 
     if (basic_changed)
         return true;
+
+    for (uint32_t i = 0; i < old_cfg->window_rules_count; i++)
+    {
+        const gf_window_rule_t *old = &old_cfg->window_rules[i];
+        const gf_window_rule_t *new = &new_cfg->window_rules[i];
+        if (strcmp (old->wm_class, new->wm_class) != 0
+            || old->workspace_id != new->workspace_id
+            || old->has_monitor_id != new->has_monitor_id
+            || (old->has_monitor_id && old->monitor_id != new->monitor_id))
+            return true;
+    }
 
     for (uint32_t i = 0; i < old_cfg->excluded_apps.count; i++)
     {
@@ -392,6 +407,15 @@ gf_config_load_or_create (const char *filename)
             struct json_object *rule_item = json_object_array_get_idx (rules_obj, i);
             struct json_object *class_obj = NULL;
             struct json_object *ws_obj = NULL;
+            struct json_object *monitor_obj = NULL;
+            bool has_monitor
+                = json_object_object_get_ex (rule_item, "monitor_id", &monitor_obj)
+                  && !json_object_is_type (monitor_obj, json_type_null);
+            int64_t monitor = has_monitor ? json_object_get_int64 (monitor_obj) : 0;
+            if (has_monitor
+                && (!json_object_is_type (monitor_obj, json_type_int) || monitor < 0
+                    || monitor >= GF_MAX_MONITORS))
+                continue;
 
             if (json_object_object_get_ex (rule_item, "wm_class", &class_obj)
                 && json_object_object_get_ex (rule_item, "workspace_id", &ws_obj))
@@ -408,6 +432,9 @@ gf_config_load_or_create (const char *filename)
                         .wm_class[GF_RULE_CLASS_MAX - 1]
                         = '\0';
                     cfg.window_rules[cfg.window_rules_count].workspace_id = ws;
+                    cfg.window_rules[cfg.window_rules_count].has_monitor_id = has_monitor;
+                    cfg.window_rules[cfg.window_rules_count].monitor_id
+                        = (gf_monitor_id_t)monitor;
                     cfg.window_rules_count++;
                 }
             }

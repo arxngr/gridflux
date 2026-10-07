@@ -261,6 +261,8 @@ gf_wm_load_cfg (gf_wm_t *m)
         handle_max_windows_change (m, &old_cfg, &new_cfg);
         gf_config_release (&old_cfg);
     }
+    for (uint32_t i = 0; i < wm_windows (m)->count; i++)
+        wm_windows (m)->items[i].rule_move_failures = 0;
     wm_sync_workspaces (m);
     gf_wm_debug_stats (m);
 }
