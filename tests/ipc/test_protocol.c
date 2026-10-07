@@ -167,6 +167,119 @@ test_lists (void)
 }
 
 static void
+test_query_roundtrip (void)
+{
+    // Preserve the actual GUI/CLI reply layout and ownership/state fields for
+    // normal, maximized and shared excluded workspaces on sparse monitors.
+    gf_config_t config = { 0 };
+    gf_platform_t platform = { 0 };
+    gf_wm_t manager = { .config = &config, .platform = &platform };
+    gf_win_info_t source_windows[3];
+    gf_ws_info_t source_workspaces[3];
+    memset (source_windows, 0, sizeof (source_windows));
+    memset (source_workspaces, 0, sizeof (source_workspaces));
+    gf_ws_id_t maximized_id = GF_MAX_WORKSPACES_TOTAL + 1;
+    gf_ws_id_t excluded_id = GF_MAX_WORKSPACES_TOTAL + 2;
+    source_workspaces[0].id = source_workspaces[0].local_id = 1;
+    source_workspaces[0].window_count = 1;
+    source_workspaces[0].max_windows = 4;
+    source_workspaces[0].available_space = 3;
+    source_workspaces[0].is_custom_layout = true;
+    source_workspaces[1].id = maximized_id;
+    source_workspaces[1].monitor_id = 2;
+    source_workspaces[1].window_count = source_workspaces[1].max_windows = 1;
+    source_workspaces[1].has_maximized_state = true;
+    source_workspaces[2].id = excluded_id;
+    source_workspaces[2].monitor_id = GF_MONITOR_SHARED;
+    source_workspaces[2].window_count = 1;
+    source_workspaces[2].max_windows = INT32_MAX;
+    source_workspaces[2].is_excluded_ws = true;
+    for (uint32_t i = 0; i < 3; i++)
+    {
+        gf_win_info_t *win = &source_windows[i];
+        win->id = (gf_handle_t)(uintptr_t)(0x1000 + i);
+        win->monitor_id = i ? 2 : 0;
+        win->workspace_id = source_workspaces[i].id;
+        win->restore_workspace_id
+            = gf_workspace_id_for_monitor_local (win->monitor_id, 3);
+        win->is_valid = true;
+        win->geometry.x = i ? 1920 : 0;
+        win->geometry.width = i ? 2560 : 1920;
+        win->geometry.height = 1080;
+        snprintf (win->name, sizeof (win->name), "app-%u|app-%u.exe", i, i);
+    }
+    source_windows[1].is_maximized = true;
+    source_windows[1].monitor_return.pending = true;
+    source_windows[1].monitor_return.monitor_id = 2;
+    source_windows[1].monitor_return.geometry = source_windows[1].geometry;
+    source_windows[2].is_minimized = source_windows[2].monitor_suspended = true;
+    manager.state.windows.items = source_windows;
+    manager.state.windows.count = 3;
+    manager.state.windows.capacity = 16;
+    manager.state.workspaces.items = source_workspaces;
+    manager.state.workspaces.count = 3;
+    manager.state.workspaces.capacity = 16;
+    manager.state.workspaces.active_workspace[0] = 1;
+    manager.state.workspaces.active_workspace[2] = maximized_id;
+    manager.state.monitor_count = 3;
+    manager.state.monitors[0].id = 0;
+    manager.state.monitors[0].is_primary = true;
+    manager.state.monitors[0].full_bounds = source_windows[0].geometry;
+    manager.state.monitors[0].bounds = source_windows[0].geometry;
+    manager.state.monitors[2].id = 2;
+    manager.state.monitors[2].full_bounds = source_windows[1].geometry;
+    manager.state.monitors[2].bounds = source_windows[1].geometry;
+    unsigned char snapshot[sizeof (manager)];
+    memcpy (snapshot, &manager, sizeof (manager));
+    const char *window_queries[] = { "query windows", "query W", "query windows 3" };
+    gf_ipc_response_t response;
+    for (size_t q = 0; q < sizeof (window_queries) / sizeof (*window_queries); q++)
+    {
+        gf_handle_client_message (window_queries[q], strlen (window_queries[q]),
+                                  &response, &manager);
+        assert (response.status == GF_IPC_SUCCESS);
+        gf_win_list_t *windows
+            = gf_parse_window_list (response.message, sizeof (response.message));
+        assert (windows && windows->count == 3 && windows->capacity == 3);
+        assert (memcmp (windows->items, source_windows, sizeof (source_windows)) == 0);
+        gf_free_window_list (windows);
+    }
+    const char *workspace_queries[] = { "query workspaces", "query D" };
+    for (size_t q = 0; q < sizeof (workspace_queries) / sizeof (*workspace_queries); q++)
+    {
+        gf_handle_client_message (workspace_queries[q], strlen (workspace_queries[q]),
+                                  &response, &manager);
+        assert (response.status == GF_IPC_SUCCESS);
+        gf_ws_list_t *workspaces
+            = gf_parse_workspace_list (response.message, sizeof (response.message));
+        assert (workspaces && workspaces->count == 3 && workspaces->capacity == 3);
+        assert (memcmp (workspaces->items, source_workspaces, sizeof (source_workspaces))
+                == 0);
+        assert (memcmp (workspaces->active_workspace,
+                        manager.state.workspaces.active_workspace,
+                        sizeof (workspaces->active_workspace))
+                == 0);
+        gf_free_workspace_list (workspaces);
+    }
+    gf_handle_client_message ("query monitors", 14, &response, &manager);
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    uint32_t count;
+    assert (response.status == GF_IPC_SUCCESS
+            && gf_parse_monitor_list (response.message, sizeof (response.message),
+                                      monitors, GF_MAX_MONITORS, &count));
+    assert (count == 2
+            && memcmp (&monitors[0], &manager.state.monitors[0], sizeof (*monitors)) == 0
+            && memcmp (&monitors[1], &manager.state.monitors[2], sizeof (*monitors))
+                   == 0);
+    gf_handle_client_message ("query T 1", 9, &response, &manager);
+    gf_command_response_t result;
+    assert (
+        gf_parse_command_response (response.message, sizeof (response.message), &result));
+    assert (strcmp (result.message, "Workspace 1 has 1 windows") == 0);
+    assert (memcmp (snapshot, &manager, sizeof (manager)) == 0);
+}
+
+static void
 test_fuzz (void)
 {
     gf_config_t config = { 0 };
@@ -217,6 +330,7 @@ main (void)
 {
     test_commands ();
     test_lists ();
+    test_query_roundtrip ();
     test_fuzz ();
     puts ("IPC malformed commands, replies, exact buffers, and 10000 fuzz cases passed");
     return 0;
