@@ -34,6 +34,10 @@ struct gf_config
 };
 // --- Configuration Lifecycle ---
 const char *gf_config_get_path (void);
+gf_err_t gf_config_set_path (const char *path);
+#ifdef _WIN32
+bool gf_config_get_launch_args (wchar_t *args, size_t capacity);
+#endif
 void gf_config_save (const char *filename, const gf_config_t *cfg);
 gf_config_t gf_config_load_or_create (const char *filename);
 

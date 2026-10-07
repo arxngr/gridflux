@@ -15,6 +15,7 @@
 #include <tlhelp32.h>
 #include <sddl.h>
 // clang-format on
+#include "../config/config.h"
 #include "../platform/windows/taskbar.h"
 
 #include <stdio.h>
@@ -97,13 +98,14 @@ is_elevated (void)
 }
 
 static HANDLE
-launch_elevated (const wchar_t *exe_path, const wchar_t *working_dir)
+launch_elevated (const wchar_t *exe_path, const wchar_t *working_dir, const wchar_t *args)
 {
     SHELLEXECUTEINFOW sei = { 0 };
     sei.cbSize = sizeof (sei);
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
     sei.lpVerb = L"runas";
     sei.lpFile = exe_path;
+    sei.lpParameters = args;
     sei.lpDirectory = working_dir;
     sei.nShow = SW_HIDE;
 
@@ -114,10 +116,14 @@ launch_elevated (const wchar_t *exe_path, const wchar_t *working_dir)
 }
 
 static HANDLE
-launch_same_level (const wchar_t *exe_path, const wchar_t *working_dir)
+launch_same_level (const wchar_t *exe_path, const wchar_t *working_dir,
+                   const wchar_t *args)
 {
-    wchar_t cmd[MAX_PATH + 4] = { 0 };
-    _snwprintf (cmd, MAX_PATH + 4, L"\"%s\"", exe_path);
+    wchar_t cmd[4096 + MAX_PATH + 64] = { 0 };
+    int length
+        = _snwprintf (cmd, sizeof (cmd) / sizeof (cmd[0]), L"\"%s\" %s", exe_path, args);
+    if (length < 0 || length >= sizeof (cmd) / sizeof (cmd[0]))
+        return NULL;
 
     STARTUPINFOW si = { .cb = sizeof (si) };
     PROCESS_INFORMATION pi = { 0 };
@@ -334,14 +340,17 @@ static void
 run_restart_loop (const wchar_t *exe_path, const wchar_t *dir, BOOL elevated)
 {
     int launch_failures = 0;
+    wchar_t args[4096 + 32];
+    if (!gf_config_get_launch_args (args, sizeof (args) / sizeof (args[0])))
+        return;
 
     for (;;)
     {
         if (GetFileAttributesW (exe_path) == INVALID_FILE_ATTRIBUTES)
             break;
 
-        HANDLE hProcess = elevated ? launch_same_level (exe_path, dir)
-                                   : launch_elevated (exe_path, dir);
+        HANDLE hProcess = elevated ? launch_same_level (exe_path, dir, args)
+                                   : launch_elevated (exe_path, dir, args);
 
         if (!hProcess)
         {

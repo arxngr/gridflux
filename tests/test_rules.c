@@ -204,6 +204,40 @@ test_color_reload (void)
     gf_workspace_list_cleanup (&m.state.workspaces);
 }
 
+static void
+test_selected_config (void)
+{
+    gf_config_t cfg = gf_config_load_or_create (gf_config_get_path ());
+    cfg.border_color = 0x00F49D2A;
+    gf_config_save ("config.json", &cfg);
+    gf_config_t selected;
+    assert (gf_config_dup (&selected, &cfg) == GF_SUCCESS);
+    selected.border_color = 0x003584E4;
+    gf_config_save ("caller config.json", &selected);
+    assert (gf_config_set_path ("caller config.json") == GF_SUCCESS);
+    gf_platform_t platform = { .workspace_get_count = workspace_count };
+    gf_wm_t m = { .config = &cfg, .platform = &platform };
+    assert (gf_window_list_init (&m.state.windows, 8) == GF_SUCCESS);
+    assert (gf_workspace_list_init (&m.state.workspaces, 8) == GF_SUCCESS);
+    gf_wm_load_cfg (&m);
+    assert (cfg.border_color == selected.border_color);
+    // IPC mutations must save into the selected user's file too.
+    assert (gf_config_workspace_lock (&cfg, 6) == GF_SUCCESS);
+    gf_config_t saved = gf_config_load_or_create (gf_config_get_path ());
+    assert (saved.border_color == selected.border_color
+            && gf_config_workspace_is_locked (&saved, 6));
+    gf_config_t original = gf_config_load_or_create ("config.json");
+    assert (original.border_color == 0x00F49D2A
+            && !gf_config_workspace_is_locked (&original, 6));
+    gf_config_release (&saved);
+    gf_config_release (&original);
+    gf_config_release (&selected);
+    gf_config_release (&cfg);
+    gf_window_list_cleanup (&m.state.windows);
+    gf_workspace_list_cleanup (&m.state.workspaces);
+    assert (remove ("config.json") == 0);
+}
+
 int
 main (void)
 {
@@ -213,6 +247,7 @@ main (void)
     test_persistence ();
     test_commands ();
     test_color_reload ();
+    test_selected_config ();
     assert (remove (gf_config_get_path ()) == 0);
     puts ("Monitor rule persistence and command regressions passed");
     return 0;

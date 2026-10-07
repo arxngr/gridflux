@@ -195,6 +195,7 @@ if(WIN32)
     endif()
     add_executable(gridflux-launcher WIN32
         src/launcher/win32.c
+        src/config/path.c
         src/platform/windows/taskbar.c
         src/platform/windows/window.c
         ${WINDOWS_WINDOW_SUPPORT_SOURCES}
@@ -222,6 +223,7 @@ add_executable(gridflux-cli
     src/utils/memory.c
     src/utils/logger.c
     src/config/config.c
+    src/config/path.c
     src/core/layout.c
     src/core/resize.c
     src/utils/file.c
@@ -264,6 +266,7 @@ if(GTK4_FOUND)
         src/utils/list.c
         src/utils/memory.c
         src/config/config.c
+        src/config/path.c
         src/utils/logger.c
         src/core/layout.c
         src/core/resize.c
@@ -334,6 +337,9 @@ endif()
 if(GF_DEV_MODE)
     target_compile_definitions(gridflux PRIVATE GF_DEV_MODE)
     target_compile_definitions(gridflux-cli PRIVATE GF_DEV_MODE)
+    if(TARGET gridflux-launcher)
+        target_compile_definitions(gridflux-launcher PRIVATE GF_DEV_MODE)
+    endif()
     if(TARGET gridflux-gui)
         target_compile_definitions(gridflux-gui PRIVATE GF_DEV_MODE)
     endif()
@@ -412,7 +418,7 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME monitor-state COMMAND gridflux-monitor-state-test)
     add_executable(gridflux-rules-test
-        tests/test_rules.c src/config/config.c src/config/excludes.c src/config/rules.c
+        tests/test_rules.c src/config/config.c src/config/path.c src/config/excludes.c src/config/rules.c
         src/ipc/ipc_command.c src/core/events.c src/core/workspace.c
         src/core/window.c src/core/arrange.c src/core/monitor.c
         src/core/wm.c src/core/border.c src/core/debug.c src/core/resize.c src/core/layout.c
@@ -433,6 +439,18 @@ if(BUILD_TESTING)
     set_tests_properties(rules PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-rules")
     if(WIN32)
+        add_executable(gridflux-config-path-test tests/test_config_path.c src/config/path.c)
+        target_include_directories(gridflux-config-path-test PRIVATE ${PLATFORM_INCLUDES})
+        target_link_libraries(gridflux-config-path-test PRIVATE user32 shell32 advapi32)
+        if(MSVC)
+            target_compile_options(gridflux-config-path-test PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(gridflux-config-path-test PRIVATE -UNDEBUG)
+        endif()
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-config-path")
+        add_test(NAME config-path COMMAND gridflux-config-path-test)
+        set_tests_properties(config-path PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-config-path")
         add_executable(gridflux-windows-monitor-test tests/test_windows_monitor.c)
         target_include_directories(gridflux-windows-monitor-test PRIVATE ${PLATFORM_INCLUDES})
         target_link_libraries(gridflux-windows-monitor-test PRIVATE user32)
