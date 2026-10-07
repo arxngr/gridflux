@@ -1047,7 +1047,9 @@ win32_populate_app_dropdown (gf_gui_platform_t *platform, GtkStringList *model)
     gf_ipc_response_t resp = gf_run_client_command ("query apps");
     if (resp.status == GF_IPC_SUCCESS)
     {
-        gf_command_response_t *cmd_resp = (gf_command_response_t *)resp.message;
+        gf_command_response_t result = { .type = 1, .message = "Invalid IPC reply" };
+        gf_parse_command_response (resp.message, sizeof (resp.message), &result);
+        gf_command_response_t *cmd_resp = &result;
         char apps_buf[sizeof (cmd_resp->message)];
         strncpy (apps_buf, cmd_resp->message, sizeof (apps_buf) - 1);
         apps_buf[sizeof (apps_buf) - 1] = '\0';

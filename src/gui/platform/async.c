@@ -9,6 +9,13 @@ handle_command_response (gpointer user_data)
 {
     gf_cmd_result_t *data = (gf_cmd_result_t *)user_data;
     data->app->operation_in_progress = FALSE;
+    if (data->app->shutting_down
+        || !gtk_window_get_application (GTK_WINDOW (data->window)))
+    {
+        g_object_unref (data->window);
+        g_free (data);
+        return G_SOURCE_REMOVE;
+    }
 
     if (data->show_dialog)
     {
@@ -54,6 +61,7 @@ handle_command_response (gpointer user_data)
         gf_gui_platform_run_refresh (data->app);
     }
 
+    g_object_unref (data->window);
     g_free (data);
     return G_SOURCE_REMOVE;
 }
@@ -66,6 +74,7 @@ run_command_thread (gpointer user_data)
 
     gf_cmd_result_t *resp_data = g_new0 (gf_cmd_result_t, 1);
     resp_data->app = data->app;
+    resp_data->window = data->window; // Transfer the UI-thread reference to the result.
     resp_data->response = response;
     resp_data->should_refresh = data->should_refresh;
     resp_data->show_dialog = data->show_dialog;
@@ -82,12 +91,20 @@ handle_refresh_response (gpointer user_data)
 {
     gf_refresh_task_t *data = (gf_refresh_task_t *)user_data;
     data->app->refresh_in_progress = FALSE;
+    if (data->app->shutting_down
+        || !gtk_window_get_application (GTK_WINDOW (data->window)))
+    {
+        g_object_unref (data->window);
+        g_free (data);
+        return G_SOURCE_REMOVE;
+    }
     g_object_set_data_full (G_OBJECT (data->app->window), "ws_response",
                             g_memdup2 (&data->workspaces, sizeof (data->workspaces)),
                             g_free);
     g_object_set_data_full (G_OBJECT (data->app->window), "win_response",
                             g_memdup2 (&data->windows, sizeof (data->windows)), g_free);
     gf_refresh_workspaces (data->app);
+    g_object_unref (data->window);
     g_free (data);
     return G_SOURCE_REMOVE;
 }
@@ -110,12 +127,13 @@ gf_gui_platform_run_command (gf_app_state_t *app, const char *command, gboolean 
                              gboolean dialog)
 {
 #ifdef _WIN32
-    if (app->operation_in_progress)
+    if (app->operation_in_progress || app->shutting_down)
         return;
     app->operation_in_progress = TRUE;
 
     gf_cmd_task_t *task = g_new0 (gf_cmd_task_t, 1);
     task->app = app;
+    task->window = g_object_ref (app->window);
     task->command = g_strdup (command);
     task->should_refresh = refresh;
     task->show_dialog = dialog;
@@ -147,11 +165,12 @@ void
 gf_gui_platform_run_refresh (gf_app_state_t *app)
 {
 #ifdef _WIN32
-    if (app->refresh_in_progress)
+    if (app->refresh_in_progress || app->shutting_down)
         return;
     app->refresh_in_progress = TRUE;
     gf_refresh_task_t *task = g_new0 (gf_refresh_task_t, 1);
     task->app = app;
+    task->window = g_object_ref (app->window);
     g_thread_unref (g_thread_new ("ipc-refresh", run_refresh_thread, task));
 #else
     gf_refresh_workspaces (app);

@@ -5,17 +5,13 @@
 bool
 gf_gui_get_monitors (gf_monitor_t *monitors, uint32_t *count)
 {
+    if (!monitors || !count)
+        return false;
     gf_ipc_response_t response = gf_run_client_command ("query monitors");
     if (response.status != GF_IPC_SUCCESS)
         return false;
-    uint32_t connected;
-    memcpy (&connected, response.message, sizeof (connected));
-    if (connected > *count || connected > GF_MAX_MONITORS)
-        return false;
-    memcpy (monitors, response.message + sizeof (connected),
-            connected * sizeof (*monitors));
-    *count = connected;
-    return true;
+    return gf_parse_monitor_list (response.message, sizeof (response.message), monitors,
+                                  *count, count);
 }
 
 gf_ipc_response_t

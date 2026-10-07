@@ -103,7 +103,9 @@ on_add_rule (GtkButton *btn, gpointer user_data)
         snprintf (command, sizeof (command), "rule add %s %d %u", wm_class, ws,
                   ctx->monitor_ids[monitor - 1]);
     gf_ipc_response_t resp = gf_run_client_command (command);
-    gf_command_response_t *cmd_resp = (gf_command_response_t *)resp.message;
+    gf_command_response_t result = { .type = 1, .message = "Invalid IPC reply" };
+    gf_parse_command_response (resp.message, sizeof (resp.message), &result);
+    gf_command_response_t *cmd_resp = &result;
 
     if (resp.status == GF_IPC_SUCCESS && cmd_resp->type == 0)
         refresh_rules_list (ctx);

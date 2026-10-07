@@ -46,7 +46,7 @@ gf_taskbar_restore_all (void)
 #define CreateProcessW capture_process
 #define ShellExecuteExW capture_elevation
 #define WinMain test_launcher_entry
-#include "../src/launcher/win32.c"
+#include "../../src/launcher/win32.c"
 #undef CreateProcessW
 #undef ShellExecuteExW
 #undef WinMain

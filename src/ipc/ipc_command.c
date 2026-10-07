@@ -8,6 +8,8 @@
 #include "ipc.h"
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,24 +25,177 @@ ipc_max_records (size_t header_bytes, size_t record_size)
     return (uint32_t)((GF_IPC_MSG_SIZE - header_bytes) / record_size);
 }
 
-static void
+static bool
 parse_command (const char *input, char *command, char *args, size_t args_size)
 {
-    while (isspace (*input))
+    while (isspace ((unsigned char)*input))
         input++;
-
-    size_t i = 0;
-    while (*input && !isspace (*input) && i < 63)
+    size_t n = 0;
+    while (*input && !isspace ((unsigned char)*input))
     {
-        command[i++] = *input++;
+        if (n == 63)
+            return false;
+        command[n++] = *input++;
     }
-    command[i] = '\0';
-
-    while (isspace (*input))
+    command[n] = '\0';
+    while (isspace ((unsigned char)*input))
         input++;
+    size_t len = strlen (input);
+    if (!n || len >= args_size)
+        return false;
+    memcpy (args, input, len + 1);
+    return true;
+}
 
-    strncpy (args, input, args_size - 1);
-    args[args_size - 1] = '\0';
+static bool
+parse_number (const char *token, int maximum, int *value)
+{
+    if (!token || !*token || *token == '-' || *token == '+')
+        return false;
+    char *end;
+    errno = 0;
+    unsigned long parsed = strtoul (token, &end, 10);
+    while (isspace ((unsigned char)*end))
+        end++;
+    if (errno || end == token || *end || parsed > (unsigned long)maximum)
+        return false;
+    *value = (int)parsed;
+    return true;
+}
+
+static size_t
+append_text (char *buffer, size_t size, size_t pos, const char *format, ...)
+{
+    if (pos >= size - 1)
+        return size - 1;
+    va_list args;
+    va_start (args, format);
+    int n = vsnprintf (buffer + pos, size - pos, format, args);
+    va_end (args);
+    if (n < 0)
+    {
+        buffer[pos] = '\0';
+        return pos;
+    }
+    return (size_t)n >= size - pos ? size - 1 : pos + (size_t)n;
+}
+
+static void
+write_window (char *buffer, const gf_win_info_t *source)
+{
+    memset (buffer, 0, sizeof (*source));
+    memcpy (buffer + offsetof (gf_win_info_t, id), &source->id, sizeof (source->id));
+    memcpy (buffer + offsetof (gf_win_info_t, workspace_id), &source->workspace_id,
+            sizeof (source->workspace_id));
+    memcpy (buffer + offsetof (gf_win_info_t, restore_workspace_id),
+            &source->restore_workspace_id, sizeof (source->restore_workspace_id));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_id), &source->monitor_id,
+            sizeof (source->monitor_id));
+    memcpy (buffer + offsetof (gf_win_info_t, geometry), &source->geometry,
+            sizeof (source->geometry));
+    memcpy (buffer + offsetof (gf_win_info_t, is_maximized), &source->is_maximized,
+            sizeof (source->is_maximized));
+    memcpy (buffer + offsetof (gf_win_info_t, is_minimized), &source->is_minimized,
+            sizeof (source->is_minimized));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_suspended),
+            &source->monitor_suspended, sizeof (source->monitor_suspended));
+    memcpy (buffer + offsetof (gf_win_info_t, visibility_request),
+            &source->visibility_request, sizeof (source->visibility_request));
+    memcpy (buffer + offsetof (gf_win_info_t, visibility_wait), &source->visibility_wait,
+            sizeof (source->visibility_wait));
+    memcpy (buffer + offsetof (gf_win_info_t, visibility_attempts),
+            &source->visibility_attempts, sizeof (source->visibility_attempts));
+    memcpy (buffer + offsetof (gf_win_info_t, visibility_settle),
+            &source->visibility_settle, sizeof (source->visibility_settle));
+    memcpy (buffer + offsetof (gf_win_info_t, mode_wait), &source->mode_wait,
+            sizeof (source->mode_wait));
+    memcpy (buffer + offsetof (gf_win_info_t, needs_update), &source->needs_update,
+            sizeof (source->needs_update));
+    memcpy (buffer + offsetof (gf_win_info_t, arrange_failures),
+            &source->arrange_failures, sizeof (source->arrange_failures));
+    memcpy (buffer + offsetof (gf_win_info_t, maximize_fill_failures),
+            &source->maximize_fill_failures, sizeof (source->maximize_fill_failures));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_restore_failures),
+            &source->monitor_restore_failures, sizeof (source->monitor_restore_failures));
+    memcpy (buffer + offsetof (gf_win_info_t, rule_move_failures),
+            &source->rule_move_failures, sizeof (source->rule_move_failures));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_return)
+                + offsetof (gf_monitor_return_t, pending),
+            &source->monitor_return.pending, sizeof (source->monitor_return.pending));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_return)
+                + offsetof (gf_monitor_return_t, cancelled),
+            &source->monitor_return.cancelled, sizeof (source->monitor_return.cancelled));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_return)
+                + offsetof (gf_monitor_return_t, failures),
+            &source->monitor_return.failures, sizeof (source->monitor_return.failures));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_return)
+                + offsetof (gf_monitor_return_t, monitor_id),
+            &source->monitor_return.monitor_id,
+            sizeof (source->monitor_return.monitor_id));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_return)
+                + offsetof (gf_monitor_return_t, workspace_id),
+            &source->monitor_return.workspace_id,
+            sizeof (source->monitor_return.workspace_id));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_return)
+                + offsetof (gf_monitor_return_t, restore_workspace_id),
+            &source->monitor_return.restore_workspace_id,
+            sizeof (source->monitor_return.restore_workspace_id));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_return)
+                + offsetof (gf_monitor_return_t, geometry),
+            &source->monitor_return.geometry, sizeof (source->monitor_return.geometry));
+    memcpy (buffer + offsetof (gf_win_info_t, monitor_return)
+                + offsetof (gf_monitor_return_t, bounds),
+            &source->monitor_return.bounds, sizeof (source->monitor_return.bounds));
+    memcpy (buffer + offsetof (gf_win_info_t, is_valid), &source->is_valid,
+            sizeof (source->is_valid));
+    memcpy (buffer + offsetof (gf_win_info_t, last_modified), &source->last_modified,
+            sizeof (source->last_modified));
+    size_t length = 0;
+    while (length < sizeof (source->name) - 1 && source->name[length])
+        length++;
+    memcpy (buffer + offsetof (gf_win_info_t, name), source->name, length);
+}
+
+static void
+write_workspace (char *buffer, const gf_ws_info_t *source)
+{
+    memset (buffer, 0, sizeof (*source));
+    memcpy (buffer + offsetof (gf_ws_info_t, id), &source->id, sizeof (source->id));
+    memcpy (buffer + offsetof (gf_ws_info_t, local_id), &source->local_id,
+            sizeof (source->local_id));
+    memcpy (buffer + offsetof (gf_ws_info_t, rule_target_id), &source->rule_target_id,
+            sizeof (source->rule_target_id));
+    memcpy (buffer + offsetof (gf_ws_info_t, monitor_id), &source->monitor_id,
+            sizeof (source->monitor_id));
+    memcpy (buffer + offsetof (gf_ws_info_t, window_count), &source->window_count,
+            sizeof (source->window_count));
+    memcpy (buffer + offsetof (gf_ws_info_t, max_windows), &source->max_windows,
+            sizeof (source->max_windows));
+    memcpy (buffer + offsetof (gf_ws_info_t, available_space), &source->available_space,
+            sizeof (source->available_space));
+    memcpy (buffer + offsetof (gf_ws_info_t, is_locked), &source->is_locked,
+            sizeof (source->is_locked));
+    memcpy (buffer + offsetof (gf_ws_info_t, has_maximized_state),
+            &source->has_maximized_state, sizeof (source->has_maximized_state));
+    memcpy (buffer + offsetof (gf_ws_info_t, is_custom_layout), &source->is_custom_layout,
+            sizeof (source->is_custom_layout));
+    memcpy (buffer + offsetof (gf_ws_info_t, has_rule), &source->has_rule,
+            sizeof (source->has_rule));
+    memcpy (buffer + offsetof (gf_ws_info_t, is_excluded_ws), &source->is_excluded_ws,
+            sizeof (source->is_excluded_ws));
+}
+
+static void
+write_monitor (char *buffer, const gf_monitor_t *source)
+{
+    memset (buffer, 0, sizeof (*source));
+    memcpy (buffer + offsetof (gf_monitor_t, id), &source->id, sizeof (source->id));
+    memcpy (buffer + offsetof (gf_monitor_t, bounds), &source->bounds,
+            sizeof (source->bounds));
+    memcpy (buffer + offsetof (gf_monitor_t, full_bounds), &source->full_bounds,
+            sizeof (source->full_bounds));
+    memcpy (buffer + offsetof (gf_monitor_t, is_primary), &source->is_primary,
+            sizeof (source->is_primary));
 }
 
 static void
@@ -72,8 +227,9 @@ cmd_query_windows (const char *args, gf_ipc_response_t *response, void *user_dat
     offset += sizeof (uint32_t);
     memcpy (response->message + offset, &windows->capacity, sizeof (uint32_t));
     offset += sizeof (uint32_t);
-    memcpy (response->message + offset, windows->items,
-            send_count * sizeof (gf_win_info_t));
+    for (uint32_t i = 0; i < send_count; i++)
+        write_window (response->message + offset + i * sizeof (gf_win_info_t),
+                      &windows->items[i]);
 }
 
 static void
@@ -102,8 +258,9 @@ cmd_query_workspaces (const char *args, gf_ipc_response_t *response, void *user_
     memcpy (response->message + offset, &workspaces->active_workspace,
             sizeof (workspaces->active_workspace));
     offset += sizeof (workspaces->active_workspace);
-    memcpy (response->message + offset, workspaces->items,
-            send_count * sizeof (gf_ws_info_t));
+    for (uint32_t i = 0; i < send_count; i++)
+        write_workspace (response->message + offset + i * sizeof (gf_ws_info_t),
+                         &workspaces->items[i]);
 }
 
 static void
@@ -111,7 +268,7 @@ cmd_query_monitors (const char *args, gf_ipc_response_t *response, void *user_da
 {
     (void)args;
     gf_wm_t *m = user_data;
-    gf_monitor_t connected[GF_MAX_MONITORS];
+    gf_monitor_t connected[GF_MAX_MONITORS] = { 0 };
     uint32_t count = 0;
     for (uint32_t i = 0; i < m->state.monitor_count && i < GF_MAX_MONITORS; i++)
     {
@@ -120,7 +277,9 @@ cmd_query_monitors (const char *args, gf_ipc_response_t *response, void *user_da
             connected[count++] = *monitor;
     }
     memcpy (response->message, &count, sizeof (count));
-    memcpy (response->message + sizeof (count), connected, count * sizeof (*connected));
+    for (uint32_t i = 0; i < count; i++)
+        write_monitor (response->message + sizeof (count) + i * sizeof (*connected),
+                       &connected[i]);
 }
 
 static void
@@ -129,12 +288,20 @@ cmd_query_count (const char *args, gf_ipc_response_t *response, void *user_data)
     gf_wm_t *m = (gf_wm_t *)user_data;
     gf_win_list_t *windows = wm_windows (m);
 
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
     resp.type = 0;
 
     if (args && *args)
     {
-        int workspace_id = atoi (args);
+        int workspace_id;
+        if (!parse_number (args, INT_MAX, &workspace_id))
+        {
+            response->status = GF_IPC_ERROR_INVALID_COMMAND;
+            resp.type = 1;
+            snprintf (resp.message, sizeof (resp.message), "Invalid workspace ID");
+            memcpy (response->message, &resp, sizeof (resp));
+            return;
+        }
         uint32_t count = gf_window_list_count_by_workspace (windows, workspace_id);
         snprintf (resp.message, sizeof (resp.message), "Workspace %d has %u windows",
                   workspace_id, count);
@@ -156,9 +323,16 @@ cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_data)
     gf_handle_t window_id = 0;
     int target_workspace = -1;
 
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
 
-    if (!args || sscanf (args, "%p %d", (void **)&window_id, &target_workspace) != 2)
+    char handle_token[32], workspace_token[32], extra[2];
+    int fields = sscanf (args, "%31s %31s %1s", handle_token, workspace_token, extra);
+    char *end = NULL;
+    errno = 0;
+    unsigned long long raw_handle = fields == 2 ? strtoull (handle_token, &end, 16) : 0;
+    if (fields != 2 || !raw_handle || errno || !end || *end || handle_token[0] == '-'
+        || handle_token[0] == '+' || raw_handle > UINTPTR_MAX
+        || !parse_number (workspace_token, INT_MAX, &target_workspace))
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
@@ -168,7 +342,8 @@ cmd_move_window (const char *args, gf_ipc_response_t *response, void *user_data)
         return;
     }
 
-    // Just call the window manager API
+    window_id = (gf_handle_t)(uintptr_t)raw_handle;
+    // Resolve the handle through the tracked window list in the core.
     gf_err_t result = gf_wm_window_move (m, window_id, target_workspace);
 
     resp.type = (result == GF_SUCCESS) ? 0 : 1;
@@ -209,9 +384,9 @@ cmd_lock_workspace (const char *args, gf_ipc_response_t *response, void *user_da
     gf_wm_t *m = (gf_wm_t *)user_data;
 
     int workspace_id = -1;
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
 
-    if (!args || sscanf (args, "%d", &workspace_id) != 1)
+    if (!parse_number (args, INT_MAX, &workspace_id))
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
@@ -258,9 +433,9 @@ cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *user_
     gf_wm_t *m = (gf_wm_t *)user_data;
 
     int workspace_id = -1;
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
 
-    if (!args || sscanf (args, "%d", &workspace_id) != 1)
+    if (!parse_number (args, INT_MAX, &workspace_id))
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
@@ -301,23 +476,11 @@ cmd_unlock_workspace (const char *args, gf_ipc_response_t *response, void *user_
     memcpy (response->message, &resp, sizeof (resp));
 }
 
-static bool
-parse_rule_number (const char *token, int maximum, int *value)
-{
-    char *end;
-    errno = 0;
-    long parsed = strtol (token, &end, 10);
-    if (errno || end == token || *end || parsed < 0 || parsed > maximum)
-        return false;
-    *value = (int)parsed;
-    return true;
-}
-
 static void
 cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
 
     char wm_class[128] = { 0 };
     int workspace_id = -1;
@@ -328,11 +491,11 @@ cmd_rule_add (const char *args, gf_ipc_response_t *response, void *user_data)
     int fields = args ? sscanf (args, "%127s %31s %31s %1s", wm_class, workspace_token,
                                 monitor_token, extra)
                       : 0;
-    if (fields < 2 || fields > 3
-        || !parse_rule_number (workspace_token, GF_MAX_WORKSPACES, &workspace_id)
+    if (strcspn (args, " \t") >= sizeof (wm_class) || fields < 2 || fields > 3
+        || !parse_number (workspace_token, GF_MAX_WORKSPACES, &workspace_id)
         || workspace_id < GF_FIRST_WORKSPACE_ID
         || (fields == 3
-            && !parse_rule_number (monitor_token, GF_MAX_MONITORS - 1, &monitor_id)))
+            && !parse_number (monitor_token, GF_MAX_MONITORS - 1, &monitor_id)))
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
@@ -399,11 +562,12 @@ static void
 cmd_rule_remove (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
 
     char wm_class[128] = { 0 };
 
-    if (!args || sscanf (args, "%127s", wm_class) != 1)
+    char extra[2];
+    if (!args || sscanf (args, "%127s %1s", wm_class, extra) != 1)
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
         resp.type = 1;
@@ -428,7 +592,7 @@ cmd_rule_list (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     (void)args;
     gf_wm_t *m = (gf_wm_t *)user_data;
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
     resp.type = 0;
 
     uint32_t count = gf_rules_count (m->config);
@@ -440,12 +604,12 @@ cmd_rule_list (const char *args, gf_ipc_response_t *response, void *user_data)
     }
 
     size_t pos = 0;
-    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
-                     "Window Rules (%u):\n", count);
-    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %-10s %s\n",
-                     "WM Class", "Workspace", "Monitor ID");
-    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%-30s %-10s %s\n",
-                     "------------------------------", "---------", "----------");
+    pos = append_text (resp.message, sizeof (resp.message), pos, "Window Rules (%u):\n",
+                       count);
+    pos = append_text (resp.message, sizeof (resp.message), pos, "%-30s %-10s %s\n",
+                       "WM Class", "Workspace", "Monitor ID");
+    pos = append_text (resp.message, sizeof (resp.message), pos, "%-30s %-10s %s\n",
+                       "------------------------------", "---------", "----------");
 
     for (uint32_t i = 0; i < count && pos < sizeof (resp.message) - 50; i++)
     {
@@ -453,8 +617,8 @@ cmd_rule_list (const char *args, gf_ipc_response_t *response, void *user_data)
         char monitor[24] = "Current";
         if (rule->has_monitor_id)
             snprintf (monitor, sizeof (monitor), "M%u", rule->monitor_id);
-        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
-                         "%-30s %-10d %s\n", rule->wm_class, rule->workspace_id, monitor);
+        pos = append_text (resp.message, sizeof (resp.message), pos, "%-30s %-10d %s\n",
+                           rule->wm_class, rule->workspace_id, monitor);
     }
 
     memcpy (response->message, &resp, sizeof (resp));
@@ -470,8 +634,13 @@ copy_class_arg (const char *args, char *out, size_t out_size)
         return false;
     while (*args == ' ' || *args == '\t')
         args++;
-    gf_safe_strcpy (out, out_size, args);
-    size_t len = strlen (out);
+    size_t len = strlen (args);
+    while (len > 0 && isspace ((unsigned char)args[len - 1]))
+        len--;
+    if (!len || len >= out_size)
+        return false;
+    memcpy (out, args, len);
+    out[len] = '\0';
     while (len > 0
            && (out[len - 1] == '\n' || out[len - 1] == '\r' || out[len - 1] == ' '
                || out[len - 1] == '\t'))
@@ -483,7 +652,7 @@ static void
 cmd_exclude_add (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
 
     char wm_class[GF_RULE_CLASS_MAX] = { 0 };
     if (!copy_class_arg (args, wm_class, sizeof (wm_class)))
@@ -511,7 +680,7 @@ static void
 cmd_exclude_remove (const char *args, gf_ipc_response_t *response, void *user_data)
 {
     gf_wm_t *m = (gf_wm_t *)user_data;
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
 
     char wm_class[GF_RULE_CLASS_MAX] = { 0 };
     if (!copy_class_arg (args, wm_class, sizeof (wm_class)))
@@ -540,7 +709,7 @@ cmd_exclude_list (const char *args, gf_ipc_response_t *response, void *user_data
 {
     (void)args;
     gf_wm_t *m = (gf_wm_t *)user_data;
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
     resp.type = 0;
 
     const gf_exclude_list_t *list = &m->config->excluded_apps;
@@ -552,11 +721,11 @@ cmd_exclude_list (const char *args, gf_ipc_response_t *response, void *user_data
     }
 
     size_t pos = 0;
-    pos += snprintf (resp.message + pos, sizeof (resp.message) - pos,
-                     "Excluded apps (%u):\n", list->count);
+    pos = append_text (resp.message, sizeof (resp.message), pos, "Excluded apps (%u):\n",
+                       list->count);
     for (uint32_t i = 0; i < list->count && pos < sizeof (resp.message) - 130; i++)
-        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%s\n",
-                         list->items[i].wm_class);
+        pos = append_text (resp.message, sizeof (resp.message), pos, "%s\n",
+                           list->items[i].wm_class);
 
     memcpy (response->message, &resp, sizeof (resp));
 }
@@ -567,7 +736,7 @@ cmd_query_apps (const char *args, gf_ipc_response_t *response, void *user_data)
     (void)args;
     gf_wm_t *m = (gf_wm_t *)user_data;
     gf_win_list_t *windows = wm_windows (m);
-    gf_command_response_t resp;
+    gf_command_response_t resp = { 0 };
     resp.type = 0;
 
     // Collect unique class names from tracked windows
@@ -576,7 +745,7 @@ cmd_query_apps (const char *args, gf_ipc_response_t *response, void *user_data)
 
     for (uint32_t i = 0; i < windows->count && class_count < 128; i++)
     {
-        char name[128];
+        char name[128] = { 0 };
         gf_wm_window_class (m, windows->items[i].id, name, sizeof (name));
 
         if (name[0] == '\0')
@@ -611,27 +780,46 @@ cmd_query_apps (const char *args, gf_ipc_response_t *response, void *user_data)
     size_t pos = 0;
     for (uint32_t i = 0; i < class_count && pos < sizeof (resp.message) - 130; i++)
     {
-        pos += snprintf (resp.message + pos, sizeof (resp.message) - pos, "%s\n",
-                         classes[i]);
+        pos = append_text (resp.message, sizeof (resp.message), pos, "%s\n", classes[i]);
     }
 
     memcpy (response->message, &resp, sizeof (resp));
 }
 
 void
-gf_handle_client_message (const char *message, gf_ipc_response_t *response,
+gf_handle_client_message (const char *message, size_t length, gf_ipc_response_t *response,
                           void *user_data)
 {
     char command[64] = { 0 };
     char args[256] = { 0 };
 
-    parse_command (message, command, args, sizeof (args));
+    if (!response)
+        return;
+    memset (response, 0, sizeof (*response));
+    response->status = GF_IPC_ERROR_INVALID_COMMAND;
+    if (!message || !length || length >= GF_IPC_MSG_SIZE || !user_data
+        || !((gf_wm_t *)user_data)->config || memchr (message, '\0', length))
+        return;
+    for (size_t i = 0; i < length; i++)
+        if (((unsigned char)message[i] < 32 && message[i] != '\t')
+            || (unsigned char)message[i] == 127)
+            return;
+    char request[GF_IPC_MSG_SIZE];
+    memcpy (request, message, length);
+    request[length] = '\0';
+    if (!parse_command (request, command, args, sizeof (args)))
+        return;
+    response->status = GF_IPC_SUCCESS;
 
     if (strcmp (command, "query") == 0)
     {
         char subcommand[64] = { 0 };
         char subargs[256] = { 0 };
-        parse_command (args, subcommand, subargs, sizeof (subargs));
+        if (!parse_command (args, subcommand, subargs, sizeof (subargs)))
+        {
+            response->status = GF_IPC_ERROR_INVALID_COMMAND;
+            return;
+        }
 
         if (strcmp (subcommand, "windows") == 0 || strcmp (subcommand, "W") == 0)
         {
@@ -656,7 +844,7 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
         else
         {
             response->status = GF_IPC_ERROR_INVALID_COMMAND;
-            gf_command_response_t resp;
+            gf_command_response_t resp = { 0 };
             resp.type = 1;
             snprintf (resp.message, sizeof (resp.message), "Unknown query: %s",
                       subcommand);
@@ -681,7 +869,7 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
         if (!m || !m->config)
         {
             response->status = GF_IPC_ERROR_INVALID_COMMAND;
-            gf_command_response_t resp;
+            gf_command_response_t resp = { 0 };
             resp.type = 1;
             snprintf (resp.message, sizeof (resp.message), "WM not initialized");
             memcpy (response->message, &resp, sizeof (resp));
@@ -694,7 +882,7 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
                 gf_config_save (path, m->config);
 
             response->status = GF_IPC_SUCCESS;
-            gf_command_response_t resp;
+            gf_command_response_t resp = { 0 };
             resp.type = 0;
             snprintf (resp.message, sizeof (resp.message), "Borders %s",
                       m->config->enable_borders ? "enabled" : "disabled");
@@ -705,7 +893,11 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     {
         char subcommand[64] = { 0 };
         char subargs[256] = { 0 };
-        parse_command (args, subcommand, subargs, sizeof (subargs));
+        if (!parse_command (args, subcommand, subargs, sizeof (subargs)))
+        {
+            response->status = GF_IPC_ERROR_INVALID_COMMAND;
+            return;
+        }
 
         if (strcmp (subcommand, "add") == 0)
         {
@@ -722,7 +914,7 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
         else
         {
             response->status = GF_IPC_ERROR_INVALID_COMMAND;
-            gf_command_response_t resp;
+            gf_command_response_t resp = { 0 };
             resp.type = 1;
             snprintf (resp.message, sizeof (resp.message), "Unknown rule command: %s",
                       subcommand);
@@ -733,7 +925,11 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     {
         char subcommand[64] = { 0 };
         char subargs[256] = { 0 };
-        parse_command (args, subcommand, subargs, sizeof (subargs));
+        if (!parse_command (args, subcommand, subargs, sizeof (subargs)))
+        {
+            response->status = GF_IPC_ERROR_INVALID_COMMAND;
+            return;
+        }
 
         if (strcmp (subcommand, "add") == 0)
         {
@@ -750,7 +946,7 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
         else
         {
             response->status = GF_IPC_ERROR_INVALID_COMMAND;
-            gf_command_response_t resp;
+            gf_command_response_t resp = { 0 };
             resp.type = 1;
             snprintf (resp.message, sizeof (resp.message), "Unknown exclude command: %s",
                       subcommand);
@@ -760,89 +956,9 @@ gf_handle_client_message (const char *message, gf_ipc_response_t *response,
     else
     {
         response->status = GF_IPC_ERROR_INVALID_COMMAND;
-        gf_command_response_t resp;
+        gf_command_response_t resp = { 0 };
         resp.type = 1;
         snprintf (resp.message, sizeof (resp.message), "Unknown command: %s", command);
         memcpy (response->message, &resp, sizeof (resp));
     }
-}
-
-gf_ws_list_t *
-gf_parse_workspace_list (const char *buffer)
-{
-    if (!buffer)
-        return NULL;
-
-    gf_ws_list_t *list = gf_malloc (sizeof (gf_ws_list_t));
-    if (!list)
-        return NULL;
-
-    size_t offset = 0;
-    memcpy (&list->count, buffer + offset, sizeof (uint32_t));
-    offset += sizeof (uint32_t);
-    memcpy (&list->capacity, buffer + offset, sizeof (uint32_t));
-    offset += sizeof (uint32_t);
-    memcpy (&list->active_workspace, buffer + offset, sizeof (list->active_workspace));
-    offset += sizeof (list->active_workspace);
-
-    // Never trust the peer-supplied count: clamp it to what the fixed reply
-    // buffer can actually hold before allocating/copying.
-    uint32_t max_items = ipc_max_records (offset, sizeof (gf_ws_info_t));
-    if (list->count > max_items)
-        list->count = max_items;
-    if (list->count == 0)
-    {
-        list->items = NULL;
-        return list;
-    }
-
-    list->items = gf_malloc (list->count * sizeof (gf_ws_info_t));
-    if (!list->items)
-    {
-        gf_free (list);
-        return NULL;
-    }
-
-    memcpy (list->items, buffer + offset, list->count * sizeof (gf_ws_info_t));
-
-    return list;
-}
-
-gf_win_list_t *
-gf_parse_window_list (const char *buffer)
-{
-    if (!buffer)
-        return NULL;
-
-    gf_win_list_t *list = gf_malloc (sizeof (gf_win_list_t));
-    if (!list)
-        return NULL;
-
-    size_t offset = 0;
-    memcpy (&list->count, buffer + offset, sizeof (uint32_t));
-    offset += sizeof (uint32_t);
-    memcpy (&list->capacity, buffer + offset, sizeof (uint32_t));
-    offset += sizeof (uint32_t);
-
-    // Never trust the peer-supplied count: clamp it to what the fixed reply
-    // buffer can actually hold before allocating/copying.
-    uint32_t max_items = ipc_max_records (offset, sizeof (gf_win_info_t));
-    if (list->count > max_items)
-        list->count = max_items;
-    if (list->count == 0)
-    {
-        list->items = NULL;
-        return list;
-    }
-
-    list->items = gf_malloc (list->count * sizeof (gf_win_info_t));
-    if (!list->items)
-    {
-        gf_free (list);
-        return NULL;
-    }
-
-    memcpy (list->items, buffer + offset, list->count * sizeof (gf_win_info_t));
-
-    return list;
 }

@@ -50,18 +50,22 @@ main (int argc, char **argv)
     char command[GF_IPC_MSG_SIZE] = { 0 };
     size_t pos = 0;
 
-    for (int i = 1; i < argc && pos < sizeof (command) - 2; i++)
+    for (int i = 1; i < argc; i++)
     {
+        size_t len = strlen (argv[i]);
+        size_t separator = i > 1 ? 1 : 0;
+        if (separator >= sizeof (command) - pos
+            || len >= sizeof (command) - pos - separator)
+        {
+            fprintf (stderr, "Error: Command exceeds IPC capacity\n");
+            return 1;
+        }
         if (i > 1)
         {
             command[pos++] = ' ';
         }
-        size_t len = strlen (argv[i]);
-        if (pos + len < sizeof (command) - 1)
-        {
-            strcpy (command + pos, argv[i]);
-            pos += len;
-        }
+        memcpy (command + pos, argv[i], len + 1);
+        pos += len;
     }
 
     gf_ipc_handle_t handle = gf_ipc_client_connect ();
@@ -83,13 +87,19 @@ main (int argc, char **argv)
 
     if (response.status != GF_IPC_SUCCESS)
     {
-        fprintf (stderr, "Error: %s\n", response.message);
+        gf_command_response_t result;
+        if (gf_parse_command_response (response.message, sizeof (response.message),
+                                       &result))
+            fprintf (stderr, "Error: %s\n", result.message);
+        else
+            fprintf (stderr, "Error: IPC request rejected (%d)\n", response.status);
         return 1;
     }
 
     if (strncmp (command, "query workspaces", 16) == 0)
     {
-        gf_ws_list_t *workspaces = gf_parse_workspace_list (response.message);
+        gf_ws_list_t *workspaces
+            = gf_parse_workspace_list (response.message, sizeof (response.message));
         if (!workspaces)
         {
             fprintf (stderr, "Error: Failed to parse workspace data\n");
@@ -118,11 +128,12 @@ main (int argc, char **argv)
                         : "");
         }
 
-        gf_workspace_list_cleanup (workspaces);
+        gf_free_workspace_list (workspaces);
     }
     else if (strncmp (command, "query windows", 13) == 0)
     {
-        gf_win_list_t *windows = gf_parse_window_list (response.message);
+        gf_win_list_t *windows
+            = gf_parse_window_list (response.message, sizeof (response.message));
         if (!windows)
         {
             fprintf (stderr, "Error: Failed to parse window data\n");
@@ -144,13 +155,14 @@ main (int argc, char **argv)
                     win->monitor_id, win->workspace_id, state);
         }
 
-        gf_window_list_cleanup (windows);
+        gf_free_window_list (windows);
     }
     else if (strncmp (command, "query monitors", 14) == 0)
     {
-        uint32_t count;
-        memcpy (&count, response.message, sizeof (count));
-        if (count > GF_MAX_MONITORS)
+        uint32_t count = GF_MAX_MONITORS;
+        gf_monitor_t monitors[GF_MAX_MONITORS];
+        if (!gf_parse_monitor_list (response.message, sizeof (response.message), monitors,
+                                    GF_MAX_MONITORS, &count))
         {
             fprintf (stderr, "Error: Invalid monitor list\n");
             return 1;
@@ -158,15 +170,20 @@ main (int argc, char **argv)
         printf ("Connected monitors:\n");
         for (uint32_t i = 0; i < count; i++)
         {
-            gf_monitor_t monitor;
-            memcpy (&monitor, response.message + sizeof (count) + i * sizeof (monitor),
-                    sizeof (monitor));
+            gf_monitor_t monitor = monitors[i];
             printf ("M%u%s\n", monitor.id, monitor.is_primary ? " (primary)" : "");
         }
     }
     else
     {
-        gf_command_response_t *resp = (gf_command_response_t *)response.message;
+        gf_command_response_t result;
+        if (!gf_parse_command_response (response.message, sizeof (response.message),
+                                        &result))
+        {
+            fprintf (stderr, "Error: Invalid command reply\n");
+            return 1;
+        }
+        gf_command_response_t *resp = &result;
         if (resp->message[0])
         {
             printf ("%s", resp->message);

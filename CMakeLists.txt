@@ -10,6 +10,38 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(GF_DEV_MODE "Enable development mode (read config from current dir)" OFF)
+option(GF_ENABLE_SANITIZERS "Enable address/undefined-behavior checks for validation builds" OFF)
+
+if(MSVC)
+    add_compile_options(/GS /guard:cf)
+    add_link_options(/guard:cf /DYNAMICBASE /NXCOMPAT)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        add_link_options(/HIGHENTROPYVA)
+    endif()
+elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-fstack-protector-strong)
+    if(MINGW)
+        # Resolve stack-check support statically; installers need no new CRT DLL.
+        link_libraries(-Wl,-Bstatic ssp -Wl,-Bdynamic)
+        add_link_options(-Wl,--dynamicbase,--nxcompat)
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            add_link_options(-Wl,--high-entropy-va)
+        endif()
+    elseif(UNIX AND NOT APPLE)
+        add_compile_definitions($<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>:_FORTIFY_SOURCE=2>)
+    endif()
+endif()
+if(GF_ENABLE_SANITIZERS)
+    if(MSVC)
+        add_compile_options(/fsanitize=address /Zi)
+        add_link_options(/INCREMENTAL:NO /DEBUG)
+    elseif(UNIX AND NOT APPLE)
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    else()
+        message(FATAL_ERROR "Sanitizer validation requires MSVC or a Linux GNU/Clang toolchain")
+    endif()
+endif()
 
 # Packaging configuration
 set(CPACK_PACKAGE_NAME "gridflux")
@@ -211,6 +243,7 @@ endif()
 add_executable(gridflux-cli
     src/cli/main.c
     src/ipc/ipc_command.c
+    src/ipc/protocol.c
     src/core/wm.c
     src/core/arrange.c
     src/core/workspace.c
@@ -255,6 +288,7 @@ if(GTK4_FOUND)
         src/gui/platform/async.c
         src/gui/window/tray.c
         src/ipc/ipc_command.c
+        src/ipc/protocol.c
         src/core/wm.c
         src/core/arrange.c
         src/core/workspace.c
@@ -394,147 +428,7 @@ message(STATUS "")
 # Include CPack for packaging
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(gridflux-multi-monitor-test
-        tests/test_multi_monitor.c src/core/arrange.c src/core/resize.c
-        src/core/monitor.c
-        src/utils/list.c src/utils/memory.c)
-    target_include_directories(gridflux-multi-monitor-test PRIVATE ${PLATFORM_INCLUDES})
-    if(MSVC)
-        target_compile_options(gridflux-multi-monitor-test PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(gridflux-multi-monitor-test PRIVATE -UNDEBUG)
-    endif()
-    add_test(NAME multi-monitor COMMAND gridflux-multi-monitor-test)
-    add_executable(gridflux-monitor-state-test
-        tests/test_monitor_state.c src/core/events.c src/core/workspace.c
-        src/core/window.c src/core/arrange.c src/core/monitor.c
-        src/config/excludes.c src/config/rules.c
-        src/utils/list.c src/utils/memory.c)
-    target_include_directories(gridflux-monitor-state-test PRIVATE ${PLATFORM_INCLUDES})
-    if(MSVC)
-        target_compile_options(gridflux-monitor-state-test PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(gridflux-monitor-state-test PRIVATE -UNDEBUG)
-    endif()
-    add_test(NAME monitor-state COMMAND gridflux-monitor-state-test)
-    add_executable(gridflux-rules-test
-        tests/test_rules.c src/config/config.c src/config/path.c src/config/excludes.c src/config/rules.c
-        src/ipc/ipc_command.c src/core/events.c src/core/workspace.c
-        src/core/window.c src/core/arrange.c src/core/monitor.c
-        src/core/wm.c src/core/border.c src/core/debug.c src/core/resize.c src/core/layout.c
-        src/utils/list.c src/utils/memory.c)
-    target_include_directories(gridflux-rules-test PRIVATE ${PLATFORM_INCLUDES})
-    target_compile_definitions(gridflux-rules-test PRIVATE GF_DEV_MODE)
-    target_link_libraries(gridflux-rules-test PRIVATE ${JSONC_LIBRARIES})
-    if(JSONC_LIBRARY_DIRS)
-        target_link_directories(gridflux-rules-test PRIVATE ${JSONC_LIBRARY_DIRS})
-    endif()
-    if(MSVC)
-        target_compile_options(gridflux-rules-test PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(gridflux-rules-test PRIVATE -UNDEBUG)
-    endif()
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-rules")
-    add_test(NAME rules COMMAND gridflux-rules-test)
-    set_tests_properties(rules PROPERTIES
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-rules")
-    if(WIN32)
-        add_executable(gridflux-windows-ipc-test tests/test_windows_ipc.c)
-        target_include_directories(gridflux-windows-ipc-test PRIVATE ${PLATFORM_INCLUDES})
-        target_link_libraries(gridflux-windows-ipc-test PRIVATE advapi32)
-        if(MSVC)
-            target_compile_options(gridflux-windows-ipc-test PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(gridflux-windows-ipc-test PRIVATE -UNDEBUG)
-        endif()
-        add_test(NAME windows-ipc COMMAND gridflux-windows-ipc-test)
-        set_tests_properties(windows-ipc PROPERTIES TIMEOUT 15)
-        if(GTK4_FOUND)
-            add_executable(gridflux-windows-gui-test tests/test_windows_gui.c)
-            target_include_directories(gridflux-windows-gui-test PRIVATE ${GTK4_INCLUDE_DIRS} ${PLATFORM_INCLUDES})
-            target_link_libraries(gridflux-windows-gui-test PRIVATE ${GTK4_LIBRARIES} user32 shell32)
-            if(GTK4_LIBRARY_DIRS)
-                target_link_directories(gridflux-windows-gui-test PRIVATE ${GTK4_LIBRARY_DIRS})
-            endif()
-            if(MSVC)
-                target_compile_options(gridflux-windows-gui-test PRIVATE /UNDEBUG)
-            else()
-                target_compile_options(gridflux-windows-gui-test PRIVATE -UNDEBUG)
-            endif()
-            add_test(NAME windows-gui COMMAND gridflux-windows-gui-test)
-            set_tests_properties(windows-gui PROPERTIES TIMEOUT 30)
-        endif()
-        add_executable(gridflux-config-path-test tests/test_config_path.c src/config/path.c)
-        target_include_directories(gridflux-config-path-test PRIVATE ${PLATFORM_INCLUDES})
-        target_link_libraries(gridflux-config-path-test PRIVATE user32 shell32 advapi32)
-        if(MSVC)
-            target_compile_options(gridflux-config-path-test PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(gridflux-config-path-test PRIVATE -UNDEBUG)
-        endif()
-        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-config-path")
-        add_test(NAME config-path COMMAND gridflux-config-path-test)
-        set_tests_properties(config-path PROPERTIES
-            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-config-path")
-        add_executable(gridflux-windows-monitor-test tests/test_windows_monitor.c)
-        target_include_directories(gridflux-windows-monitor-test PRIVATE ${PLATFORM_INCLUDES})
-        target_link_libraries(gridflux-windows-monitor-test PRIVATE user32)
-        if(MSVC)
-            target_compile_options(gridflux-windows-monitor-test PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(gridflux-windows-monitor-test PRIVATE -UNDEBUG)
-        endif()
-        add_test(NAME windows-monitor COMMAND gridflux-windows-monitor-test)
-        add_executable(gridflux-windows-border-test
-            tests/test_windows_border.c src/platform/windows/border.c
-            src/config/excludes.c src/config/rules.c
-            src/platform/windows/window.c ${WINDOWS_WINDOW_SUPPORT_SOURCES})
-        target_include_directories(gridflux-windows-border-test PRIVATE ${PLATFORM_INCLUDES})
-        target_link_libraries(gridflux-windows-border-test PRIVATE user32 gdi32 dwmapi)
-        if(MSVC)
-            target_compile_options(gridflux-windows-border-test PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(gridflux-windows-border-test PRIVATE -UNDEBUG)
-        endif()
-        add_test(NAME windows-border COMMAND gridflux-windows-border-test)
-        add_executable(gridflux-windows-dock-test
-            tests/test_windows_dock.c ${WINDOWS_WINDOW_SUPPORT_SOURCES})
-        target_include_directories(gridflux-windows-dock-test PRIVATE ${PLATFORM_INCLUDES})
-        target_link_libraries(gridflux-windows-dock-test PRIVATE user32 gdi32 dwmapi)
-        if(MSVC)
-            target_compile_options(gridflux-windows-dock-test PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(gridflux-windows-dock-test PRIVATE -UNDEBUG)
-        endif()
-        add_test(NAME windows-dock COMMAND gridflux-windows-dock-test)
-        foreach(test_name IN ITEMS windows-maximized windows-maximized-native)
-            string(REPLACE "-" "_" test_source "${test_name}")
-            add_executable(gridflux-${test_name}-test tests/test_${test_source}.c)
-            target_sources(gridflux-${test_name}-test PRIVATE ${WINDOWS_WINDOW_SUPPORT_SOURCES})
-            target_include_directories(gridflux-${test_name}-test PRIVATE ${PLATFORM_INCLUDES})
-            target_link_libraries(gridflux-${test_name}-test PRIVATE user32 gdi32 dwmapi)
-            if(MSVC)
-                target_compile_options(gridflux-${test_name}-test PRIVATE /UNDEBUG)
-            else()
-                target_compile_options(gridflux-${test_name}-test PRIVATE -UNDEBUG)
-            endif()
-            if(test_name STREQUAL "windows-maximized-native")
-                target_sources(gridflux-${test_name}-test PRIVATE
-                    src/platform/windows/window.c src/platform/windows/workspace.c)
-                add_dependencies(gridflux-${test_name}-test gridflux-launcher)
-                add_test(NAME ${test_name} COMMAND gridflux-${test_name}-test
-                    $<TARGET_FILE:gridflux-launcher>)
-            else()
-                add_test(NAME ${test_name} COMMAND gridflux-${test_name}-test)
-            endif()
-        endforeach()
-    endif()
-    if(UNIX AND NOT APPLE AND GTK4_FOUND)
-        add_executable(gridflux-tray-test tests/test_tray_protocol.c)
-        target_include_directories(gridflux-tray-test PRIVATE ${GTK4_INCLUDE_DIRS} ${PLATFORM_INCLUDES})
-        target_link_libraries(gridflux-tray-test PRIVATE ${GTK4_LIBRARIES})
-        target_compile_options(gridflux-tray-test PRIVATE -UNDEBUG)
-        add_test(NAME tray-protocol COMMAND gridflux-tray-test)
-    endif()
+    add_subdirectory(tests)
 endif()
+
 include(CPack)

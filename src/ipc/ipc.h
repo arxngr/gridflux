@@ -2,6 +2,7 @@
 #define GRIDFLUX_IPC_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define GF_IPC_MSG_SIZE 8192
@@ -35,8 +36,11 @@ bool gf_ipc_client_send (gf_ipc_handle_t handle, const char *command,
                          gf_ipc_response_t *response);
 
 // --- Misc Operations ---
-void gf_handle_client_message (const char *message, gf_ipc_response_t *response,
-                               void *user_data);
+void gf_handle_client_message (const char *message, size_t length,
+                               gf_ipc_response_t *response, void *user_data);
+// Commands are bounded C strings; received frames use their explicit byte length.
+bool gf_ipc_command_length (const char *command, size_t *length);
+bool gf_ipc_response_valid (const gf_ipc_response_t *response);
 const char *gf_ipc_get_socket_path (void);
 
 #endif

@@ -21,6 +21,14 @@ jobs:
           clangFormatVersion: 18
           style: file
 
+      - name: Check Test Source Formatting
+        uses: DoozyX/clang-format-lint-action@v0.20
+        with:
+          source: 'tests'
+          extensions: 'c,h'
+          clangFormatVersion: 18
+          style: file
+
   build:
     name: Build (${{ matrix.os }})
     needs: lint
@@ -61,6 +69,13 @@ jobs:
         run: |
           cmake --build build --config Release
           ctest --test-dir build --output-on-failure
+
+      - name: Validate IPC and core with sanitizers (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DGF_ENABLE_SANITIZERS=ON
+          cmake --build build-asan --parallel 2 --target gridflux-ipc-protocol-test gridflux-unix-ipc-test gridflux-rules-test gridflux-multi-monitor-test gridflux-monitor-state-test
+          ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 UBSAN_OPTIONS=halt_on_error=1 ctest --test-dir build-asan --output-on-failure -R '^(ipc-protocol|unix-ipc|rules|multi-monitor|monitor-state)$'
 
       - name: Setup MSYS2 (Windows)
         if: matrix.os == 'windows-latest'

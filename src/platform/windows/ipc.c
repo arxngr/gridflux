@@ -37,18 +37,13 @@ pipe_security_attributes (void)
     if (!sa)
         return NULL;
 
-    // Build an explicit DACL instead of a NULL DACL (which would grant Everyone
-    // access). Grant full access (GA) to the pipe owner / current user (OW),
-    // SYSTEM (SY) and the Administrators group (BA) — these manage the pipe.
-    // Interactive Users (IU) get only read+write (GR|GW), the minimum a client
-    // needs: this lets the non-elevated GUI reach the pipe when the server runs
-    // elevated (its UAC-filtered token has Administrators disabled, so the BA ACE
-    // alone would deny it) without granting WRITE_DAC/WRITE_OWNER/DELETE. The
-    // descriptor is allocated by LocalAlloc and released with LocalFree.
+    // FILE_GENERIC_WRITE includes FILE_CREATE_PIPE_INSTANCE. Grant interactive
+    // clients individual data/attribute rights instead, including across UAC.
+    // Full control stays with the owner, SYSTEM, and administrators.
     PSECURITY_DESCRIPTOR sd = NULL;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorA (
-            "D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)", SDDL_REVISION_1, &sd,
-            NULL))
+            "D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x12019b;;;IU)", SDDL_REVISION_1,
+            &sd, NULL))
     {
         free (sa);
         return NULL;
@@ -79,6 +74,8 @@ create_pipe_instance (BOOL first_instance)
     const char *pipe_path = gf_ipc_get_socket_path ();
 
     SECURITY_ATTRIBUTES *sa = pipe_security_attributes ();
+    if (!sa)
+        return INVALID_HANDLE_VALUE;
 
     // FILE_FLAG_FIRST_PIPE_INSTANCE on the first instance ensures we are the
     // creator of the pipe (a squatter cannot pre-create it). PIPE_REJECT_REMOTE_
@@ -163,11 +160,14 @@ pipe_destroy_instances (int count)
     }
     free (pipe_instances);
     pipe_instances = NULL;
+    num_instances = 0;
 }
 
 gf_ipc_handle_t
 gf_ipc_server_create (void)
 {
+    if (pipe_instances)
+        return -1;
     const char *pipe_path = gf_ipc_get_socket_path ();
 
     pipe_instances = calloc (MAX_PIPE_INSTANCES, sizeof (gf_pipe_t));
@@ -197,7 +197,11 @@ gf_ipc_server_create (void)
         }
 
         // Start listening for connections
-        connect_to_client (&pipe_instances[i]);
+        if (!connect_to_client (&pipe_instances[i]))
+        {
+            pipe_destroy_instances (i + 1);
+            return -1;
+        }
         num_instances++;
     }
 
@@ -268,7 +272,7 @@ pipe_write_sync (HANDLE pipe, const void *data, DWORD length)
 // Program Files, writable only by administrators), so an unprivileged process
 // cannot plant a look-alike binary there.
 static bool
-client_path_trusted (const wchar_t *client_path)
+peer_path_trusted (const wchar_t *client_path, bool server)
 {
     wchar_t self[MAX_PATH];
     DWORD n = GetModuleFileNameW (NULL, self, MAX_PATH);
@@ -286,6 +290,8 @@ client_path_trusted (const wchar_t *client_path)
         return false; // different directory
 
     const wchar_t *base = cli_slash + 1;
+    if (server)
+        return _wcsicmp (base, L"gridflux.exe") == 0;
     return _wcsicmp (base, L"gridflux-gui.exe") == 0
            || _wcsicmp (base, L"gridflux-cli.exe") == 0;
 }
@@ -294,36 +300,45 @@ client_path_trusted (const wchar_t *client_path)
 // pipe access via the Interactive-Users ACE cannot feed crafted bytes to the
 // (elevated) command parser. Only the trusted GridFlux front-ends are accepted.
 static bool
-pipe_client_trusted (HANDLE pipe)
+pipe_peer_trusted (HANDLE pipe, bool server)
 {
-    DWORD pid = 0;
-    if (!GetNamedPipeClientProcessId (pipe, &pid))
+    DWORD pid = 0, peer_session = 0, self_session = 0;
+    BOOL identified = server ? GetNamedPipeServerProcessId (pipe, &pid)
+                             : GetNamedPipeClientProcessId (pipe, &pid);
+    if (!identified || !ProcessIdToSessionId (pid, &peer_session)
+        || !ProcessIdToSessionId (GetCurrentProcessId (), &self_session)
+        || peer_session != self_session)
         return false;
 
     HANDLE proc = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!proc)
         return false;
 
-    wchar_t path[MAX_PATH];
+    wchar_t path[MAX_PATH] = { 0 };
     DWORD sz = MAX_PATH;
     BOOL ok = QueryFullProcessImageNameW (proc, 0, path, &sz);
     CloseHandle (proc);
 
-    return ok && client_path_trusted (path);
+    return ok && sz > 0 && sz < MAX_PATH && peer_path_trusted (path, server);
 }
 
 static void
 pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
 {
+    if (!bytes || bytes >= sizeof (inst->buffer))
+    {
+        pipe_reset (inst);
+        return;
+    }
     inst->buffer[bytes] = '\0';
 
     gf_ipc_response_t response = { 0 };
     response.status = GF_IPC_SUCCESS;
 
-    if (!pipe_client_trusted (inst->pipe))
+    if (!pipe_peer_trusted (inst->pipe, false))
         response.status = GF_IPC_ERROR_PERMISSION; // reject untrusted callers
     else
-        gf_handle_client_message (inst->buffer, &response, user_data);
+        gf_handle_client_message (inst->buffer, bytes, &response, user_data);
 
     if (!pipe_write_sync (inst->pipe, &response, sizeof (response)))
     {
@@ -426,11 +441,20 @@ gf_ipc_client_connect (void)
     // Try multiple times with short waits
     for (int retry = 0; retry < 10; retry++)
     {
-        HANDLE pipe = CreateFileA (pipe_path, GENERIC_READ | GENERIC_WRITE, 0, NULL,
-                                   OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
+        DWORD access = FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES
+                       | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE;
+        HANDLE pipe = CreateFileA (
+            pipe_path, access, 0, NULL, OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
 
         if (pipe != INVALID_HANDLE_VALUE)
         {
+            if (!pipe_peer_trusted (pipe, true))
+            {
+                CloseHandle (pipe);
+                SetLastError (ERROR_ACCESS_DENIED);
+                return -1;
+            }
             DWORD mode = PIPE_READMODE_MESSAGE;
             if (!SetNamedPipeHandleState (pipe, &mode, NULL, NULL))
             {
@@ -470,11 +494,17 @@ gf_ipc_client_send (gf_ipc_handle_t handle, const char *command,
 {
     if (handle == -1 || !command || !response)
         return false;
+    memset (response, 0, sizeof (*response));
+    size_t length;
+    if (!gf_ipc_command_length (command, &length))
+    {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
+        return false;
+    }
     response->status = GF_IPC_ERROR_CONNECTION;
     HANDLE pipe = (HANDLE)handle;
     ULONGLONG start = GetTickCount64 ();
-    if (!pipe_transfer (pipe, (void *)command, (DWORD)strlen (command), FALSE,
-                        GF_PIPE_TIMEOUT))
+    if (!pipe_transfer (pipe, (void *)command, (DWORD)length, FALSE, GF_PIPE_TIMEOUT))
         goto failed;
     ULONGLONG elapsed = GetTickCount64 () - start;
     if (elapsed >= GF_PIPE_TIMEOUT)
@@ -485,8 +515,14 @@ gf_ipc_client_send (gf_ipc_handle_t handle, const char *command,
     if (!pipe_transfer (pipe, response, sizeof (*response), TRUE,
                         GF_PIPE_TIMEOUT - (DWORD)elapsed))
         goto failed;
+    if (!gf_ipc_response_valid (response))
+    {
+        SetLastError (ERROR_INVALID_DATA);
+        goto failed;
+    }
     return true;
 failed:
+    memset (response->message, 0, sizeof (response->message));
     response->status = GetLastError () == ERROR_TIMEOUT ? GF_IPC_ERROR_TIMEOUT
                                                         : GF_IPC_ERROR_CONNECTION;
     return false;

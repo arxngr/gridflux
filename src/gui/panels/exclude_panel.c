@@ -44,7 +44,9 @@ on_add_exclude (GtkButton *btn, gpointer user_data)
     char command[288];
     snprintf (command, sizeof (command), "exclude add %s", wm_class);
     gf_ipc_response_t resp = gf_run_client_command (command);
-    gf_command_response_t *cmd_resp = (gf_command_response_t *)resp.message;
+    gf_command_response_t result = { .type = 1, .message = "Invalid IPC reply" };
+    gf_parse_command_response (resp.message, sizeof (resp.message), &result);
+    gf_command_response_t *cmd_resp = &result;
 
     if (resp.status == GF_IPC_SUCCESS && cmd_resp->type == 0)
         refresh_exclude_list (ctx);

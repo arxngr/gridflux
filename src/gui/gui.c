@@ -49,7 +49,12 @@ gtk_shutdown (GtkApplication *app, gpointer user_data)
     (void)app;
     (void)user_data;
     if (g_widgets)
+    {
+#ifdef _WIN32
+        g_widgets->shutting_down = TRUE;
+#endif
         gf_gui_tray_destroy (g_widgets);
+    }
 }
 
 int

@@ -184,7 +184,7 @@ fake_enum_windows (WNDENUMPROC callback, LPARAM context)
 #define EnumWindows fake_enum_windows
 #define GetWindowRgnBox fake_region_box
 #define SetWindowRgn fake_set_region
-#include "../src/platform/windows/window.c"
+#include "../../src/platform/windows/window.c"
 
 static void
 expect_rect (unsigned i, LONG left, LONG top, LONG right, LONG bottom)

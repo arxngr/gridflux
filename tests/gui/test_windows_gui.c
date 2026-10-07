@@ -81,14 +81,14 @@ gf_refresh_workspaces (gf_app_state_t *app)
 
 // Use real GTK windows, close handling, activation, tray dispatch, and workers.
 // Explorer icon calls and server operations are replaced to isolate the test.
-#include "../src/gui/platform/async.c"
-#include "../src/gui/window/main_window.c"
-#include "../src/gui/window/statusbar.c"
+#include "../../src/gui/platform/async.c"
+#include "../../src/gui/window/main_window.c"
+#include "../../src/gui/window/statusbar.c"
 #define Shell_NotifyIconW test_notify_icon
-#include "../src/gui/window/tray.c"
+#include "../../src/gui/window/tray.c"
 #undef Shell_NotifyIconW
 #define main test_gui_entry
-#include "../src/gui/gui.c"
+#include "../../src/gui/gui.c"
 #undef main
 
 static void
@@ -189,10 +189,23 @@ gui_lifecycle (LPVOID desktop)
     tray_request_show (tray);
     guint pending = tray->show_source;
     assert (pending);
+    // A late IPC result must release its retained window without touching
+    // destroyed widgets or starting another refresh during shutdown.
+    assert (ResetEvent (reply_gate));
+    gf_gui_platform_run_refresh (g_widgets);
+    gf_gui_platform_run_command (g_widgets, "query count", TRUE, TRUE);
     gtk_shutdown (application, NULL);
     assert (!g_main_context_find_source_by_id (NULL, pending));
     assert (!g_widgets->tray_data);
     gtk_window_destroy (GTK_WINDOW (g_widgets->window));
+    assert (SetEvent (reply_gate));
+    start = GetTickCount64 ();
+    while (g_widgets->refresh_in_progress || g_widgets->operation_in_progress)
+    {
+        assert (GetTickCount64 () - start < 2000);
+        iterate ();
+    }
+    assert (refreshes == 1);
     g_application_release (G_APPLICATION (application));
     g_object_unref (application);
     CloseHandle (reply_gate);

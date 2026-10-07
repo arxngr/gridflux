@@ -82,7 +82,7 @@ fake_tick_count (void)
 #define EnumDisplayMonitors fake_enumerate
 #define MonitorFromWindow fake_from_window
 #define GetTickCount64 fake_tick_count
-#include "../src/platform/windows/workspace.c"
+#include "../../src/platform/windows/workspace.c"
 
 int
 main (void)

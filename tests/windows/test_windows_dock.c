@@ -171,9 +171,9 @@ gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window)
 #define GetGUIThreadInfo fake_gui_thread
 #define GetAsyncKeyState fake_key
 #define EnumWindows fake_enum_windows
-#include "../src/platform/windows/dock.c"
-#include "../src/platform/windows/taskbar.c"
-#include "../src/platform/windows/window.c"
+#include "../../src/platform/windows/dock.c"
+#include "../../src/platform/windows/taskbar.c"
+#include "../../src/platform/windows/window.c"
 
 int
 main (void)

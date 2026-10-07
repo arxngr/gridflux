@@ -50,7 +50,7 @@ command (gf_wm_t *m, const char *text)
 {
     gf_ipc_response_t response = { 0 };
     gf_command_response_t result;
-    gf_handle_client_message (text, &response, m);
+    gf_handle_client_message (text, strlen (text), &response, m);
     memcpy (&result, response.message, sizeof (result));
     return result.type;
 }
@@ -140,7 +140,8 @@ test_commands (void)
             = (gf_monitor_t){ .id = i, .full_bounds = { 0, 0, 1920, 1080 } };
     m.state.monitors[1].full_bounds.width = 0;
     gf_ipc_response_t response = { 0 };
-    gf_handle_client_message ("query monitors", &response, &m);
+    gf_handle_client_message ("query monitors", sizeof ("query monitors") - 1, &response,
+                              &m);
     uint32_t connected;
     gf_monitor_t monitors[GF_MAX_MONITORS];
     memcpy (&connected, response.message, sizeof (connected));
@@ -149,11 +150,13 @@ test_commands (void)
             connected * sizeof (*monitors));
     assert (monitors[0].id == 0 && monitors[1].id == 2 && monitors[2].id == 3);
     m.state.monitors[3].full_bounds.height = 0;
-    gf_handle_client_message ("query monitors", &response, &m);
+    gf_handle_client_message ("query monitors", sizeof ("query monitors") - 1, &response,
+                              &m);
     memcpy (&connected, response.message, sizeof (connected));
     assert (connected == 2);
     m.state.monitors[1].full_bounds.width = 1920;
-    gf_handle_client_message ("query monitors", &response, &m);
+    gf_handle_client_message ("query monitors", sizeof ("query monitors") - 1, &response,
+                              &m);
     memcpy (&connected, response.message, sizeof (connected));
     memcpy (monitors, response.message + sizeof (connected),
             connected * sizeof (*monitors));

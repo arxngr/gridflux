@@ -19,6 +19,7 @@ typedef struct
 #ifdef _WIN32
     gboolean operation_in_progress;
     gboolean refresh_in_progress;
+    gboolean shutting_down;
 #endif
 } gf_app_state_t;
 
@@ -26,6 +27,7 @@ typedef struct
 typedef struct
 {
     gf_app_state_t *app;
+    GtkWidget *window;
     gchar *command;
     gboolean should_refresh;
     gboolean show_dialog;
@@ -34,6 +36,7 @@ typedef struct
 typedef struct
 {
     gf_app_state_t *app;
+    GtkWidget *window;
     gf_ipc_response_t response;
     gboolean should_refresh;
     gboolean show_dialog;
@@ -42,6 +45,7 @@ typedef struct
 typedef struct
 {
     gf_app_state_t *app;
+    GtkWidget *window;
     gf_ipc_response_t workspaces;
     gf_ipc_response_t windows;
 } gf_refresh_task_t;

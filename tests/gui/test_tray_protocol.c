@@ -1,4 +1,4 @@
-#include "../src/gui/window/tray.c"
+#include "../../src/gui/window/tray.c"
 #include <assert.h>
 
 bool
