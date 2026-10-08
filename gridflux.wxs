@@ -28,7 +28,11 @@
     <InstallExecuteSequence>
       <!-- WiX defaults to closing apps before InstallFiles, which is after
            RemoveFiles. Stop them before scheduling uninstall recovery. -->
+      <?if $(sys.WIXMAJORVERSION) >= 5 ?>
+      <Custom Action="override Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="UninstallTask" Condition="VersionNT &gt; 400" />
+      <?else ?>
       <Custom Action="Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="UninstallTask" Condition="VersionNT &gt; 400" />
+      <?endif ?>
       <Custom Action="InstallTask" After="InstallFiles" Condition="NOT REMOVE=&quot;ALL&quot;" />
       <Custom Action="UninstallTask" Before="RestoreDesktop" Condition="REMOVE=&quot;ALL&quot;" />
       <Custom Action="RestoreDesktop" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
