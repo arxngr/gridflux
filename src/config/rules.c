@@ -40,12 +40,14 @@ gf_class_matches (const char *rule_class, const char *window_class)
 }
 
 gf_err_t
-gf_rules_add (gf_config_t *cfg, const char *wm_class, gf_ws_id_t ws_id)
+gf_rules_add (gf_config_t *cfg, const char *wm_class, gf_ws_id_t ws_id,
+              int32_t monitor_id)
 {
     if (!cfg || !wm_class || wm_class[0] == '\0')
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (ws_id < GF_FIRST_WORKSPACE_ID)
+    if (ws_id < GF_FIRST_WORKSPACE_ID || ws_id > GF_MAX_WORKSPACES || monitor_id < -1
+        || monitor_id >= GF_MAX_MONITORS)
         return GF_ERROR_INVALID_PARAMETER;
 
     // Check if rule already exists for this class — update it
@@ -54,6 +56,8 @@ gf_rules_add (gf_config_t *cfg, const char *wm_class, gf_ws_id_t ws_id)
         if (gf_class_matches (cfg->window_rules[i].wm_class, wm_class))
         {
             cfg->window_rules[i].workspace_id = ws_id;
+            cfg->window_rules[i].has_monitor_id = monitor_id >= 0;
+            cfg->window_rules[i].monitor_id = monitor_id >= 0 ? monitor_id : 0;
             GF_LOG_INFO ("Updated rule: %s → workspace %d", wm_class, ws_id);
 
             const char *path = gf_config_get_path ();
@@ -71,6 +75,8 @@ gf_rules_add (gf_config_t *cfg, const char *wm_class, gf_ws_id_t ws_id)
     strncpy (rule->wm_class, wm_class, GF_RULE_CLASS_MAX - 1);
     rule->wm_class[GF_RULE_CLASS_MAX - 1] = '\0';
     rule->workspace_id = ws_id;
+    rule->has_monitor_id = monitor_id >= 0;
+    rule->monitor_id = monitor_id >= 0 ? monitor_id : 0;
     cfg->window_rules_count++;
 
     GF_LOG_INFO ("Added rule: %s → workspace %d", wm_class, ws_id);

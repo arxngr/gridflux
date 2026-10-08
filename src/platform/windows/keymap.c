@@ -1,6 +1,7 @@
 #include "../../utils/logger.h"
 #include "internal.h"
 #include "platform.h"
+#include "window.h"
 #include <stdbool.h>
 #include <windows.h>
 
@@ -9,7 +10,7 @@ static gf_key_action_t g_pending_action = GF_KEY_NONE;
 static HWND g_pending_window = NULL;
 
 static LRESULT CALLBACK
-LowLevelKeyboardProc (int nCode, WPARAM wParam, LPARAM lParam)
+low_level_keyboard_proc (int nCode, WPARAM wParam, LPARAM lParam)
 {
     if (nCode == HC_ACTION)
     {
@@ -22,15 +23,22 @@ LowLevelKeyboardProc (int nCode, WPARAM wParam, LPARAM lParam)
                                || (GetAsyncKeyState (VK_RWIN) & 0x8000) != 0;
             bool alt_pressed = (GetAsyncKeyState (VK_MENU) & 0x8000) != 0;
 
+            if (win_pressed && (GetAsyncKeyState (VK_SHIFT) & 0x8000)
+                && (p->vkCode == VK_LEFT || p->vkCode == VK_RIGHT))
+                SetPropA (GetForegroundWindow (), GF_WINDOW_MOVED_PROP,
+                          (HANDLE)(INT_PTR)1);
+
             if (ctrl_pressed && win_pressed)
             {
                 if (p->vkCode == VK_LEFT)
                 {
+                    g_pending_window = GetForegroundWindow ();
                     g_pending_action = GF_KEY_WORKSPACE_PREV;
                     return 1; // Consume key to prevent Windows Virtual Desktop switch
                 }
                 else if (p->vkCode == VK_RIGHT)
                 {
+                    g_pending_window = GetForegroundWindow ();
                     g_pending_action = GF_KEY_WORKSPACE_NEXT;
                     return 1; // Consume key
                 }
@@ -60,7 +68,7 @@ gf_keymap_init (gf_platform_t *platform, gf_display_t display)
 
     // Use a Low-Level Keyboard Hook instead of RegisterHotKey to bypass
     // the native Windows 10/11 reserved Ctrl+Win+Left/Right behavior.
-    g_keymap_hook = SetWindowsHookEx (WH_KEYBOARD_LL, LowLevelKeyboardProc,
+    g_keymap_hook = SetWindowsHookEx (WH_KEYBOARD_LL, low_level_keyboard_proc,
                                       GetModuleHandle (NULL), 0);
 
     if (!g_keymap_hook)

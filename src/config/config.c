@@ -5,19 +5,10 @@
 #include "../utils/logger.h"
 #include "../utils/memory.h"
 #include <json-c/json.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-
-#ifdef _WIN32
-#include <direct.h>
-#endif
-
-#ifndef PATH_MAX
-#define PATH_MAX 4096
-#endif
 
 static const gf_config_t DEFAULT_CONFIG
     = { .max_windows_per_workspace = GF_MAX_WINDOWS_PER_WORKSPACE,
@@ -29,71 +20,6 @@ static const gf_config_t DEFAULT_CONFIG
         .locked_workspaces_count = 0,
         .window_rules_count = 0,
         .exclude_zones_count = 0 };
-
-const char *
-gf_config_get_path (void)
-{
-    static char config_path[PATH_MAX];
-
-#ifdef GF_DEV_MODE
-    strncpy (config_path, "config.json", sizeof (config_path) - 1);
-    config_path[sizeof (config_path) - 1] = '\0';
-    return config_path;
-#else
-#ifdef _WIN32
-    const char *appdata = getenv ("APPDATA");
-    if (!appdata || appdata[0] == '\0')
-    {
-        fprintf (stderr, "Error: APPDATA environment variable not set or empty\n");
-        return NULL;
-    }
-
-    snprintf (config_path, sizeof (config_path), "%s\\gridflux\\config.json", appdata);
-
-    // Ensure the directory exists
-    char gridflux_dir[PATH_MAX];
-    snprintf (gridflux_dir, sizeof (gridflux_dir), "%s\\gridflux", appdata);
-    _mkdir (gridflux_dir);
-
-    return config_path;
-#else
-    // Unix-like systems
-    const char *xdg_config = getenv ("XDG_CONFIG_HOME");
-    if (xdg_config && xdg_config[0] != '\0')
-    {
-        snprintf (config_path, sizeof (config_path), "%s/gridflux/config.json",
-                  xdg_config);
-
-        // Ensure the directory exists
-        char gridflux_dir[PATH_MAX];
-        snprintf (gridflux_dir, sizeof (gridflux_dir), "%s/gridflux", xdg_config);
-        mkdir (gridflux_dir, 0755);
-
-        return config_path;
-    }
-
-    const char *home = getenv ("HOME");
-    if (!home || home[0] == '\0')
-    {
-        fprintf (stderr, "Error: HOME environment variable not set\n");
-        return NULL;
-    }
-
-    snprintf (config_path, sizeof (config_path), "%s/.config/gridflux/config.json", home);
-
-    // Ensure the directory exists
-    char config_dir[PATH_MAX];
-    snprintf (config_dir, sizeof (config_dir), "%s/.config", home);
-    mkdir (config_dir, 0755);
-
-    char gridflux_dir[PATH_MAX];
-    snprintf (gridflux_dir, sizeof (gridflux_dir), "%s/.config/gridflux", home);
-    mkdir (gridflux_dir, 0755);
-
-    return config_path;
-#endif
-#endif
-}
 
 static char *
 read_file (const char *filename)
@@ -184,6 +110,10 @@ gf_config_save (const char *filename, const gf_config_t *cfg)
                                 json_object_new_string (cfg->window_rules[i].wm_class));
         json_object_object_add (rule_obj, "workspace_id",
                                 json_object_new_int (cfg->window_rules[i].workspace_id));
+        if (cfg->window_rules[i].has_monitor_id)
+            json_object_object_add (
+                rule_obj, "monitor_id",
+                json_object_new_int (cfg->window_rules[i].monitor_id));
         json_object_array_add (rules_arr, rule_obj);
     }
     json_object_object_add (json, "window_rules", rules_arr);
@@ -239,6 +169,17 @@ gf_config_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
     if (basic_changed)
         return true;
 
+    for (uint32_t i = 0; i < old_cfg->window_rules_count; i++)
+    {
+        const gf_window_rule_t *old = &old_cfg->window_rules[i];
+        const gf_window_rule_t *new = &new_cfg->window_rules[i];
+        if (strcmp (old->wm_class, new->wm_class) != 0
+            || old->workspace_id != new->workspace_id
+            || old->has_monitor_id != new->has_monitor_id
+            || (old->has_monitor_id && old->monitor_id != new->monitor_id))
+            return true;
+    }
+
     for (uint32_t i = 0; i < old_cfg->excluded_apps.count; i++)
     {
         if (strcmp (old_cfg->excluded_apps.items[i].wm_class,
@@ -256,6 +197,12 @@ gf_config_changed (const gf_config_t *old_cfg, const gf_config_t *new_cfg)
         {
             return true;
         }
+    }
+
+    for (uint32_t i = 0; i < old_cfg->locked_workspaces_count; i++)
+    {
+        if (old_cfg->locked_workspaces[i] != new_cfg->locked_workspaces[i])
+            return true;
     }
 
     return false;
@@ -278,7 +225,7 @@ set_if_missing_int (struct json_object *json, const char *key, uint32_t *target,
 }
 
 gf_config_t
-load_or_create_config (const char *filename)
+gf_config_load_or_create (const char *filename)
 {
     gf_config_t cfg = DEFAULT_CONFIG;
     bool changed = false;
@@ -350,15 +297,15 @@ load_or_create_config (const char *filename)
         size_t len = json_object_array_length (arr_obj);
         cfg.locked_workspaces_count = 0;
 
-        if (len > cfg.max_workspaces)
+        if (len > GF_MAX_LOCKED_WORKSPACES)
             changed = true; // truncated
 
-        for (size_t i = 0; i < len && cfg.locked_workspaces_count < cfg.max_workspaces;
-             i++)
+        for (size_t i = 0;
+             i < len && cfg.locked_workspaces_count < GF_MAX_LOCKED_WORKSPACES; i++)
         {
             int ws = json_object_get_int (json_object_array_get_idx (arr_obj, i));
 
-            if (ws < 0 || ws >= cfg.max_workspaces)
+            if (ws < GF_FIRST_WORKSPACE_ID || ws > GF_MAX_WORKSPACES_TOTAL)
             {
                 changed = true;
                 continue;
@@ -386,6 +333,15 @@ load_or_create_config (const char *filename)
             struct json_object *rule_item = json_object_array_get_idx (rules_obj, i);
             struct json_object *class_obj = NULL;
             struct json_object *ws_obj = NULL;
+            struct json_object *monitor_obj = NULL;
+            bool has_monitor
+                = json_object_object_get_ex (rule_item, "monitor_id", &monitor_obj)
+                  && !json_object_is_type (monitor_obj, json_type_null);
+            int64_t monitor = has_monitor ? json_object_get_int64 (monitor_obj) : 0;
+            if (has_monitor
+                && (!json_object_is_type (monitor_obj, json_type_int) || monitor < 0
+                    || monitor >= GF_MAX_MONITORS))
+                continue;
 
             if (json_object_object_get_ex (rule_item, "wm_class", &class_obj)
                 && json_object_object_get_ex (rule_item, "workspace_id", &ws_obj))
@@ -393,7 +349,8 @@ load_or_create_config (const char *filename)
                 const char *cls = json_object_get_string (class_obj);
                 int ws = json_object_get_int (ws_obj);
 
-                if (cls && cls[0] != '\0' && ws >= GF_FIRST_WORKSPACE_ID)
+                if (cls && cls[0] != '\0' && ws >= GF_FIRST_WORKSPACE_ID
+                    && ws <= GF_MAX_WORKSPACES)
                 {
                     strncpy (cfg.window_rules[cfg.window_rules_count].wm_class, cls,
                              GF_RULE_CLASS_MAX - 1);
@@ -401,6 +358,9 @@ load_or_create_config (const char *filename)
                         .wm_class[GF_RULE_CLASS_MAX - 1]
                         = '\0';
                     cfg.window_rules[cfg.window_rules_count].workspace_id = ws;
+                    cfg.window_rules[cfg.window_rules_count].has_monitor_id = has_monitor;
+                    cfg.window_rules[cfg.window_rules_count].monitor_id
+                        = (gf_monitor_id_t)monitor;
                     cfg.window_rules_count++;
                 }
             }
@@ -494,8 +454,7 @@ gf_config_release (gf_config_t *cfg)
 bool
 gf_config_workspace_is_locked (const gf_config_t *cfg, gf_ws_id_t ws)
 {
-    if (!cfg || ws < GF_FIRST_WORKSPACE_ID
-        || ws >= (gf_ws_id_t)cfg->max_workspaces + GF_FIRST_WORKSPACE_ID)
+    if (!cfg || ws < GF_FIRST_WORKSPACE_ID || ws > GF_MAX_WORKSPACES_TOTAL)
         return false;
 
     for (uint32_t i = 0; i < cfg->locked_workspaces_count; i++)
@@ -511,7 +470,7 @@ gf_config_workspace_is_locked (const gf_config_t *cfg, gf_ws_id_t ws)
 gf_err_t
 gf_config_workspace_lock (gf_config_t *config, gf_ws_id_t ws_id)
 {
-    if (!config || ws_id < 0)
+    if (!config || ws_id < GF_FIRST_WORKSPACE_ID || ws_id > GF_MAX_WORKSPACES_TOTAL)
         return GF_ERROR_INVALID_PARAMETER;
 
     for (uint32_t i = 0; i < config->locked_workspaces_count; i++)
@@ -522,9 +481,7 @@ gf_config_workspace_lock (gf_config_t *config, gf_ws_id_t ws_id)
         }
     }
 
-    // max_workspaces is clamped to the array size at load, so it is the
-    // authoritative (config-driven) limit here.
-    if (config->locked_workspaces_count >= config->max_workspaces)
+    if (config->locked_workspaces_count >= GF_MAX_LOCKED_WORKSPACES)
     {
         return GF_ERROR_INVALID_PARAMETER;
     }
@@ -543,7 +500,7 @@ gf_config_workspace_lock (gf_config_t *config, gf_ws_id_t ws_id)
 gf_err_t
 gf_config_workspace_unlock (gf_config_t *config, gf_ws_id_t ws_id)
 {
-    if (!config || ws_id < 0)
+    if (!config || ws_id < GF_FIRST_WORKSPACE_ID || ws_id > GF_MAX_WORKSPACES_TOTAL)
         return GF_ERROR_INVALID_PARAMETER;
 
     bool found = false;

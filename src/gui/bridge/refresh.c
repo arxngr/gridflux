@@ -14,8 +14,8 @@ build_card_list (gf_ws_list_t *workspaces, const gf_win_list_t *windows,
     gtk_widget_set_margin_bottom (list, 12);
 
     for (uint32_t i = 0; i < workspaces->count; i++)
-        gtk_box_append (GTK_BOX (list),
-                        gf_gui_workspace_card_new (&workspaces->items[i], windows, app));
+        gtk_box_append (GTK_BOX (list), gf_gui_workspace_card_new (&workspaces->items[i],
+                                                                   windows, app, i + 1));
     return list;
 }
 
@@ -50,20 +50,22 @@ gf_refresh_workspaces (gf_app_state_t *app)
     if (ws_resp.status != GF_IPC_SUCCESS || win_resp.status != GF_IPC_SUCCESS)
         return;
 
-    gf_ws_list_t *workspaces = gf_parse_workspace_list (ws_resp.message);
-    gf_win_list_t *windows = gf_parse_window_list (win_resp.message);
+    gf_ws_list_t *workspaces
+        = gf_parse_workspace_list (ws_resp.message, sizeof (ws_resp.message));
+    gf_win_list_t *windows
+        = gf_parse_window_list (win_resp.message, sizeof (win_resp.message));
     if (!workspaces || !windows)
     {
         if (workspaces)
-            gf_workspace_list_cleanup (workspaces);
+            gf_free_workspace_list (workspaces);
         if (windows)
-            gf_window_list_cleanup (windows);
+            gf_free_window_list (windows);
         return;
     }
 
     GtkWidget *list = build_card_list (workspaces, windows, app);
     gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (app->workspace_table), list);
 
-    gf_workspace_list_cleanup (workspaces);
-    gf_window_list_cleanup (windows);
+    gf_free_workspace_list (workspaces);
+    gf_free_window_list (windows);
 }

@@ -10,6 +10,38 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(GF_DEV_MODE "Enable development mode (read config from current dir)" OFF)
+option(GF_ENABLE_SANITIZERS "Enable address/undefined-behavior checks for validation builds" OFF)
+
+if(MSVC)
+    add_compile_options(/GS /guard:cf)
+    add_link_options(/guard:cf /DYNAMICBASE /NXCOMPAT)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        add_link_options(/HIGHENTROPYVA)
+    endif()
+elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-fstack-protector-strong)
+    if(MINGW)
+        # Resolve stack-check support statically; installers need no new CRT DLL.
+        link_libraries(-Wl,-Bstatic ssp -Wl,-Bdynamic)
+        add_link_options(-Wl,--dynamicbase,--nxcompat)
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            add_link_options(-Wl,--high-entropy-va)
+        endif()
+    elseif(UNIX AND NOT APPLE)
+        add_compile_definitions($<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>:_FORTIFY_SOURCE=2>)
+    endif()
+endif()
+if(GF_ENABLE_SANITIZERS)
+    if(MSVC)
+        add_compile_options(/fsanitize=address /Zi)
+        add_link_options(/INCREMENTAL:NO /DEBUG)
+    elseif(UNIX AND NOT APPLE)
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    else()
+        message(FATAL_ERROR "Sanitizer validation requires MSVC or a Linux GNU/Clang toolchain")
+    endif()
+endif()
 
 # Packaging configuration
 set(CPACK_PACKAGE_NAME "gridflux")
@@ -36,12 +68,23 @@ list(APPEND COMMON_SOURCES "src/server/main.c")
 
 if(WIN32)
     add_compile_definitions(
+        # Match the Windows 10 DPI APIs already used by the window module.
+        WINVER=0x0A00
+        _WIN32_WINNT=0x0A00
         _CRT_SECURE_NO_WARNINGS
         _CRT_NONSTDC_NO_DEPRECATE
     )
 
-    # Statically link GCC runtime to avoid missing DLL errors on user machines
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc")
+    # This linker option applies only to the MinGW GCC toolchain.
+    if(MINGW)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc")
+    endif()
+
+    if(MSVC AND DEFINED VCPKG_INSTALLED_DIR)
+        find_program(PKG_CONFIG_EXECUTABLE NAMES pkgconf pkg-config
+            PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/tools/pkgconf"
+                  "${VCPKG_INSTALLED_DIR}/${VCPKG_HOST_TRIPLET}/tools/pkgconf")
+    endif()
 
     find_package(PkgConfig REQUIRED)
 
@@ -128,11 +171,20 @@ if(UNIX AND NOT APPLE)
 elseif(WIN32)
     file(GLOB PLATFORM_SOURCES "src/platform/windows/*.c")
 
+    set(WINDOWS_WINDOW_SUPPORT_SOURCES
+        src/platform/windows/internal.c
+        src/utils/memory.c
+        src/utils/logger.c
+    )
+
     set(PLATFORM_LIBRARIES
         user32
         gdi32
         kernel32
         shell32
+        advapi32
+        ole32
+        uuid
         dwmapi
         ${JSONC_LIBRARIES}
     )
@@ -178,9 +230,14 @@ if(WIN32)
     endif()
     add_executable(gridflux-launcher WIN32
         src/launcher/win32.c
+        src/config/path.c
+        src/platform/windows/taskbar.c
+        src/platform/windows/window.c
+        ${WINDOWS_WINDOW_SUPPORT_SOURCES}
         src/launcher/gridflux-launcher.rc
     )
-    target_link_libraries(gridflux-launcher PRIVATE kernel32 user32 shell32)
+    target_include_directories(gridflux-launcher PRIVATE ${PLATFORM_INCLUDES})
+    target_link_libraries(gridflux-launcher PRIVATE kernel32 user32 gdi32 shell32 advapi32 dwmapi)
     if(NOT GF_DEV_MODE)
         install(TARGETS gridflux-launcher DESTINATION bin)
     endif()
@@ -189,17 +246,20 @@ endif()
 add_executable(gridflux-cli
     src/cli/main.c
     src/ipc/ipc_command.c
+    src/ipc/protocol.c
     src/core/wm.c
     src/core/arrange.c
     src/core/workspace.c
     src/core/window.c
     src/core/events.c
+    src/core/monitor.c
     src/core/debug.c
     src/core/border.c
     src/utils/list.c
     src/utils/memory.c
     src/utils/logger.c
     src/config/config.c
+    src/config/path.c
     src/core/layout.c
     src/core/resize.c
     src/utils/file.c
@@ -229,17 +289,21 @@ if(GTK4_FOUND)
         src/gui/bridge/ipc_client.c
         src/gui/bridge/refresh.c
         src/gui/platform/async.c
+        src/gui/window/tray.c
         src/ipc/ipc_command.c
+        src/ipc/protocol.c
         src/core/wm.c
         src/core/arrange.c
         src/core/workspace.c
         src/core/window.c
         src/core/events.c
+        src/core/monitor.c
         src/core/debug.c
         src/core/border.c
         src/utils/list.c
         src/utils/memory.c
         src/config/config.c
+        src/config/path.c
         src/utils/logger.c
         src/core/layout.c
         src/core/resize.c
@@ -253,7 +317,6 @@ if(GTK4_FOUND)
         target_sources(gridflux-gui PRIVATE
             src/gui/platform/windows/gui_platform.c
             src/gui/bridge/windows/process_manager.c
-            src/gui/window/tray.c
         )
     elseif(UNIX AND NOT APPLE)
         target_sources(gridflux-gui PRIVATE
@@ -271,6 +334,9 @@ if(GTK4_FOUND)
         ${GTK4_LIBRARIES}
         ${PLATFORM_LIBRARIES}
     )
+    if(GTK4_LIBRARY_DIRS)
+        target_link_directories(gridflux-gui PRIVATE ${GTK4_LIBRARY_DIRS})
+    endif()
 
     # Embed icon resource on Windows (taskbar, alt-tab, explorer)
     if(WIN32)
@@ -308,6 +374,9 @@ endif()
 if(GF_DEV_MODE)
     target_compile_definitions(gridflux PRIVATE GF_DEV_MODE)
     target_compile_definitions(gridflux-cli PRIVATE GF_DEV_MODE)
+    if(TARGET gridflux-launcher)
+        target_compile_definitions(gridflux-launcher PRIVATE GF_DEV_MODE)
+    endif()
     if(TARGET gridflux-gui)
         target_compile_definitions(gridflux-gui PRIVATE GF_DEV_MODE)
     endif()
@@ -337,6 +406,10 @@ if(NOT GF_DEV_MODE)
             @ONLY
         )
         install(FILES "${CMAKE_BINARY_DIR}/gridflux-gui.desktop" DESTINATION share/applications)
+        if(TARGET gridflux-gui)
+            configure_file(gridflux-tray.desktop.in gridflux-tray.desktop @ONLY)
+            install(FILES "${CMAKE_BINARY_DIR}/gridflux-tray.desktop" DESTINATION /etc/xdg/autostart)
+        endif()
         
         # Install icons to system icon theme for window manager integration
         install(DIRECTORY icons/hicolor/ DESTINATION share/icons/hicolor)
@@ -356,4 +429,9 @@ message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "")
 
 # Include CPack for packaging
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
+
 include(CPack)

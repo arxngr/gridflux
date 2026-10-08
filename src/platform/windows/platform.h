@@ -19,19 +19,45 @@ typedef struct
 // Windows platform data
 typedef struct
 {
+    HWND window;
+    RECT rect;
+    gf_monitor_id_t monitor_id;
+    ULONGLONG reveal_until;
+} gf_taskbar_state_t;
+
+typedef struct
+{
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    HMONITOR handles[GF_MAX_MONITORS];
+    char identities[GF_MAX_MONITORS][128];
+    char devices[GF_MAX_MONITORS][CCHDEVICENAME];
+    uint32_t count; // Reserved identity slots, including disconnected monitors
+    uint32_t connected;
+} gf_monitor_snapshot_t;
+
+typedef struct
+{
     HANDLE event_hook;
     HANDLE shell_hook;
     HMONITOR monitor;
     int monitor_count;
     gf_monitor_t monitors[GF_MAX_MONITORS];
     uint32_t enumerated_monitor_count;
+    gf_monitor_snapshot_t monitor_snapshot;
+    gf_monitor_snapshot_t pending_monitors;
+    HWND monitor_window;
+    ULONGLONG monitor_last_poll;
+    ULONGLONG monitor_settle_until;
+    ULONGLONG monitor_reconnect_until;
+    bool monitor_pending;
+    bool monitor_suspended;
     gf_border_t *borders[GF_MAX_WINDOWS_PER_WORKSPACE * GF_MAX_WORKSPACES];
     int border_count;
     HWINEVENTHOOK resize_hook;
     HWINEVENTHOOK location_hook;
     gf_resize_state_t resize_state;
-    UINT original_dock_state;
-    bool dock_state_saved;
+    gf_taskbar_state_t taskbars[GF_MAX_MONITORS];
+    uint32_t taskbar_count;
 } gf_windows_platform_data_t;
 
 // Platform interface (Windows implementation)
@@ -59,6 +85,11 @@ bool gf_window_is_excluded (gf_display_t display, gf_handle_t window);
 gf_handle_t gf_window_get_focused (gf_display_t display);
 gf_err_t gf_window_minimize (gf_display_t display, gf_handle_t window);
 gf_err_t gf_window_unminimize (gf_display_t display, gf_handle_t window);
+gf_err_t gf_window_focus (gf_display_t display, gf_handle_t window);
+gf_err_t gf_window_set_maximized (gf_display_t display, gf_handle_t window,
+                                  bool maximized);
+gf_err_t gf_window_fill_maximized (gf_display_t display, gf_handle_t window,
+                                   bool fill_monitor);
 bool gf_platform_window_minimized (gf_display_t display, gf_handle_t window);
 void gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
                     int thickness);
@@ -70,12 +101,20 @@ bool gf_window_is_maximized (gf_display_t display, gf_handle_t window);
 bool gf_window_is_fullscreen (gf_display_t display, gf_handle_t window);
 void gf_dock_hide (gf_platform_t *platform);
 void gf_dock_restore (gf_platform_t *platform);
+void gf_dock_sync (gf_platform_t *platform, const bool *hide_on_monitor,
+                   uint32_t monitor_count);
 
 // Monitor management
 uint32_t gf_monitor_get_count (gf_platform_t *platform);
 gf_err_t gf_monitor_enumerate (gf_platform_t *platform, gf_monitor_t *monitors,
                                uint32_t *count);
 gf_monitor_id_t gf_monitor_from_window (gf_platform_t *platform, gf_handle_t window);
+gf_err_t gf_monitor_init (gf_platform_t *platform);
+void gf_monitor_cleanup (gf_platform_t *platform);
+bool gf_monitor_poll (gf_platform_t *platform);
+bool gf_window_was_moved (gf_display_t display, gf_handle_t window);
+gf_err_t gf_window_restore_monitor (gf_platform_t *platform, const gf_win_info_t *window,
+                                    const gf_rect_t *previous_bounds);
 gf_err_t gf_screen_get_bounds_for_monitor (gf_display_t display,
                                            gf_monitor_id_t monitor_id, gf_rect_t *bounds);
 

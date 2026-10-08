@@ -10,7 +10,7 @@
 
 #include "../platform/platform_compat.h" // Centralized platform-specific includes
 
-#define GF_MAX_LOCKED_WORKSPACES 32
+#define GF_MAX_LOCKED_WORKSPACES GF_MAX_WORKSPACES_TOTAL
 #define GF_MAX_EXCLUDE_ZONES 8
 
 typedef struct gf_config gf_config_t;
@@ -34,8 +34,12 @@ struct gf_config
 };
 // --- Configuration Lifecycle ---
 const char *gf_config_get_path (void);
+gf_err_t gf_config_set_path (const char *path);
+#ifdef _WIN32
+bool gf_config_get_launch_args (wchar_t *args, size_t capacity);
+#endif
 void gf_config_save (const char *filename, const gf_config_t *cfg);
-gf_config_t load_or_create_config (const char *filename);
+gf_config_t gf_config_load_or_create (const char *filename);
 
 // gf_config_dup deep-copies owned memory; gf_config_release frees it. A plain
 // struct assignment is a move, after which the source must not be released.

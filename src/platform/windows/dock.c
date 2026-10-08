@@ -1,74 +1,159 @@
 #include "internal.h"
+#include "taskbar.h"
+#include <string.h>
 
-// Hide the taskbar by setting auto-hide mode and forcing it off-screen.
-// SHAppBarMessage(ABM_SETSTATE) alone is unreliable — it changes the setting
-// but doesn't force the taskbar to actually hide. We must also set the
-// window position to trigger the taskbar to slide away, and broadcast
-// a taskbar-created message so the shell re-evaluates the state.
+// Explorer's auto-hide preference is desktop-wide. Manage individual taskbar
+// visibility instead, leaving the user's preference and work areas unchanged.
+// Work-area changes during maximize previously invalidated unrelated layouts.
+// The core expands visible maximized apps separately into their taskbar gap.
+static bool
+taskbar_native_autohide (void)
+{
+    APPBARDATA abd
+        = { .cbSize = sizeof (abd), .hWnd = FindWindowA ("Shell_TrayWnd", NULL) };
+    return abd.hWnd && (SHAppBarMessage (ABM_GETSTATE, &abd) & ABS_AUTOHIDE);
+}
+
+static gf_taskbar_state_t *
+taskbar_find (gf_windows_platform_data_t *data, HWND window)
+{
+    for (uint32_t i = 0; i < data->taskbar_count; i++)
+        if (data->taskbars[i].window == window)
+            return &data->taskbars[i];
+    return NULL;
+}
+
+static bool
+taskbar_interacting (HWND window, gf_monitor_id_t monitor_id,
+                     gf_windows_platform_data_t *data, POINT cursor)
+{
+    HWND foreground = GetForegroundWindow ();
+    if (foreground && GetAncestor (foreground, GA_ROOTOWNER) == window)
+        return true;
+    GUITHREADINFO info = { .cbSize = sizeof (info) };
+    DWORD thread = GetWindowThreadProcessId (window, NULL);
+    if (thread && GetGUIThreadInfo (thread, &info)
+        && (info.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE)) && info.hwndMenuOwner
+        && GetAncestor (info.hwndMenuOwner, GA_ROOTOWNER) == window)
+        return true;
+    gf_rect_t full = data->monitors[monitor_id].full_bounds;
+    bool cursor_on_monitor = cursor.x >= full.x && cursor.y >= full.y
+                             && cursor.x < full.x + (int32_t)full.width
+                             && cursor.y < full.y + (int32_t)full.height;
+    return cursor_on_monitor
+           && ((GetAsyncKeyState (VK_LWIN) & 0x8000)
+               || (GetAsyncKeyState (VK_RWIN) & 0x8000));
+}
+
+static bool
+taskbar_edge (gf_taskbar_state_t *bar, const gf_rect_t *full, POINT cursor)
+{
+    RECT monitor = { full->x, full->y, full->x + (int32_t)full->width,
+                     full->y + (int32_t)full->height };
+    if (!PtInRect (&monitor, cursor))
+        return false;
+    if (PtInRect (&bar->rect, cursor))
+        return true;
+    bool horizontal
+        = bar->rect.right - bar->rect.left >= bar->rect.bottom - bar->rect.top;
+    if (horizontal)
+    {
+        bool top = bar->rect.top + bar->rect.bottom < monitor.top + monitor.bottom;
+        return top ? cursor.y < monitor.top + 2 : cursor.y >= monitor.bottom - 2;
+    }
+    bool left = bar->rect.left + bar->rect.right < monitor.left + monitor.right;
+    return left ? cursor.x < monitor.left + 2 : cursor.x >= monitor.right - 2;
+}
+
+static void
+taskbar_sync (gf_platform_t *platform, HWND window, const bool *hide_on_monitor,
+              uint32_t monitor_count, bool native_autohide, POINT cursor, ULONGLONG now)
+{
+    if (!window)
+        return;
+    gf_windows_platform_data_t *data = platform->platform_data;
+    gf_monitor_id_t id = gf_monitor_from_window (platform, window);
+    bool hide = !native_autohide && id < monitor_count
+                && id < data->enumerated_monitor_count && hide_on_monitor[id];
+    gf_taskbar_state_t *bar = taskbar_find (data, window);
+    if (!hide)
+    {
+        gf_taskbar_restore_window (window);
+        if (bar)
+        {
+            uint32_t index = (uint32_t)(bar - data->taskbars);
+            memmove (bar, bar + 1, (data->taskbar_count - index - 1) * sizeof (*bar));
+            data->taskbar_count--;
+        }
+        return;
+    }
+    if (!bar)
+    {
+        // Never revive a bar that was hidden before GridFlux took ownership.
+        if (!IsWindowVisible (window) || data->taskbar_count >= GF_MAX_MONITORS)
+            return;
+        RECT rect;
+        if (!GetWindowRect (window, &rect)
+            || !SetPropA (window, GF_TASKBAR_HIDDEN_PROP, (HANDLE)(INT_PTR)1))
+            return;
+        bar = &data->taskbars[data->taskbar_count++];
+        *bar = (gf_taskbar_state_t){ .window = window, .rect = rect, .monitor_id = id };
+    }
+    bar->monitor_id = id;
+    // Explorer can move the taskbar after a display or DPI change while our
+    // visibility override is active. Follow its current edge even when hidden.
+    GetWindowRect (window, &bar->rect);
+    if (taskbar_edge (bar, &data->monitors[id].full_bounds, cursor)
+        || taskbar_interacting (window, id, data, cursor))
+        bar->reveal_until = now + 300;
+    bool reveal = now < bar->reveal_until;
+    if (reveal != (IsWindowVisible (window) != FALSE))
+        ShowWindow (window, reveal ? SW_SHOWNOACTIVATE : SW_HIDE);
+}
+
+void
+gf_dock_sync (gf_platform_t *platform, const bool *hide_on_monitor,
+              uint32_t monitor_count)
+{
+    if (!platform || !platform->platform_data || !hide_on_monitor)
+        return;
+    gf_windows_platform_data_t *data = platform->platform_data;
+    for (uint32_t i = 0; i < data->taskbar_count;)
+    {
+        if (IsWindow (data->taskbars[i].window))
+        {
+            i++;
+            continue;
+        }
+        memmove (&data->taskbars[i], &data->taskbars[i + 1],
+                 (--data->taskbar_count - i) * sizeof (data->taskbars[0]));
+    }
+    POINT cursor;
+    if (!GetCursorPos (&cursor))
+        return;
+    bool native_autohide = taskbar_native_autohide ();
+    ULONGLONG now = GetTickCount64 ();
+    taskbar_sync (platform, FindWindowA ("Shell_TrayWnd", NULL), hide_on_monitor,
+                  monitor_count, native_autohide, cursor, now);
+    HWND secondary = NULL;
+    while ((secondary = FindWindowExA (NULL, secondary, "Shell_SecondaryTrayWnd", NULL)))
+        taskbar_sync (platform, secondary, hide_on_monitor, monitor_count,
+                      native_autohide, cursor, now);
+}
+
 void
 gf_dock_hide (gf_platform_t *platform)
 {
-    (void)platform;
-
-    HWND taskbar = FindWindowA ("Shell_TrayWnd", NULL);
-    if (taskbar)
-    {
-        // 1. Set auto-hide via the appbar API
-        APPBARDATA abd = { .cbSize = sizeof (abd), .hWnd = taskbar };
-        abd.lParam = ABS_AUTOHIDE;
-        SHAppBarMessage (ABM_SETSTATE, &abd);
-
-        // 2. Force the taskbar to re-evaluate its position by poking its
-        //    window placement. SetWindowPos with NOMOVE|NOSIZE triggers
-        //    the shell to honour the newly set auto-hide flag.
-        SetWindowPos (taskbar, HWND_BOTTOM, 0, 0, 0, 0,
-                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-
-        // 3. Broadcast a settings-change notification so Explorer
-        //    re-reads the taskbar state immediately.
-        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
-    }
-
-    // Handle multi-monitor secondary taskbars (Windows 10/11)
-    // Note: Secondary taskbars don't reliably support the AppBar API auto-hide
-    // toggle, so we keep them hidden for now to ensure a clean maximized
-    // experience.
-    HWND secondary = NULL;
-    while ((secondary = FindWindowExA (NULL, secondary, "Shell_SecondaryTrayWnd", NULL)))
-    {
-        ShowWindow (secondary, SW_HIDE);
-    }
+    bool hide_on_monitor[GF_MAX_MONITORS];
+    for (uint32_t i = 0; i < GF_MAX_MONITORS; i++)
+        hide_on_monitor[i] = true;
+    gf_dock_sync (platform, hide_on_monitor, GF_MAX_MONITORS);
 }
 
 void
 gf_dock_restore (gf_platform_t *platform)
 {
-    (void)platform;
-
-    HWND taskbar = FindWindowA ("Shell_TrayWnd", NULL);
-    if (taskbar)
-    {
-        // 1. Restore always-on-top via appbar API
-        APPBARDATA abd = { .cbSize = sizeof (abd), .hWnd = taskbar };
-        abd.lParam = ABS_ALWAYSONTOP;
-        SHAppBarMessage (ABM_SETSTATE, &abd);
-
-        // 2. Ensure the taskbar is visible
-        ShowWindow (taskbar, SW_SHOW);
-
-        // 3. Bring it back on top so it's visible above normal windows
-        SetWindowPos (taskbar, HWND_TOPMOST, 0, 0, 0, 0,
-                      SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
-
-        // 4. Broadcast settings-change so Explorer refreshes the work area
-        //    and the taskbar redraws at its normal position.
-        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
-    }
-
-    // Restore secondary taskbars
-    HWND secondary = NULL;
-    while ((secondary = FindWindowExA (NULL, secondary, "Shell_SecondaryTrayWnd", NULL)))
-    {
-        ShowWindow (secondary, SW_SHOW);
-    }
+    gf_taskbar_restore_all ();
+    if (platform && platform->platform_data)
+        ((gf_windows_platform_data_t *)platform->platform_data)->taskbar_count = 0;
 }

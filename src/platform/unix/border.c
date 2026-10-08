@@ -225,8 +225,8 @@ get_toplevel_parent (Display *dpy, Window w)
 // Build the hollow border region: full window, minus the interior hollow, minus
 // the exclusion rects. Caller owns the returned Region (XDestroyRegion it).
 static Region
-_build_border_region (int w, int h, int thickness, int frame_w, int frame_h,
-                      const XRectangle *sub_rects, int sub_count)
+build_border_region (int w, int h, int thickness, int frame_w, int frame_h,
+                     const XRectangle *sub_rects, int sub_count)
 {
     // Create the full window region
     Region full_reg = XCreateRegion ();
@@ -260,8 +260,9 @@ _build_border_region (int w, int h, int thickness, int frame_w, int frame_h,
 }
 
 void
-apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, int frame_w,
-                  int frame_h, const XRectangle *sub_rects, int sub_count)
+gf_border_apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness,
+                            int frame_w, int frame_h, const XRectangle *sub_rects,
+                            int sub_count)
 {
     int shape_event_base, shape_error_base;
     if (!XShapeQueryExtension (dpy, &shape_event_base, &shape_error_base))
@@ -279,7 +280,7 @@ apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, int
     }
 
     Region final_reg
-        = _build_border_region (w, h, thickness, frame_w, frame_h, sub_rects, sub_count);
+        = build_border_region (w, h, thickness, frame_w, frame_h, sub_rects, sub_count);
 
     XWindowAttributes attrs;
     bool is_viewable = false;
@@ -308,7 +309,7 @@ apply_shape_mask (Display *dpy, Window overlay, int w, int h, int thickness, int
 }
 
 void
-resize_border_overlay (Display *dpy, gf_border_t *b, const gf_rect_t *frame)
+gf_border_resize_border_overlay (Display *dpy, gf_border_t *b, const gf_rect_t *frame)
 {
     int thickness = b->thickness;
     int x = frame->x - thickness;
@@ -326,10 +327,10 @@ resize_border_overlay (Display *dpy, gf_border_t *b, const gf_rect_t *frame)
 }
 
 Window
-create_border_overlay (Display *dpy, Window target, gf_color_t color, int thickness)
+gf_border_create_overlay (Display *dpy, Window target, gf_color_t color, int thickness)
 {
     gf_rect_t frame;
-    if (!get_frame_geometry (dpy, target, &frame))
+    if (!gf_window_get_frame_geometry (dpy, target, &frame))
     {
         GF_LOG_ERROR ("Failed to get frame geometry for target %lu",
                       (unsigned long)target);
@@ -373,7 +374,8 @@ create_border_overlay (Display *dpy, Window target, gf_color_t color, int thickn
         return None;
     }
 
-    apply_shape_mask (dpy, overlay, w, h, thickness, frame.width, frame.height, NULL, 0);
+    gf_border_apply_shape_mask (dpy, overlay, w, h, thickness, frame.width, frame.height,
+                                NULL, 0);
     XMapWindow (dpy, overlay);
     return overlay;
 }
@@ -433,6 +435,7 @@ alloc_border (Window window, Window overlay, gf_color_t color, int thickness)
     if (!border)
         return NULL;
     border->target = window;
+    border->monitor_id = 0;
     border->overlay = overlay;
     border->color = color;
     border->thickness = thickness;
@@ -463,13 +466,13 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     gf_border_t *existing = find_border_by_window (data, (Window)window);
     if (existing)
     {
-        GF_LOG_INFO ("Border already exists for window %lu, updating color",
-                     (unsigned long)window);
-        update_border_color (data->display, existing, color);
+        existing->monitor_id = gf_monitor_from_window (platform, window);
+        if (existing->color != color)
+            update_border_color (data->display, existing, color);
         return;
     }
 
-    Window overlay = create_border_overlay (data->display, window, color, thickness);
+    Window overlay = gf_border_create_overlay (data->display, window, color, thickness);
     if (!overlay)
     {
         GF_LOG_WARN ("Failed to create border overlay for window %lu",
@@ -485,6 +488,7 @@ gf_border_add (gf_platform_t *platform, gf_handle_t window, gf_color_t color,
     }
 
     fetch_border_rect (data->display, (Window)window, border);
+    border->monitor_id = gf_monitor_from_window (platform, window);
     data->borders[data->border_count++] = border;
 
     XFlush (data->display);
@@ -626,8 +630,8 @@ reapply_border_shape (Display *dpy, gf_border_t *b, const gf_rect_t *frame, int 
     if (geom_changed)
         XMoveResizeWindow (dpy, b->overlay, win_x, win_y, win_w, win_h);
 
-    apply_shape_mask (dpy, b->overlay, win_w, win_h, b->thickness, frame->width,
-                      frame->height, ints, count);
+    gf_border_apply_shape_mask (dpy, b->overlay, win_w, win_h, b->thickness, frame->width,
+                                frame->height, ints, count);
 
     b->last_rect = *frame;
     b->last_intersect_count = count;
@@ -637,7 +641,7 @@ reapply_border_shape (Display *dpy, gf_border_t *b, const gf_rect_t *frame, int 
 
 // Destroy the border at index i (its target window is gone) and compact the array.
 static void
-_border_remove_dead (Display *dpy, gf_linux_platform_data_t *data, int i)
+border_remove_dead (Display *dpy, gf_linux_platform_data_t *data, int i)
 {
     gf_border_t *b = data->borders[i];
     XDestroyWindow (dpy, b->overlay);
@@ -654,13 +658,13 @@ update_single_border (Display *dpy, gf_linux_platform_data_t *data,
                       bool notification_active)
 {
     gf_border_t *b = data->borders[i];
-    if (!b || window_is_border_excluded (dpy, b->target))
+    if (!b || gf_window_is_border_excluded (dpy, b->target))
         return;
 
     XWindowAttributes attrs;
     if (!XGetWindowAttributes (dpy, b->target, &attrs))
     {
-        _border_remove_dead (dpy, data, i);
+        border_remove_dead (dpy, data, i);
         return;
     }
 
@@ -672,13 +676,14 @@ update_single_border (Display *dpy, gf_linux_platform_data_t *data,
     }
 
     XMapWindow (dpy, b->overlay);
+    b->monitor_id = gf_monitor_from_window (platform, b->target);
     border_stack_above_target (dpy, b);
 
     if (b->color != config->border_color)
         update_border_color (dpy, b, config->border_color);
 
     gf_rect_t frame;
-    if (!get_frame_geometry (dpy, b->target, &frame))
+    if (!gf_window_get_frame_geometry (dpy, b->target, &frame))
         return;
 
     int thick = b->thickness;
@@ -703,7 +708,7 @@ update_single_border (Display *dpy, gf_linux_platform_data_t *data,
 
 // Read a window's _NET_WM_PID (0 if unset).
 static unsigned long
-_read_net_wm_pid (Display *dpy, gf_platform_atoms_t *atoms, Window win)
+read_net_wm_pid (Display *dpy, gf_platform_atoms_t *atoms, Window win)
 {
     unsigned char *data = NULL;
     unsigned long nitems = 0, pid = 0;
@@ -721,7 +726,7 @@ _read_net_wm_pid (Display *dpy, gf_platform_atoms_t *atoms, Window win)
 
 // Root-relative geometry of a viewable override-redirect window (false otherwise).
 static bool
-_override_geometry (Display *dpy, Window win, gf_rect_t *out)
+override_geometry (Display *dpy, Window win, gf_rect_t *out)
 {
     XWindowAttributes wa;
     if (!XGetWindowAttributes (dpy, win, &wa) || wa.map_state != IsViewable
@@ -742,8 +747,8 @@ _override_geometry (Display *dpy, Window win, gf_rect_t *out)
 // aren't managed clients, so scan the root's children for ones owned by the GUI
 // process (identified by PID, resolved from the GUI's own managed window).
 static void
-_collect_gui_popups (Display *dpy, gf_platform_atoms_t *atoms, unsigned long gui_pid,
-                     Window root, gf_rect_t *gui_geoms, int *gui_count, int max)
+collect_gui_popups (Display *dpy, gf_platform_atoms_t *atoms, unsigned long gui_pid,
+                    Window root, gf_rect_t *gui_geoms, int *gui_count, int max)
 {
     if (!gui_pid)
         return;
@@ -757,9 +762,9 @@ _collect_gui_popups (Display *dpy, gf_platform_atoms_t *atoms, unsigned long gui
 
     for (unsigned int i = 0; i < nchildren && *gui_count < max; i++)
     {
-        if (_read_net_wm_pid (dpy, atoms, children[i]) != gui_pid)
+        if (read_net_wm_pid (dpy, atoms, children[i]) != gui_pid)
             continue;
-        if (_override_geometry (dpy, children[i], &gui_geoms[*gui_count]))
+        if (override_geometry (dpy, children[i], &gui_geoms[*gui_count]))
             (*gui_count)++;
     }
     XFree (children);
@@ -768,8 +773,8 @@ _collect_gui_popups (Display *dpy, gf_platform_atoms_t *atoms, unsigned long gui
 // Gather geometries to clip borders against: configured exclude zones, the
 // frames of border-excluded (GUI) client windows, and the GUI's popups.
 static int
-_collect_gui_geoms (Display *dpy, gf_platform_atoms_t *atoms, const gf_config_t *config,
-                    gf_rect_t *gui_geoms, int max)
+collect_gui_geoms (Display *dpy, gf_platform_atoms_t *atoms, const gf_config_t *config,
+                   gf_rect_t *gui_geoms, int max)
 {
     int gui_count = 0;
 
@@ -787,21 +792,22 @@ _collect_gui_geoms (Display *dpy, gf_platform_atoms_t *atoms, const gf_config_t 
         Window *clients = (Window *)prop_data;
         for (unsigned long i = 0; i < nitems && gui_count < max; i++)
         {
-            if (!gui_pid && window_is_self (dpy, clients[i]))
-                gui_pid = _read_net_wm_pid (dpy, atoms, clients[i]);
+            if (!gui_pid && gf_window_is_self (dpy, clients[i]))
+                gui_pid = read_net_wm_pid (dpy, atoms, clients[i]);
 
-            if (window_is_border_excluded (dpy, clients[i])
-                && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_desktop)
-                && !window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
+            if (gf_window_is_border_excluded (dpy, clients[i])
+                && !gf_window_has_type (dpy, clients[i],
+                                        atoms->net_wm_window_type_desktop)
+                && !gf_window_has_type (dpy, clients[i], atoms->net_wm_window_type_dock))
             {
-                if (get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
+                if (gf_window_get_frame_geometry (dpy, clients[i], &gui_geoms[gui_count]))
                     gui_count++;
             }
         }
         XFree (prop_data);
     }
 
-    _collect_gui_popups (dpy, atoms, gui_pid, root, gui_geoms, &gui_count, max);
+    collect_gui_popups (dpy, atoms, gui_pid, root, gui_geoms, &gui_count, max);
     return gui_count;
 }
 
@@ -823,7 +829,7 @@ gf_border_update (gf_platform_t *platform, const gf_config_t *config)
     pthread_mutex_unlock (&g_notification_mutex);
 
     gf_rect_t gui_geoms[32];
-    int gui_count = _collect_gui_geoms (dpy, atoms, config, gui_geoms, 32);
+    int gui_count = collect_gui_geoms (dpy, atoms, config, gui_geoms, 32);
 
     for (int i = 0; i < data->border_count;)
     {

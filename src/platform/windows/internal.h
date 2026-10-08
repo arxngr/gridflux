@@ -9,16 +9,16 @@
 #include <windows.h>
 
 // --- Window Management ---
-BOOL window_is_app (HWND hwnd);
-BOOL window_validate (HWND hwnd);
-bool window_is_self (gf_display_t display, gf_handle_t window);
-BOOL window_is_excluded_class (const char *class_name);
-BOOL window_is_border_excluded (HWND hwnd);
-BOOL window_is_excluded_style (HWND hwnd);
-bool window_is_installer (HWND hwnd);
-BOOL window_is_fullscreen (HWND hwnd);
-BOOL window_is_cloaked (HWND hwnd);
-BOOL window_is_notification_center (HWND hwnd);
+BOOL gf_window_is_app (HWND hwnd);
+BOOL gf_window_validate (HWND hwnd);
+bool gf_window_is_self (gf_display_t display, gf_handle_t window);
+BOOL gf_window_is_excluded_class (const char *class_name);
+BOOL gf_window_is_border_excluded (HWND hwnd);
+BOOL gf_window_is_excluded_style (HWND hwnd);
+bool gf_window_is_installer (HWND hwnd);
+BOOL gf_window_is_native_fullscreen (HWND hwnd);
+BOOL gf_window_is_cloaked (HWND hwnd);
+BOOL gf_window_is_notification_center (HWND hwnd);
 void gf_window_get_class (gf_display_t display, gf_handle_t window, char *buffer,
                           size_t bufsize);
 
@@ -40,7 +40,7 @@ typedef struct
     char cls[MAX_CLASS_NAME_LENGTH];
 } class_cache_entry_t;
 
-HWND create_border_overlay (HWND target);
+HWND gf_border_create_overlay (HWND target);
 void gf_border_remove (gf_platform_t *platform, gf_handle_t window);
 void gf_border_update (gf_platform_t *platform, const gf_config_t *config);
 void gf_border_cleanup (gf_platform_t *platform);

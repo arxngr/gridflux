@@ -245,8 +245,14 @@ echo Release version: !GF_VERSION!
 
 set "MSI_NAME=GridFlux-!GF_VERSION!.msi"
 
+:: WiX 7+ requires its EULA option; WiX 4-6 do not recognize that switch.
+set "WIX_EULA_ARGS="
+for /f "tokens=1 delims=." %%V in ('wix --version') do (
+    if %%V geq 7 set "WIX_EULA_ARGS=-acceptEula wix7"
+)
+
 :: Build MSI with WiX v4+ command (version reaches gridflux.wxs via $(var.Version))
-wix build -arch x64 -acceptEula wix7 -d Version=!GF_VERSION! -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out "%MSI_NAME%"
+wix build -arch x64 !WIX_EULA_ARGS! -d Version=!GF_VERSION! -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext gridflux.wxs build\wix_dlls.wxs -out "%MSI_NAME%"
 if !ERRORLEVEL! neq 0 (
     echo ERROR: wix build failed
     exit /b 1
