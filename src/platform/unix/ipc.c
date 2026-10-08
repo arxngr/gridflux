@@ -212,7 +212,15 @@ wait_socket (int fd, short events, int64_t deadline)
         struct pollfd p = { .fd = fd, .events = events };
         int ready = poll (&p, 1, (int)(deadline - now));
         if (ready > 0)
-            return (p.revents & (events | POLLHUP)) != 0;
+        {
+            if (p.revents & POLLNVAL)
+                errno = EBADF;
+            else if (p.revents & (events | POLLHUP))
+                return true;
+            else
+                errno = EIO;
+            return false;
+        }
         if (ready < 0 && errno == EINTR)
             continue;
         if (!ready)
@@ -240,6 +248,8 @@ send_all (int fd, const void *buf, size_t len, int64_t deadline)
         }
         if (n < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK))
             continue;
+        if (!n)
+            errno = EPIPE;
         return false; // error or peer closed
     }
     return true;
@@ -264,6 +274,8 @@ recv_all (int fd, void *buf, size_t len, int64_t deadline)
         }
         if (n < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK))
             continue;
+        if (!n)
+            errno = ECONNRESET;
         return false; // error or peer closed
     }
     return true;
@@ -365,9 +377,15 @@ gf_ipc_client_send (gf_ipc_handle_t handle, const char *command,
         return false;
     }
     int64_t deadline = milliseconds () + 1000;
-    if (!send_all (handle, command, len, deadline) || shutdown (handle, SHUT_WR) < 0
-        || !recv_all (handle, response, sizeof (*response), deadline)
-        || !gf_ipc_response_valid (response))
+    bool received = send_all (handle, command, len, deadline)
+                    && shutdown (handle, SHUT_WR) == 0
+                    && recv_all (handle, response, sizeof (*response), deadline);
+    if (received && !gf_ipc_response_valid (response))
+    {
+        errno = EPROTO;
+        received = false;
+    }
+    if (!received)
     {
         response->status
             = errno == ETIMEDOUT ? GF_IPC_ERROR_TIMEOUT : GF_IPC_ERROR_CONNECTION;

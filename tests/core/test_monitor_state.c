@@ -966,7 +966,7 @@ main (void)
     maximized[1] = false;
     tick (&m);
     assert (fill_failures == 3 && win (&m, 1)->maximize_fill_failures == 0);
-    rejected_fill = NULL;
+    rejected_fill = 0;
 
     // A cancelled minimize can arrive late. Retain the restore selection until
     // it settles and repair the late iconify response without changing identity.
@@ -1019,7 +1019,7 @@ main (void)
     // Excluding an already maximized app releases GridFlux's mode without
     // changing the app's native maximize state or the other monitor.
     missing_external = false;
-    rejected = rejected_visibility = NULL;
+    rejected = rejected_visibility = 0;
     platform.window_maximize_async = false;
     focused = handle (1);
     maximized[1] = true;

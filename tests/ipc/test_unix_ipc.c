@@ -95,13 +95,35 @@ test_deadlines (gf_ipc_handle_t server)
     gf_ipc_response_t response;
     assert (send_all (pair[1], "short reply", 11, milliseconds () + 1000));
     assert (shutdown (pair[1], SHUT_WR) == 0);
+    errno = ETIMEDOUT;
     assert (!gf_ipc_client_send (pair[0], "query test", &response));
-    assert (response.status == GF_IPC_ERROR_CONNECTION);
+    assert (response.status == GF_IPC_ERROR_CONNECTION && errno == ECONNRESET);
     close (pair[0]);
     close (pair[1]);
     assert (socketpair (AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, pair) == 0);
+    memset (&response, 0, sizeof (response));
+    response.status = (gf_ipc_status_t)99;
+    assert (send_all (pair[1], &response, sizeof (response), milliseconds () + 1000));
+    errno = ETIMEDOUT;
+    assert (!gf_ipc_client_send (pair[0], "query test", &response));
+    assert (response.status == GF_IPC_ERROR_CONNECTION && errno == EPROTO);
+    assert (response.message[0] == '\0');
+    close (pair[0]);
     close (pair[1]);
+    assert (socketpair (AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, pair) == 0);
+    errno = ECONNRESET;
+    assert (!gf_ipc_client_send (pair[0], "query test", &response));
+    assert (response.status == GF_IPC_ERROR_TIMEOUT && errno == ETIMEDOUT);
+    close (pair[0]);
+    close (pair[1]);
+    assert (socketpair (AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, pair) == 0);
+    int invalid = pair[1];
+    close (pair[1]);
+    errno = ETIMEDOUT;
+    assert (!wait_socket (invalid, POLLIN, milliseconds () + 1000) && errno == EBADF);
+    errno = ETIMEDOUT;
     assert (!send_all (pair[0], "x", 1, milliseconds () + 1000)); // No SIGPIPE.
+    assert (errno != ETIMEDOUT);
     close (pair[0]);
 }
 

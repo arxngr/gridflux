@@ -68,6 +68,9 @@ list(APPEND COMMON_SOURCES "src/server/main.c")
 
 if(WIN32)
     add_compile_definitions(
+        # Match the Windows 10 DPI APIs already used by the window module.
+        WINVER=0x0A00
+        _WIN32_WINNT=0x0A00
         _CRT_SECURE_NO_WARNINGS
         _CRT_NONSTDC_NO_DEPRECATE
     )
