@@ -12,7 +12,7 @@
 
 // Shrink the over-allocated window list to its final size, or free it if empty.
 static gf_err_t
-_finalize_window_list (gf_win_info_t *list, uint32_t count, gf_win_info_t **out)
+finalize_window_list (gf_win_info_t *list, uint32_t count, gf_win_info_t **out)
 {
     if (count == 0)
     {
@@ -65,7 +65,8 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
     for (unsigned long i = 0; i < nitems; i++)
     {
         gf_win_info_t info;
-        if (query_window_info (display, window_list[i], atoms, workspace_id, &info))
+        if (gf_window_query_window_info (display, window_list[i], atoms, workspace_id,
+                                         &info))
         {
             filtered_windows[filtered_count++] = info;
         }
@@ -73,7 +74,7 @@ gf_platform_get_windows (gf_display_t display, gf_ws_id_t *workspace_id,
 
     XFree (data);
 
-    gf_err_t fin = _finalize_window_list (filtered_windows, filtered_count, windows);
+    gf_err_t fin = finalize_window_list (filtered_windows, filtered_count, windows);
     if (fin != GF_SUCCESS)
         return fin;
 
@@ -120,26 +121,26 @@ gf_window_is_valid (gf_display_t display, gf_handle_t window)
 }
 
 bool
-window_is_border_excluded (gf_display_t display, gf_handle_t window)
+gf_window_is_border_excluded (gf_display_t display, gf_handle_t window)
 {
-    // The GUI and its dialogs/popups share the app's WM_CLASS, so window_is_self
+    // The GUI and its dialogs/popups share the app's WM_CLASS, so gf_window_is_self
     // already excludes them — the border is clipped around them, not drawn over.
-    if (window_is_self (display, window))
+    if (gf_window_is_self (display, window))
         return true;
 
-    if (window_is_app_exception (display, window))
+    if (gf_window_is_app_exception (display, window))
         return true;
 
-    if (window_has_excluded_state (display, window))
+    if (gf_window_has_excluded_state (display, window))
         return true;
-    if (window_has_excluded_type (display, window))
+    if (gf_window_has_excluded_type (display, window))
         return true;
 
     return false;
 }
 
 bool
-window_is_self (gf_display_t display, gf_handle_t window)
+gf_window_is_self (gf_display_t display, gf_handle_t window)
 {
     if (!display || window == None)
         return false;
@@ -170,10 +171,10 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     if (!display || window == None)
         return true;
 
-    if (window_is_self (display, window))
+    if (gf_window_is_self (display, window))
         return true;
 
-    if (window_is_app_exception (display, window))
+    if (gf_window_is_app_exception (display, window))
         return true;
 
     // Exclude fullscreen OR maximized NORMAL windows
@@ -181,16 +182,16 @@ gf_window_is_excluded (gf_display_t display, gf_handle_t window)
     bool is_fullscreen
         = gf_platform_window_has_state (display, window, atoms->net_wm_state_fullscreen);
 
-    if (window_has_type (display, window, atoms->net_wm_window_type_normal)
+    if (gf_window_has_type (display, window, atoms->net_wm_window_type_normal)
         && (is_fullscreen))
     {
         return true;
     }
 
-    if (window_has_excluded_state (display, window))
+    if (gf_window_has_excluded_state (display, window))
         return true;
 
-    if (window_has_excluded_type (display, window))
+    if (gf_window_has_excluded_type (display, window))
         return true;
 
     return false;
@@ -208,7 +209,7 @@ gf_window_is_fullscreen (gf_display_t display, gf_handle_t window)
 // the grid cell: CSD windows expand (shadows hang outside), SSD windows shrink
 // (client fits inside the WM frame).
 static void
-_adjust_rect_for_frame (gf_display_t dpy, gf_handle_t win, gf_rect_t *rect)
+adjust_rect_for_frame (gf_display_t dpy, gf_handle_t win, gf_rect_t *rect)
 {
     int left = 0, right = 0, top = 0, bottom = 0;
     bool is_csd = false;
@@ -242,7 +243,7 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
     if (!dpy || !geometry)
         return GF_ERROR_INVALID_PARAMETER;
 
-    if (remove_size_constraints (dpy, win) != GF_SUCCESS)
+    if (gf_window_remove_size_constraints (dpy, win) != GF_SUCCESS)
     {
         GF_LOG_WARN ("Failed to remove size constraints, continuing anyway");
     }
@@ -252,7 +253,7 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
     if (flags & GF_GEOMETRY_APPLY_PADDING)
         gf_rect_apply_padding (&rect, GF_DEFAULT_PADDING);
 
-    _adjust_rect_for_frame (dpy, win, &rect);
+    adjust_rect_for_frame (dpy, win, &rect);
 
     // Use StaticGravity (10) to force the WM to place the client at exactly x, y
     // This removes ambiguity about how NorthWestGravity is interpreted relative to
@@ -272,6 +273,59 @@ gf_window_set_geometry (gf_display_t dpy, gf_handle_t win, const gf_rect_t *geom
 
     return gf_platform_send_client_message (dpy, win, atoms->net_moveresize_window, data,
                                             5);
+}
+
+gf_err_t
+gf_window_restore_monitor (gf_platform_t *platform, const gf_win_info_t *window,
+                           const gf_rect_t *previous_bounds)
+{
+    if (!platform || !platform->platform_data || !window || !previous_bounds)
+        return GF_ERROR_INVALID_PARAMETER;
+    gf_linux_platform_data_t *data = platform->platform_data;
+    if (window->monitor_id >= data->enumerated_monitor_count)
+        return GF_ERROR_DISPLAY_CONNECTION;
+    gf_rect_t bounds = data->monitors[window->monitor_id].bounds;
+    if (!bounds.width || !bounds.height)
+        return GF_ERROR_DISPLAY_CONNECTION;
+    gf_rect_t target = window->geometry;
+    target.x += bounds.x - previous_bounds->x;
+    target.y += bounds.y - previous_bounds->y;
+    if (!target.width || target.width > bounds.width)
+        target.width = bounds.width;
+    if (!target.height || target.height > bounds.height)
+        target.height = bounds.height;
+    if (target.x < bounds.x)
+        target.x = bounds.x;
+    if (target.y < bounds.y)
+        target.y = bounds.y;
+    if (target.x + (int32_t)target.width > bounds.x + (int32_t)bounds.width)
+        target.x = bounds.x + (int32_t)(bounds.width - target.width);
+    if (target.y + (int32_t)target.height > bounds.y + (int32_t)bounds.height)
+        target.y = bounds.y + (int32_t)(bounds.height - target.height);
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    bool maximized = window->is_maximized && !window->is_minimized;
+    if (!atoms)
+        return GF_ERROR_PLATFORM_ERROR;
+    long mode[5] = { 0, atoms->net_wm_state_maximized_vert,
+                     atoms->net_wm_state_maximized_horz, 2, 0 };
+    if (maximized)
+    {
+        gf_err_t result = gf_platform_send_client_message (data->display, window->id,
+                                                           atoms->net_wm_state, mode, 5);
+        if (result != GF_SUCCESS)
+            return result;
+    }
+    gf_err_t result = gf_window_set_geometry (data->display, window->id, &target,
+                                              GF_GEOMETRY_CHANGE_ALL, NULL);
+    if (maximized)
+    {
+        mode[0] = 1;
+        gf_err_t restored = gf_platform_send_client_message (
+            data->display, window->id, atoms->net_wm_state, mode, 5);
+        if (result == GF_SUCCESS)
+            result = restored;
+    }
+    return result;
 }
 
 gf_handle_t
@@ -351,10 +405,11 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
         return GF_ERROR_PLATFORM_ERROR;
     }
 
-    // Map the window first — XIconifyWindow unmaps it, so we need to
-    // re-map before any focus requests can succeed. XSync ensures the WM has
-    // processed the map before we later attempt to set input focus.
-    XMapRaised (display, window);
+    // Restoring sibling tiles must not activate them and move keyboard focus
+    // to another monitor. Only map windows that are actually iconified.
+    if (attr.map_state == IsViewable && !gf_window_is_minimized (display, window))
+        return GF_SUCCESS;
+    XMapWindow (display, window);
     XSync (display, False);
 
     gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
@@ -369,26 +424,70 @@ gf_window_unminimize (gf_display_t display, gf_handle_t window)
         gf_platform_send_client_message (display, window, atoms->net_wm_state, data, 5);
     }
 
-    if (atoms->net_active_window != None)
-    {
-        long data[5] = { 2, // source: pager/task-switcher (authoritative)
-                         CurrentTime, 0, 0, 0 };
-
-        gf_platform_send_client_message (display, window, atoms->net_active_window, data,
-                                         5);
-    }
-
-    // Force focus transfer — _NET_ACTIVE_WINDOW is advisory, this is required so
-    // gf_wm_event sees the correct focused window. Only focus once the window is
-    // actually viewable: XSetInputFocus on an unmapped window yields BadMatch.
-    if (XGetWindowAttributes (display, window, &attr) != 0
-        && attr.map_state == IsViewable)
-    {
-        XSetInputFocus (display, window, RevertToPointerRoot, CurrentTime);
-    }
     XFlush (display);
 
     return GF_SUCCESS;
+}
+
+gf_err_t
+gf_window_focus (gf_display_t display, gf_handle_t window)
+{
+    if (!display || !gf_window_is_valid (display, window))
+        return GF_ERROR_INVALID_PARAMETER;
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    if (atoms && atoms->net_active_window != None)
+    {
+        long data[5] = { 2, CurrentTime, 0, 0, 0 };
+        gf_platform_send_client_message (display, window, atoms->net_active_window, data,
+                                         5);
+    }
+    XWindowAttributes attr;
+    if (XGetWindowAttributes (display, window, &attr) && attr.map_state == IsViewable)
+        XSetInputFocus (display, window, RevertToPointerRoot, CurrentTime);
+    XFlush (display);
+    return GF_SUCCESS;
+}
+
+gf_err_t
+gf_window_set_maximized (gf_display_t display, gf_handle_t window, bool maximized)
+{
+    if (!display || !gf_window_is_valid (display, window))
+        return GF_ERROR_INVALID_PARAMETER;
+    gf_platform_atoms_t *atoms = gf_platform_atoms_get_global ();
+    if (!atoms || atoms->net_wm_state == None)
+        return GF_ERROR_PLATFORM_ERROR;
+    bool native_maximized = gf_window_is_maximized (display, window);
+    if (!maximized && !native_maximized)
+        return GF_SUCCESS;
+    gf_rect_t destination;
+    if (gf_window_get_geometry (display, window, &destination) != GF_SUCCESS)
+        return GF_ERROR_PLATFORM_ERROR;
+    long data[5] = { 0, atoms->net_wm_state_maximized_vert,
+                     atoms->net_wm_state_maximized_horz, 2, 0 };
+    gf_err_t result = GF_SUCCESS;
+    if (native_maximized)
+    {
+        result = gf_platform_send_client_message (display, window, atoms->net_wm_state,
+                                                  data, 5);
+        if (result != GF_SUCCESS)
+            return result;
+        // Removing maximize can restore a saved position on the old monitor.
+        // Move back to the captured destination before applying its new mode.
+        long position[5] = { StaticGravity | (1 << 8) | (1 << 9) | (2 << 12),
+                             destination.x, destination.y, 0, 0 };
+        result = gf_platform_send_client_message (
+            display, window, atoms->net_moveresize_window, position, 5);
+        if (result != GF_SUCCESS)
+            return result;
+    }
+    if (maximized)
+    {
+        data[0] = 1;
+        result = gf_platform_send_client_message (display, window, atoms->net_wm_state,
+                                                  data, 5);
+    }
+    XFlush (display);
+    return result;
 }
 
 void

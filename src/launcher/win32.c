@@ -15,6 +15,8 @@
 #include <tlhelp32.h>
 #include <sddl.h>
 // clang-format on
+#include "../config/config.h"
+#include "../platform/windows/taskbar.h"
 
 #include <stdio.h>
 #include <wchar.h>
@@ -59,6 +61,26 @@ get_self_dir (wchar_t *buf, DWORD buf_len)
         *(last_sep + 1) = L'\0';
 }
 
+static void
+launcher_launch_tray (const wchar_t *dir)
+{
+    if (is_process_running (L"gridflux-gui.exe"))
+        return;
+    wchar_t path[MAX_PATH], cmd[MAX_PATH + 32];
+    _snwprintf (path, MAX_PATH, L"%sgridflux-gui.exe", dir);
+    _snwprintf (cmd, MAX_PATH + 32, L"\"%s\" --minimized", path);
+    STARTUPINFOW si = { .cb = sizeof (si) };
+    PROCESS_INFORMATION pi = { 0 };
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    if (CreateProcessW (path, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, dir, &si,
+                        &pi))
+    {
+        CloseHandle (pi.hThread);
+        CloseHandle (pi.hProcess);
+    }
+}
+
 static BOOL
 is_elevated (void)
 {
@@ -76,13 +98,14 @@ is_elevated (void)
 }
 
 static HANDLE
-launch_elevated (const wchar_t *exe_path, const wchar_t *working_dir)
+launch_elevated (const wchar_t *exe_path, const wchar_t *working_dir, const wchar_t *args)
 {
     SHELLEXECUTEINFOW sei = { 0 };
     sei.cbSize = sizeof (sei);
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
     sei.lpVerb = L"runas";
     sei.lpFile = exe_path;
+    sei.lpParameters = args;
     sei.lpDirectory = working_dir;
     sei.nShow = SW_HIDE;
 
@@ -93,10 +116,14 @@ launch_elevated (const wchar_t *exe_path, const wchar_t *working_dir)
 }
 
 static HANDLE
-launch_same_level (const wchar_t *exe_path, const wchar_t *working_dir)
+launch_same_level (const wchar_t *exe_path, const wchar_t *working_dir,
+                   const wchar_t *args)
 {
-    wchar_t cmd[MAX_PATH + 4] = { 0 };
-    _snwprintf (cmd, MAX_PATH + 4, L"\"%s\"", exe_path);
+    wchar_t cmd[4096 + MAX_PATH + 64] = { 0 };
+    int length
+        = _snwprintf (cmd, sizeof (cmd) / sizeof (cmd[0]), L"\"%s\" %s", exe_path, args);
+    if (length < 0 || length >= sizeof (cmd) / sizeof (cmd[0]))
+        return NULL;
 
     STARTUPINFOW si = { .cb = sizeof (si) };
     PROCESS_INFORMATION pi = { 0 };
@@ -281,30 +308,9 @@ install_task (const wchar_t *launcher_path, const wchar_t *dir)
 static void
 uninstall_task (void)
 {
-    // Restore the Windows taskbar to its normal state.
-    // When gridflux.exe is force-terminated during uninstall,
-    // gf_platform_cleanup never runs, so the taskbar may be stuck
-    // in auto-hide mode.  Restore it here before files are removed.
-    HWND taskbar = FindWindowA ("Shell_TrayWnd", NULL);
-    if (taskbar)
-    {
-        APPBARDATA abd = { .cbSize = sizeof (abd), .hWnd = taskbar };
-        abd.lParam = ABS_ALWAYSONTOP;
-        SHAppBarMessage (ABM_SETSTATE, &abd);
-
-        ShowWindow (taskbar, SW_SHOW);
-        SetWindowPos (taskbar, HWND_TOPMOST, 0, 0, 0, 0,
-                      SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
-
-        SendNotifyMessageA (HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0);
-    }
-
-    // Restore secondary taskbars (multi-monitor)
-    HWND secondary = NULL;
-    while ((secondary = FindWindowExA (NULL, secondary, "Shell_SecondaryTrayWnd", NULL)))
-    {
-        ShowWindow (secondary, SW_SHOW);
-    }
+    // Recover managed bars after forced termination without changing the
+    // user's Explorer auto-hide preference.
+    gf_taskbar_restore_all ();
 
     // Remove the scheduled task
     wchar_t sys_dir[MAX_PATH];
@@ -334,14 +340,17 @@ static void
 run_restart_loop (const wchar_t *exe_path, const wchar_t *dir, BOOL elevated)
 {
     int launch_failures = 0;
+    wchar_t args[4096 + 32];
+    if (!gf_config_get_launch_args (args, sizeof (args) / sizeof (args[0])))
+        return;
 
     for (;;)
     {
         if (GetFileAttributesW (exe_path) == INVALID_FILE_ATTRIBUTES)
             break;
 
-        HANDLE hProcess = elevated ? launch_same_level (exe_path, dir)
-                                   : launch_elevated (exe_path, dir);
+        HANDLE hProcess = elevated ? launch_same_level (exe_path, dir, args)
+                                   : launch_elevated (exe_path, dir, args);
 
         if (!hProcess)
         {
@@ -365,6 +374,7 @@ run_restart_loop (const wchar_t *exe_path, const wchar_t *dir, BOOL elevated)
         DWORD exit_code = 0;
         GetExitCodeProcess (hProcess, &exit_code);
         CloseHandle (hProcess);
+        gf_taskbar_restore_all ();
 
         if (exit_code == 0)
             break;
@@ -382,6 +392,13 @@ WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd
 
     // Detect MSI commands
     const wchar_t *cmdline = GetCommandLineW ();
+    if (wcsstr (cmdline, L"--restore-desktop"))
+    {
+        // MSI invokes this separately in the interactive user's context.
+        // Task removal can run as SYSTEM, outside that user's desktop.
+        gf_taskbar_restore_all ();
+        return 0;
+    }
     if (wcsstr (cmdline, L"--install-task"))
     {
         wchar_t dir[MAX_PATH] = { 0 };
@@ -412,6 +429,8 @@ WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd
 
     get_self_dir (dir, MAX_PATH);
     _snwprintf (exe_path, MAX_PATH, L"%s" EXE_NAME, dir);
+
+    launcher_launch_tray (dir);
 
     // If gridflux.exe is already running, nothing to do
     if (is_process_running (EXE_NAME))

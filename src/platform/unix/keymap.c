@@ -85,7 +85,7 @@ gf_keymap_cleanup (gf_platform_t *platform)
 // Ctrl+Super+Left/Right switch workspace; Alt+E (Alt alone) excludes the
 // focused window, captured here before arrangement can shift focus.
 static gf_key_action_t
-_keymap_action_from_raw (gf_display_t display, XEvent *ev, gf_linux_platform_data_t *data)
+keymap_action_from_raw (gf_display_t display, XEvent *ev, gf_linux_platform_data_t *data)
 {
     XIRawEvent *raw = (XIRawEvent *)ev->xcookie.data;
     KeySym sym = XkbKeycodeToKeysym (display, raw->detail, 0, 0);
@@ -102,9 +102,15 @@ _keymap_action_from_raw (gf_display_t display, XEvent *ev, gf_linux_platform_dat
     if (mods == GF_MOD_MASK)
     {
         if (sym == XK_Left)
+        {
+            data->pending_focus_window = gf_window_get_focused (display);
             return GF_KEY_WORKSPACE_PREV;
+        }
         if (sym == XK_Right)
+        {
+            data->pending_focus_window = gf_window_get_focused (display);
             return GF_KEY_WORKSPACE_NEXT;
+        }
         return GF_KEY_NONE;
     }
 
@@ -150,7 +156,7 @@ gf_keymap_poll (gf_platform_t *platform, gf_display_t display)
 
         gf_key_action_t action = GF_KEY_NONE;
         if (ev.xcookie.evtype == XI_RawKeyPress)
-            action = _keymap_action_from_raw (display, &ev, data);
+            action = keymap_action_from_raw (display, &ev, data);
 
         XFreeEventData (display, &ev.xcookie);
 

@@ -46,6 +46,12 @@ struct gf_platform
                                      const gf_rect_t *geometry, gf_geom_flags_t flags,
                                      gf_config_t *cfg);
     gf_err_t (*window_unminimize) (gf_display_t display, gf_handle_t window);
+    gf_err_t (*window_focus) (gf_display_t display, gf_handle_t window);
+    gf_err_t (*window_set_maximized) (gf_display_t display, gf_handle_t window,
+                                      bool maximized);
+    bool window_maximize_async; // Native maximize requests can complete in later ticks
+    gf_err_t (*window_fill_maximized) (gf_display_t display, gf_handle_t window,
+                                       bool fill_monitor);
 
     // --- Workspace & Screen ---
     gf_err_t (*screen_get_bounds) (gf_display_t display, gf_rect_t *bounds);
@@ -56,6 +62,12 @@ struct gf_platform
     gf_err_t (*monitor_enumerate) (gf_platform_t *platform, gf_monitor_t *monitors,
                                    uint32_t *count);
     gf_monitor_id_t (*monitor_from_window) (gf_platform_t *platform, gf_handle_t window);
+    // Suspend window reconciliation while the native display topology settles.
+    bool (*monitor_poll) (gf_platform_t *platform);
+    bool (*window_was_moved) (gf_display_t display, gf_handle_t window);
+    gf_err_t (*window_restore_monitor) (gf_platform_t *platform,
+                                        const gf_win_info_t *window,
+                                        const gf_rect_t *previous_bounds);
     gf_err_t (*screen_get_bounds_for_monitor) (gf_display_t display,
                                                gf_monitor_id_t monitor_id,
                                                gf_rect_t *bounds);
@@ -70,6 +82,8 @@ struct gf_platform
     // --- Dock Management ---
     void (*dock_hide) (gf_platform_t *platform);
     void (*dock_restore) (gf_platform_t *platform);
+    void (*dock_sync) (gf_platform_t *platform, const bool *hide_on_monitor,
+                       uint32_t monitor_count);
 
     // --- Keymap Support ---
     gf_err_t (*keymap_init) (gf_platform_t *platform, gf_display_t display);
@@ -80,6 +94,7 @@ struct gf_platform
     gf_handle_t (*keymap_focused_window) (gf_platform_t *platform);
 
     // --- Resize Interaction ---
+    bool (*window_is_interacting) (gf_display_t display);
     gf_err_t (*resize_hook_install) (gf_platform_t *platform);
     void (*resize_hook_uninstall) (gf_platform_t *platform);
     bool (*resize_poll) (gf_platform_t *platform, gf_resize_event_t *event);

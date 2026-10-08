@@ -27,7 +27,7 @@ static gboolean
 run_deferred (gpointer user_data)
 {
     deferred_cmd_t *d = user_data;
-    platform_run_command (d->app, d->command, TRUE, d->dialog);
+    gf_gui_platform_run_command (d->app, d->command, TRUE, d->dialog);
     g_free (d);
     return G_SOURCE_REMOVE;
 }
@@ -201,9 +201,10 @@ build_chip (gf_app_state_t *app, const gf_win_info_t *win, bool draggable)
 }
 
 static gboolean
-window_in_workspace (const gf_win_info_t *win, gf_ws_id_t ws)
+window_in_workspace (const gf_win_info_t *win, const gf_ws_info_t *ws)
 {
-    return win->is_valid && win->workspace_id == ws && win->name[0] != '\0';
+    return win->is_valid && win->workspace_id == ws->id
+           && gf_workspace_has_monitor (ws, win->monitor_id) && win->name[0] != '\0';
 }
 
 static GtkWidget *
@@ -218,7 +219,7 @@ build_chips (gf_app_state_t *app, const gf_ws_info_t *ws, const gf_win_list_t *w
     uint32_t shown = 0, hidden = 0;
     for (uint32_t i = 0; windows && i < windows->count; i++)
     {
-        if (!window_in_workspace (&windows->items[i], ws->id))
+        if (!window_in_workspace (&windows->items[i], ws))
             continue;
         GtkWidget *chip = build_chip (app, &windows->items[i], !ws->has_rule);
         gtk_flow_box_append (GTK_FLOW_BOX (fb), chip);
@@ -251,28 +252,28 @@ build_chips (gf_app_state_t *app, const gf_ws_info_t *ws, const gf_win_list_t *w
 static void
 compose_status (const gf_ws_info_t *ws, char *buf, size_t n)
 {
-    if (ws->has_maximized_state)
-        snprintf (buf, n, "%u window%s · maximized", ws->window_count,
-                  ws->window_count == 1 ? "" : "s");
-    else if (ws->window_count == 0)
-        snprintf (buf, n, "Empty · %d slots free", ws->available_space);
-    else
-        snprintf (buf, n, "%u window%s · %d slot%s free", ws->window_count,
-                  ws->window_count == 1 ? "" : "s", ws->available_space,
-                  ws->available_space == 1 ? "" : "s");
+    int32_t free_slots = ws->is_excluded_ws || ws->has_maximized_state
+                             ? 0
+                             : (ws->available_space > 0 ? ws->available_space : 0);
+    snprintf (buf, n, "%u Windows - %d slots free", ws->window_count, free_slots);
 }
 
 static GtkWidget *
-build_number (gf_ws_id_t id)
+build_number (const gf_ws_info_t *ws, uint32_t number)
 {
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_valign (box, GTK_ALIGN_CENTER);
 
     char idbuf[16];
-    snprintf (idbuf, sizeof (idbuf), "%d", id);
+    snprintf (idbuf, sizeof (idbuf), "%u", number);
     GtkWidget *num = gtk_label_new (idbuf);
     gtk_widget_add_css_class (num, "gf-wsnum");
-    GtkWidget *cap = gtk_label_new ("WS");
+    char cap_text[24];
+    if (ws->is_excluded_ws)
+        snprintf (cap_text, sizeof (cap_text), "Shared");
+    else
+        snprintf (cap_text, sizeof (cap_text), "M%u", ws->monitor_id);
+    GtkWidget *cap = gtk_label_new (cap_text);
     gtk_widget_add_css_class (cap, "gf-wsnum-cap");
 
     gtk_box_append (GTK_BOX (box), num);
@@ -317,11 +318,13 @@ build_minimap (uint32_t count, uint32_t cap, bool maximized)
 }
 
 static GtkWidget *
-build_pill (bool maximized)
+build_pill (const gf_ws_info_t *ws)
 {
-    GtkWidget *pill = gtk_label_new (maximized ? "Maximized" : "Tiled");
+    GtkWidget *pill = gtk_label_new (ws->is_excluded_ws        ? "Excluded"
+                                     : ws->has_maximized_state ? "Maximized"
+                                                               : "Tiled");
     gtk_widget_add_css_class (pill, "gf-pill");
-    gtk_widget_add_css_class (pill, maximized ? "max" : "tiled");
+    gtk_widget_add_css_class (pill, ws->has_maximized_state ? "max" : "tiled");
     return pill;
 }
 
@@ -351,14 +354,14 @@ build_right_column (const gf_ws_info_t *ws, ws_ctx_t *ctx)
     uint32_t cap = ws->max_windows ? ws->max_windows : 4;
     gtk_box_append (GTK_BOX (right),
                     build_minimap (ws->window_count, cap, ws->has_maximized_state));
-    gtk_box_append (GTK_BOX (right), build_pill (ws->has_maximized_state));
+    gtk_box_append (GTK_BOX (right), build_pill (ws));
     gtk_box_append (GTK_BOX (right), build_lock (ctx));
     return right;
 }
 
 GtkWidget *
 gf_gui_workspace_card_new (const gf_ws_info_t *ws, const gf_win_list_t *windows,
-                           gf_app_state_t *app)
+                           gf_app_state_t *app, uint32_t number)
 {
     ws_ctx_t *ctx = g_new0 (ws_ctx_t, 1);
     ctx->app = app;
@@ -369,7 +372,15 @@ gf_gui_workspace_card_new (const gf_ws_info_t *ws, const gf_win_list_t *windows,
     GtkWidget *card = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 14);
     gtk_widget_add_css_class (card, "gf-wscard");
     g_object_set_data_full (G_OBJECT (card), "ctx", ctx, g_free);
-    gtk_box_append (GTK_BOX (card), build_number (ws->id));
+    gtk_box_append (GTK_BOX (card), build_number (ws, number));
+    char tooltip[96];
+    if (ws->is_excluded_ws)
+        snprintf (tooltip, sizeof (tooltip),
+                  "Excluded apps share this workspace across monitors");
+    else
+        snprintf (tooltip, sizeof (tooltip), "M%u, Workspace %d", ws->monitor_id,
+                  ws->local_id);
+    gtk_widget_set_tooltip_text (card, tooltip);
 
     GtkWidget *info = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_hexpand (info, TRUE);

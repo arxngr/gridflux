@@ -9,8 +9,8 @@
 #include <string.h>
 
 #define GF_PIPE_NAME "\\\\.\\pipe\\gridflux"
-#define GF_PIPE_BUFSIZE 8192
-#define GF_PIPE_TIMEOUT 100
+#define GF_PIPE_BUFSIZE sizeof (gf_ipc_response_t)
+#define GF_PIPE_TIMEOUT 1000
 #define MAX_PIPE_INSTANCES 10
 
 typedef struct
@@ -21,6 +21,9 @@ typedef struct
     DWORD bytes_read;
     BOOL pending_io;
     BOOL connected;
+    BOOL read_pending;
+    BOOL replied;
+    ULONGLONG connected_at;
 } gf_pipe_t;
 
 static char pipe_name[256] = { 0 };
@@ -28,24 +31,19 @@ static gf_pipe_t *pipe_instances = NULL;
 static int num_instances = 0;
 
 static SECURITY_ATTRIBUTES *
-gf_pipe_security_attributes (void)
+pipe_security_attributes (void)
 {
     SECURITY_ATTRIBUTES *sa = malloc (sizeof (*sa));
     if (!sa)
         return NULL;
 
-    // Build an explicit DACL instead of a NULL DACL (which would grant Everyone
-    // access). Grant full access (GA) to the pipe owner / current user (OW),
-    // SYSTEM (SY) and the Administrators group (BA) — these manage the pipe.
-    // Interactive Users (IU) get only read+write (GR|GW), the minimum a client
-    // needs: this lets the non-elevated GUI reach the pipe when the server runs
-    // elevated (its UAC-filtered token has Administrators disabled, so the BA ACE
-    // alone would deny it) without granting WRITE_DAC/WRITE_OWNER/DELETE. The
-    // descriptor is allocated by LocalAlloc and released with LocalFree.
+    // FILE_GENERIC_WRITE includes FILE_CREATE_PIPE_INSTANCE. Grant interactive
+    // clients individual data/attribute rights instead, including across UAC.
+    // Full control stays with the owner, SYSTEM, and administrators.
     PSECURITY_DESCRIPTOR sd = NULL;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorA (
-            "D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)", SDDL_REVISION_1, &sd,
-            NULL))
+            "D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x12019b;;;IU)", SDDL_REVISION_1,
+            &sd, NULL))
     {
         free (sa);
         return NULL;
@@ -75,7 +73,9 @@ create_pipe_instance (BOOL first_instance)
 {
     const char *pipe_path = gf_ipc_get_socket_path ();
 
-    SECURITY_ATTRIBUTES *sa = gf_pipe_security_attributes ();
+    SECURITY_ATTRIBUTES *sa = pipe_security_attributes ();
+    if (!sa)
+        return INVALID_HANDLE_VALUE;
 
     // FILE_FLAG_FIRST_PIPE_INSTANCE on the first instance ensures we are the
     // creator of the pipe (a squatter cannot pre-create it). PIPE_REJECT_REMOTE_
@@ -102,43 +102,57 @@ create_pipe_instance (BOOL first_instance)
 static BOOL
 connect_to_client (gf_pipe_t *instance)
 {
+    HANDLE event = instance->overlapped.hEvent;
+    memset (&instance->overlapped, 0, sizeof (instance->overlapped));
+    instance->overlapped.hEvent = event;
+    ResetEvent (event);
+    instance->connected = FALSE;
+    instance->pending_io = FALSE;
+    instance->read_pending = FALSE;
+    instance->replied = FALSE;
+    instance->connected_at = GetTickCount64 ();
     BOOL connected = ConnectNamedPipe (instance->pipe, &instance->overlapped);
-
-    if (connected)
+    if (connected || GetLastError () == ERROR_PIPE_CONNECTED)
     {
-        // Should never happen with async pipes
-        return FALSE;
+        instance->connected = TRUE;
+        return TRUE;
     }
-
-    DWORD err = GetLastError ();
-    switch (err)
+    if (GetLastError () == ERROR_IO_PENDING)
     {
-    case ERROR_IO_PENDING:
         instance->pending_io = TRUE;
         return TRUE;
-
-    case ERROR_PIPE_CONNECTED:
-        // Client connected before we called ConnectNamedPipe
-        if (SetEvent (instance->overlapped.hEvent))
-        {
-            instance->pending_io = FALSE;
-            instance->connected = TRUE;
-            return TRUE;
-        }
-        break;
     }
-
     return FALSE;
+}
+
+static void
+pipe_reset (gf_pipe_t *instance)
+{
+    if (instance->pending_io || instance->read_pending)
+    {
+        DWORD ignored;
+        CancelIoEx (instance->pipe, &instance->overlapped);
+        GetOverlappedResult (instance->pipe, &instance->overlapped, &ignored, TRUE);
+    }
+    DisconnectNamedPipe (instance->pipe);
+    connect_to_client (instance);
 }
 
 // Close the first `count` pipe instances and free the array (used to unwind a
 // partially-initialised server). Closes each instance's pipe AND event handle.
 // NOTE: the previous CreateEvent-failure path closed only pipes, leaking events.
 static void
-_pipe_destroy_instances (int count)
+pipe_destroy_instances (int count)
 {
     for (int j = 0; j < count; j++)
     {
+        if (pipe_instances[j].pending_io || pipe_instances[j].read_pending)
+        {
+            DWORD ignored;
+            CancelIoEx (pipe_instances[j].pipe, &pipe_instances[j].overlapped);
+            GetOverlappedResult (pipe_instances[j].pipe, &pipe_instances[j].overlapped,
+                                 &ignored, TRUE);
+        }
         if (pipe_instances[j].pipe != INVALID_HANDLE_VALUE)
             CloseHandle (pipe_instances[j].pipe);
         if (pipe_instances[j].overlapped.hEvent)
@@ -146,11 +160,14 @@ _pipe_destroy_instances (int count)
     }
     free (pipe_instances);
     pipe_instances = NULL;
+    num_instances = 0;
 }
 
 gf_ipc_handle_t
 gf_ipc_server_create (void)
 {
+    if (pipe_instances)
+        return -1;
     const char *pipe_path = gf_ipc_get_socket_path ();
 
     pipe_instances = calloc (MAX_PIPE_INSTANCES, sizeof (gf_pipe_t));
@@ -167,7 +184,7 @@ gf_ipc_server_create (void)
         if (pipe_instances[i].pipe == INVALID_HANDLE_VALUE)
         {
             fprintf (stderr, "CreateNamedPipe failed: %lu\n", GetLastError ());
-            _pipe_destroy_instances (i);
+            pipe_destroy_instances (i);
             return -1;
         }
 
@@ -175,12 +192,16 @@ gf_ipc_server_create (void)
         if (!pipe_instances[i].overlapped.hEvent)
         {
             fprintf (stderr, "CreateEvent failed: %lu\n", GetLastError ());
-            _pipe_destroy_instances (i + 1);
+            pipe_destroy_instances (i + 1);
             return -1;
         }
 
         // Start listening for connections
-        connect_to_client (&pipe_instances[i]);
+        if (!connect_to_client (&pipe_instances[i]))
+        {
+            pipe_destroy_instances (i + 1);
+            return -1;
+        }
         num_instances++;
     }
 
@@ -192,45 +213,56 @@ gf_ipc_server_create (void)
 void
 gf_ipc_server_destroy (gf_ipc_handle_t handle)
 {
+    (void)handle;
     if (pipe_instances)
     {
-        for (int i = 0; i < num_instances; i++)
-        {
-            if (pipe_instances[i].pipe != INVALID_HANDLE_VALUE)
-            {
-                DisconnectNamedPipe (pipe_instances[i].pipe);
-                CloseHandle (pipe_instances[i].pipe);
-            }
-            if (pipe_instances[i].overlapped.hEvent)
-            {
-                CloseHandle (pipe_instances[i].overlapped.hEvent);
-            }
-        }
-        free (pipe_instances);
-        pipe_instances = NULL;
+        pipe_destroy_instances (num_instances);
         num_instances = 0;
     }
 }
 
-// Synchronously write `len` bytes to a FILE_FLAG_OVERLAPPED pipe handle.
-// A blocking WriteFile with a NULL lpOverlapped is invalid on an overlapped
-// handle, so we drive the async write to completion via a temporary
-// manual-reset event and GetOverlappedResult. Returns TRUE on success.
+// Every operation owns its event until completion or cancellation. A stalled
+// peer must not block the UI or leave I/O referring to expired stack buffers.
 static BOOL
-_pipe_write_sync (HANDLE pipe, const void *data, DWORD len)
+pipe_transfer (HANDLE pipe, void *data, DWORD length, BOOL reading, DWORD timeout)
 {
-    OVERLAPPED ov = { 0 };
-    ov.hEvent = CreateEvent (NULL, TRUE, FALSE, NULL);
-    if (!ov.hEvent)
+    OVERLAPPED operation = { 0 };
+    operation.hEvent = CreateEvent (NULL, TRUE, FALSE, NULL);
+    if (!operation.hEvent)
         return FALSE;
+    DWORD transferred = 0;
+    BOOL ok = reading ? ReadFile (pipe, data, length, &transferred, &operation)
+                      : WriteFile (pipe, data, length, &transferred, &operation);
+    DWORD error = ok ? ERROR_SUCCESS : GetLastError ();
+    if (!ok && error == ERROR_IO_PENDING)
+    {
+        DWORD wait = WaitForSingleObject (operation.hEvent, timeout);
+        if (wait == WAIT_OBJECT_0)
+        {
+            ok = GetOverlappedResult (pipe, &operation, &transferred, FALSE);
+            error = ok ? ERROR_SUCCESS : GetLastError ();
+        }
+        else
+        {
+            error = wait == WAIT_TIMEOUT ? ERROR_TIMEOUT : GetLastError ();
+            CancelIoEx (pipe, &operation);
+            GetOverlappedResult (pipe, &operation, &transferred, TRUE);
+        }
+    }
+    CloseHandle (operation.hEvent);
+    if (ok && transferred != length)
+    {
+        ok = FALSE;
+        error = ERROR_INVALID_DATA;
+    }
+    SetLastError (error);
+    return ok;
+}
 
-    DWORD written = 0;
-    BOOL ok = WriteFile (pipe, data, len, &written, &ov);
-    if (!ok && GetLastError () == ERROR_IO_PENDING)
-        ok = GetOverlappedResult (pipe, &ov, &written, TRUE);
-
-    CloseHandle (ov.hEvent);
-    return ok && written == len;
+static BOOL
+pipe_write_sync (HANDLE pipe, const void *data, DWORD length)
+{
+    return pipe_transfer (pipe, (void *)data, length, FALSE, 100);
 }
 
 // Handle a fully-read client message: dispatch it, write the reply, and reset
@@ -240,7 +272,7 @@ _pipe_write_sync (HANDLE pipe, const void *data, DWORD len)
 // Program Files, writable only by administrators), so an unprivileged process
 // cannot plant a look-alike binary there.
 static bool
-_client_path_trusted (const wchar_t *client_path)
+peer_path_trusted (const wchar_t *client_path, bool server)
 {
     wchar_t self[MAX_PATH];
     DWORD n = GetModuleFileNameW (NULL, self, MAX_PATH);
@@ -258,6 +290,8 @@ _client_path_trusted (const wchar_t *client_path)
         return false; // different directory
 
     const wchar_t *base = cli_slash + 1;
+    if (server)
+        return _wcsicmp (base, L"gridflux.exe") == 0;
     return _wcsicmp (base, L"gridflux-gui.exe") == 0
            || _wcsicmp (base, L"gridflux-cli.exe") == 0;
 }
@@ -266,103 +300,121 @@ _client_path_trusted (const wchar_t *client_path)
 // pipe access via the Interactive-Users ACE cannot feed crafted bytes to the
 // (elevated) command parser. Only the trusted GridFlux front-ends are accepted.
 static bool
-_pipe_client_trusted (HANDLE pipe)
+pipe_peer_trusted (HANDLE pipe, bool server)
 {
-    DWORD pid = 0;
-    if (!GetNamedPipeClientProcessId (pipe, &pid))
+    DWORD pid = 0, peer_session = 0, self_session = 0;
+    BOOL identified = server ? GetNamedPipeServerProcessId (pipe, &pid)
+                             : GetNamedPipeClientProcessId (pipe, &pid);
+    if (!identified || !ProcessIdToSessionId (pid, &peer_session)
+        || !ProcessIdToSessionId (GetCurrentProcessId (), &self_session)
+        || peer_session != self_session)
         return false;
 
     HANDLE proc = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!proc)
         return false;
 
-    wchar_t path[MAX_PATH];
+    wchar_t path[MAX_PATH] = { 0 };
     DWORD sz = MAX_PATH;
     BOOL ok = QueryFullProcessImageNameW (proc, 0, path, &sz);
     CloseHandle (proc);
 
-    return ok && _client_path_trusted (path);
+    return ok && sz > 0 && sz < MAX_PATH && peer_path_trusted (path, server);
 }
 
 static void
-_pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
+pipe_handle_message (gf_pipe_t *inst, DWORD bytes, void *user_data)
 {
+    if (!bytes || bytes >= sizeof (inst->buffer))
+    {
+        pipe_reset (inst);
+        return;
+    }
     inst->buffer[bytes] = '\0';
 
     gf_ipc_response_t response = { 0 };
     response.status = GF_IPC_SUCCESS;
 
-    if (!_pipe_client_trusted (inst->pipe))
+    if (!pipe_peer_trusted (inst->pipe, false))
         response.status = GF_IPC_ERROR_PERMISSION; // reject untrusted callers
     else
-        gf_handle_client_message (inst->buffer, &response, user_data);
+        gf_handle_client_message (inst->buffer, bytes, &response, user_data);
 
-    if (!_pipe_write_sync (inst->pipe, &response, sizeof (response)))
+    if (!pipe_write_sync (inst->pipe, &response, sizeof (response)))
+    {
         fprintf (stderr, "Pipe reply write failed: %lu\n", GetLastError ());
-
-    FlushFileBuffers (inst->pipe);
-    DisconnectNamedPipe (inst->pipe);
-
-    inst->connected = FALSE;
-    connect_to_client (inst);
+        pipe_reset (inst);
+        return;
+    }
+    // Keep buffered reply bytes available until the client disconnects. A
+    // FlushFileBuffers here waits indefinitely for that client to read them.
+    inst->replied = TRUE;
+    inst->connected_at = GetTickCount64 ();
 }
 
 // Advance one pipe instance: complete a pending connect, then service any
 // readable client message. Returns true if a message was processed.
 static bool
-_pipe_poll_instance (gf_pipe_t *inst, void *user_data)
+pipe_poll_instance (gf_pipe_t *inst, void *user_data)
 {
     DWORD bytes = 0;
-
     if (inst->pending_io)
     {
         if (!GetOverlappedResult (inst->pipe, &inst->overlapped, &bytes, FALSE))
         {
             if (GetLastError () == ERROR_IO_INCOMPLETE)
-                return false; // still waiting for a client
-            // Error occurred, reset this instance
-            DisconnectNamedPipe (inst->pipe);
-            connect_to_client (inst);
+                return false;
+            pipe_reset (inst);
             return false;
         }
         inst->pending_io = FALSE;
         inst->connected = TRUE;
+        inst->connected_at = GetTickCount64 ();
     }
-
     if (!inst->connected)
         return false;
-
-    if (ReadFile (inst->pipe, inst->buffer, sizeof (inst->buffer) - 1, &bytes,
-                  &inst->overlapped))
+    if (GetTickCount64 () - inst->connected_at >= GF_PIPE_TIMEOUT)
     {
-        _pipe_handle_message (inst, bytes, user_data);
-        return true;
-    }
-
-    if (GetLastError () == ERROR_IO_PENDING)
-    {
-        if (WaitForSingleObject (inst->overlapped.hEvent, 0) == WAIT_OBJECT_0)
-        {
-            // Never index the buffer with an unvalidated byte count: bail out and
-            // re-arm the instance if the overlapped read did not complete cleanly.
-            if (!GetOverlappedResult (inst->pipe, &inst->overlapped, &bytes, FALSE))
-            {
-                DisconnectNamedPipe (inst->pipe);
-                inst->connected = FALSE;
-                connect_to_client (inst);
-                return false;
-            }
-            _pipe_handle_message (inst, bytes, user_data);
-            return true;
-        }
+        pipe_reset (inst);
         return false;
     }
-
-    // Error occurred
-    DisconnectNamedPipe (inst->pipe);
-    inst->connected = FALSE;
-    connect_to_client (inst);
-    return false;
+    if (inst->replied)
+    {
+        if (!PeekNamedPipe (inst->pipe, NULL, 0, NULL, NULL, NULL))
+            pipe_reset (inst);
+        return false;
+    }
+    if (inst->read_pending)
+    {
+        if (!GetOverlappedResult (inst->pipe, &inst->overlapped, &bytes, FALSE))
+        {
+            if (GetLastError () == ERROR_IO_INCOMPLETE)
+                return false;
+            pipe_reset (inst);
+            return false;
+        }
+        inst->read_pending = FALSE;
+    }
+    else
+    {
+        ResetEvent (inst->overlapped.hEvent);
+        if (!ReadFile (inst->pipe, inst->buffer, sizeof (inst->buffer) - 1, &bytes,
+                       &inst->overlapped))
+        {
+            if (GetLastError () == ERROR_IO_PENDING)
+                inst->read_pending = TRUE;
+            else
+                pipe_reset (inst);
+            return false;
+        }
+    }
+    if (!bytes || bytes >= sizeof (inst->buffer))
+    {
+        pipe_reset (inst);
+        return false;
+    }
+    pipe_handle_message (inst, bytes, user_data);
+    return true;
 }
 
 bool
@@ -375,7 +427,7 @@ gf_ipc_server_process (gf_ipc_handle_t handle, void *user_data)
 
     bool processed = false;
     for (int i = 0; i < num_instances; i++)
-        if (_pipe_poll_instance (&pipe_instances[i], user_data))
+        if (pipe_poll_instance (&pipe_instances[i], user_data))
             processed = true;
 
     return processed;
@@ -389,11 +441,20 @@ gf_ipc_client_connect (void)
     // Try multiple times with short waits
     for (int retry = 0; retry < 10; retry++)
     {
-        HANDLE pipe = CreateFileA (pipe_path, GENERIC_READ | GENERIC_WRITE, 0, NULL,
-                                   OPEN_EXISTING, 0, NULL);
+        DWORD access = FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES
+                       | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE;
+        HANDLE pipe = CreateFileA (
+            pipe_path, access, 0, NULL, OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
 
         if (pipe != INVALID_HANDLE_VALUE)
         {
+            if (!pipe_peer_trusted (pipe, true))
+            {
+                CloseHandle (pipe);
+                SetLastError (ERROR_ACCESS_DENIED);
+                return -1;
+            }
             DWORD mode = PIPE_READMODE_MESSAGE;
             if (!SetNamedPipeHandleState (pipe, &mode, NULL, NULL))
             {
@@ -432,32 +493,39 @@ gf_ipc_client_send (gf_ipc_handle_t handle, const char *command,
                     gf_ipc_response_t *response)
 {
     if (handle == -1 || !command || !response)
+        return false;
+    memset (response, 0, sizeof (*response));
+    size_t length;
+    if (!gf_ipc_command_length (command, &length))
     {
+        response->status = GF_IPC_ERROR_INVALID_COMMAND;
         return false;
     }
-
+    response->status = GF_IPC_ERROR_CONNECTION;
     HANDLE pipe = (HANDLE)handle;
-    DWORD bytes_written;
-
-    BOOL success
-        = WriteFile (pipe, command, (DWORD)strlen (command), &bytes_written, NULL);
-
-    if (!success)
+    ULONGLONG start = GetTickCount64 ();
+    if (!pipe_transfer (pipe, (void *)command, (DWORD)length, FALSE, GF_PIPE_TIMEOUT))
+        goto failed;
+    ULONGLONG elapsed = GetTickCount64 () - start;
+    if (elapsed >= GF_PIPE_TIMEOUT)
     {
-        fprintf (stderr, "WriteFile failed: %lu\n", GetLastError ());
-        return false;
+        SetLastError (ERROR_TIMEOUT);
+        goto failed;
     }
-
-    DWORD bytes_read;
-    success = ReadFile (pipe, response, sizeof (*response), &bytes_read, NULL);
-
-    if (!success || bytes_read != sizeof (*response))
+    if (!pipe_transfer (pipe, response, sizeof (*response), TRUE,
+                        GF_PIPE_TIMEOUT - (DWORD)elapsed))
+        goto failed;
+    if (!gf_ipc_response_valid (response))
     {
-        fprintf (stderr, "ReadFile failed: %lu\n", GetLastError ());
-        return false;
+        SetLastError (ERROR_INVALID_DATA);
+        goto failed;
     }
-
     return true;
+failed:
+    memset (response->message, 0, sizeof (response->message));
+    response->status = GetLastError () == ERROR_TIMEOUT ? GF_IPC_ERROR_TIMEOUT
+                                                        : GF_IPC_ERROR_CONNECTION;
+    return false;
 }
 
 void

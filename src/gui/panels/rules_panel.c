@@ -14,10 +14,60 @@ typedef struct
     GtkWidget *app_dropdown;
     GtkStringList *app_model;
     GtkWidget *ws_spin;
+    GtkWidget *monitor_dropdown;
+    gf_monitor_id_t monitor_ids[GF_MAX_MONITORS];
+    uint32_t monitor_count;
+    guint monitor_timer;
     GtkWidget *list_box; // vertical box holding the grouped rules
 } rules_ctx_t;
 
 static void refresh_rules_list (rules_ctx_t *ctx);
+
+static void
+free_rules_context (gpointer data)
+{
+    rules_ctx_t *ctx = data;
+    if (ctx->monitor_timer)
+        g_source_remove (ctx->monitor_timer);
+    g_free (ctx);
+}
+
+static gboolean
+refresh_monitors (gpointer data)
+{
+    rules_ctx_t *ctx = data;
+    gf_monitor_t monitors[GF_MAX_MONITORS];
+    uint32_t count = GF_MAX_MONITORS;
+    if (!gf_gui_get_monitors (monitors, &count))
+        return G_SOURCE_CONTINUE;
+    bool changed = count != ctx->monitor_count;
+    for (uint32_t i = 0; !changed && i < count; i++)
+        changed = monitors[i].id != ctx->monitor_ids[i];
+    if (!changed)
+        return G_SOURCE_CONTINUE;
+
+    guint selected = gtk_drop_down_get_selected (GTK_DROP_DOWN (ctx->monitor_dropdown));
+    gf_monitor_id_t previous = selected > 0 && selected <= ctx->monitor_count
+                                   ? ctx->monitor_ids[selected - 1]
+                                   : GF_MONITOR_SHARED;
+    GtkStringList *model = gtk_string_list_new (NULL);
+    gtk_string_list_append (model, "Current monitor");
+    guint next = 0;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        ctx->monitor_ids[i] = monitors[i].id;
+        char label[16];
+        snprintf (label, sizeof (label), "M%u", monitors[i].id);
+        gtk_string_list_append (model, label);
+        if (monitors[i].id == previous)
+            next = i + 1;
+    }
+    ctx->monitor_count = count;
+    gtk_drop_down_set_model (GTK_DROP_DOWN (ctx->monitor_dropdown), G_LIST_MODEL (model));
+    g_object_unref (model);
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (ctx->monitor_dropdown), next);
+    return G_SOURCE_CONTINUE;
+}
 
 static void
 on_remove_rule (GtkButton *btn, gpointer user_data)
@@ -46,9 +96,16 @@ on_add_rule (GtkButton *btn, gpointer user_data)
     int ws = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (ctx->ws_spin));
 
     char command[256];
-    snprintf (command, sizeof (command), "rule add %s %d", wm_class, ws);
+    guint monitor = gtk_drop_down_get_selected (GTK_DROP_DOWN (ctx->monitor_dropdown));
+    if (monitor == 0 || monitor == GTK_INVALID_LIST_POSITION)
+        snprintf (command, sizeof (command), "rule add %s %d", wm_class, ws);
+    else
+        snprintf (command, sizeof (command), "rule add %s %d %u", wm_class, ws,
+                  ctx->monitor_ids[monitor - 1]);
     gf_ipc_response_t resp = gf_run_client_command (command);
-    gf_command_response_t *cmd_resp = (gf_command_response_t *)resp.message;
+    gf_command_response_t result = { .type = 1, .message = "Invalid IPC reply" };
+    gf_parse_command_response (resp.message, sizeof (resp.message), &result);
+    gf_command_response_t *cmd_resp = &result;
 
     if (resp.status == GF_IPC_SUCCESS && cmd_resp->type == 0)
         refresh_rules_list (ctx);
@@ -64,6 +121,10 @@ rule_less (const gf_config_t *cfg, int a, int b)
 {
     const gf_window_rule_t *ra = &cfg->window_rules[a];
     const gf_window_rule_t *rb = &cfg->window_rules[b];
+    int ma = ra->has_monitor_id ? (int)ra->monitor_id : -1;
+    int mb = rb->has_monitor_id ? (int)rb->monitor_id : -1;
+    if (ma != mb)
+        return ma < mb;
     if (ra->workspace_id != rb->workspace_id)
         return ra->workspace_id < rb->workspace_id;
     return strcmp (ra->wm_class, rb->wm_class) < 0;
@@ -87,10 +148,13 @@ sort_rule_order (const gf_config_t *cfg, int *order, uint32_t n)
 }
 
 static GtkWidget *
-build_group_header (gf_ws_id_t ws)
+build_group_header (gf_ws_id_t ws, int monitor)
 {
     char buf[32];
-    snprintf (buf, sizeof (buf), "Workspace %d", ws);
+    if (monitor < 0)
+        snprintf (buf, sizeof (buf), "Current monitor - Workspace %d", ws);
+    else
+        snprintf (buf, sizeof (buf), "M%d - Workspace %d", monitor, ws);
     GtkWidget *label = gtk_label_new (buf);
     gtk_widget_add_css_class (label, "gf-rule-group");
     gtk_widget_set_halign (label, GTK_ALIGN_START);
@@ -135,7 +199,7 @@ refresh_rules_list (rules_ctx_t *ctx)
     if (!path)
         return;
 
-    gf_config_t config = load_or_create_config (path);
+    gf_config_t config = gf_config_load_or_create (path);
     uint32_t n = config.window_rules_count;
     if (n == 0)
     {
@@ -152,13 +216,17 @@ refresh_rules_list (rules_ctx_t *ctx)
     sort_rule_order (&config, order, n);
 
     gf_ws_id_t current_ws = -1;
+    int current_monitor = -2;
     for (uint32_t i = 0; i < n; i++)
     {
         const gf_window_rule_t *rule = &config.window_rules[order[i]];
-        if (rule->workspace_id != current_ws)
+        int monitor = rule->has_monitor_id ? (int)rule->monitor_id : -1;
+        if (rule->workspace_id != current_ws || monitor != current_monitor)
         {
             current_ws = rule->workspace_id;
-            gtk_box_append (GTK_BOX (ctx->list_box), build_group_header (current_ws));
+            current_monitor = monitor;
+            gtk_box_append (GTK_BOX (ctx->list_box),
+                            build_group_header (current_ws, monitor));
         }
         gtk_box_append (GTK_BOX (ctx->list_box), build_rule_row (ctx, rule));
     }
@@ -172,9 +240,26 @@ build_add_form (rules_ctx_t *ctx)
     ctx->app_dropdown = gf_panel_build_app_dropdown (ctx->app, &ctx->app_model);
     gtk_box_append (GTK_BOX (form), ctx->app_dropdown);
 
+    GtkWidget *workspace_field = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+    gtk_box_append (GTK_BOX (workspace_field), gtk_label_new ("Workspace ID"));
     ctx->ws_spin = gtk_spin_button_new_with_range (1, GF_MAX_WORKSPACES, 1);
     gtk_spin_button_set_value (GTK_SPIN_BUTTON (ctx->ws_spin), 1);
-    gtk_box_append (GTK_BOX (form), ctx->ws_spin);
+    gtk_widget_set_tooltip_text (ctx->ws_spin,
+                                 "Workspace number on the selected monitor");
+    gtk_box_append (GTK_BOX (workspace_field), ctx->ws_spin);
+    gtk_box_append (GTK_BOX (form), workspace_field);
+
+    GtkWidget *monitor_field = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+    gtk_box_append (GTK_BOX (monitor_field), gtk_label_new ("Monitor ID"));
+    GtkStringList *monitor_model = gtk_string_list_new (NULL);
+    gtk_string_list_append (monitor_model, "Current monitor");
+    ctx->monitor_dropdown = gtk_drop_down_new (G_LIST_MODEL (monitor_model), NULL);
+    refresh_monitors (ctx);
+    ctx->monitor_timer = g_timeout_add_seconds (2, refresh_monitors, ctx);
+    gtk_widget_set_tooltip_text (ctx->monitor_dropdown,
+                                 "Optional: keep this app on a specific monitor");
+    gtk_box_append (GTK_BOX (monitor_field), ctx->monitor_dropdown);
+    gtk_box_append (GTK_BOX (form), monitor_field);
 
     GtkWidget *add = gtk_button_new_with_label ("Add");
     gtk_widget_add_css_class (add, "suggested-action");
@@ -184,7 +269,7 @@ build_add_form (rules_ctx_t *ctx)
 }
 
 void
-on_rules_button_clicked (GtkButton *btn, gpointer data)
+gf_gui_on_rules_button_clicked (GtkButton *btn, gpointer data)
 {
     (void)btn;
     gf_app_state_t *app = (gf_app_state_t *)data;
@@ -193,10 +278,10 @@ on_rules_button_clicked (GtkButton *btn, gpointer data)
 
     GtkWidget *window = gtk_window_new ();
     gtk_window_set_title (GTK_WINDOW (window), "Window Rules");
-    gtk_window_set_default_size (GTK_WINDOW (window), 380, 460);
+    gtk_window_set_default_size (GTK_WINDOW (window), 560, 460);
     gtk_window_set_modal (GTK_WINDOW (window), TRUE);
     gtk_window_set_transient_for (GTK_WINDOW (window), GTK_WINDOW (app->window));
-    g_object_set_data_full (G_OBJECT (window), "ctx", ctx, g_free);
+    g_object_set_data_full (G_OBJECT (window), "ctx", ctx, free_rules_context);
     ctx->window = window;
 
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);

@@ -9,6 +9,8 @@
 #include <shellapi.h>
 #include <tlhelp32.h>
 // clang-format on
+#include "../../../config/config.h"
+#include "../../../platform/windows/taskbar.h"
 
 #define GF_SERVER_EXE_W L"gridflux.exe"
 #define GF_LAUNCHER_EXE_W L"gridflux-launcher.exe"
@@ -130,10 +132,17 @@ gf_server_start (void)
     if (GetFileAttributesW (exe_path) == INVALID_FILE_ATTRIBUTES)
         return false; // executable not found
 
+    wchar_t args[4096 + 32];
+    if (!gf_config_get_launch_args (args, sizeof (args) / sizeof (args[0])))
+        return false;
+
     if (is_elevated ())
     {
-        wchar_t cmd[MAX_PATH + 4] = { 0 };
-        _snwprintf (cmd, MAX_PATH + 4, L"\"%s\"", exe_path);
+        wchar_t cmd[4096 + MAX_PATH + 64] = { 0 };
+        int length = _snwprintf (cmd, sizeof (cmd) / sizeof (cmd[0]), L"\"%s\" %s",
+                                 exe_path, args);
+        if (length < 0 || length >= sizeof (cmd) / sizeof (cmd[0]))
+            return false;
 
         STARTUPINFOW si = { .cb = sizeof (si) };
         PROCESS_INFORMATION pi = { 0 };
@@ -155,6 +164,7 @@ gf_server_start (void)
         sei.fMask = SEE_MASK_NOASYNC;
         sei.lpVerb = L"runas";
         sei.lpFile = exe_path;
+        sei.lpParameters = args;
         sei.lpDirectory = dir;
         sei.nShow = SW_HIDE;
 
@@ -201,7 +211,10 @@ gf_server_stop (void)
 
     DWORD pid = find_server_pid ();
     if (pid == 0)
+    {
+        gf_taskbar_restore_all ();
         return false; // not running
+    }
 
     HANDLE proc = OpenProcess (PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
     if (!proc)
@@ -215,5 +228,7 @@ gf_server_stop (void)
     }
 
     CloseHandle (proc);
+    if (ok)
+        gf_taskbar_restore_all ();
     return ok != 0;
 }

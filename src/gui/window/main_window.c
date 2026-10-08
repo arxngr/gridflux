@@ -136,15 +136,15 @@ on_window_realize (GtkWidget *widget, gpointer user_data)
 #endif
 }
 
-#ifdef _WIN32
 static gboolean
 on_close_request_hide (GtkWindow *window, gpointer user_data)
 {
-    (void)user_data;
+    gf_app_state_t *app = user_data;
+    if (!app->tray_data)
+        return FALSE;
     gtk_widget_set_visible (GTK_WIDGET (window), FALSE);
     return TRUE; // suppress default destroy
 }
-#endif
 
 static void
 apply_window_css (void)
@@ -219,10 +219,8 @@ setup_main_window (gf_app_state_t *widgets, GtkApplication *app)
     load_window_icon (widgets->window);
 
     g_signal_connect (widgets->window, "realize", G_CALLBACK (on_window_realize), NULL);
-#ifdef _WIN32
     g_signal_connect (widgets->window, "close-request",
-                      G_CALLBACK (on_close_request_hide), NULL);
-#endif
+                      G_CALLBACK (on_close_request_hide), widgets);
 }
 
 static void
@@ -251,5 +249,15 @@ gf_gui_main_window_init (gf_app_state_t *widgets, GtkApplication *app)
     apply_window_css ();
     setup_main_window (widgets, app);
     assemble_window_widgets (widgets);
-    gtk_window_present (GTK_WINDOW (widgets->window));
+    if (!g_object_get_data (G_OBJECT (app), "start-minimized"))
+        gtk_window_present (GTK_WINDOW (widgets->window));
+}
+
+void
+gf_gui_main_window_present (gf_app_state_t *app)
+{
+    if (!app || !app->window)
+        return;
+    gtk_window_unminimize (GTK_WINDOW (app->window));
+    gtk_window_present (GTK_WINDOW (app->window));
 }

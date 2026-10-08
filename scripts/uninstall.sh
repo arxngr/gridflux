@@ -45,6 +45,7 @@ if [ -f "$INSTALL_DIR/gridflux-cli" ]; then
 fi
 
 echo "→ Removing desktop entries and icons..."
+rm -f "$HOME/.config/autostart/gridflux-tray.desktop"
 if [ -f "$HOME/.local/share/applications/gridflux-gui.desktop" ]; then
     rm -f "$HOME/.local/share/applications/gridflux-gui.desktop"
     echo "  ✓ Desktop entry removed"

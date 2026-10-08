@@ -2,7 +2,7 @@
 #include <minwindef.h>
 
 void
-_window_get_name (gf_display_t display, HWND window, char *buffer, size_t bufsize)
+gf_window_get_name (gf_display_t display, HWND window, char *buffer, size_t bufsize)
 {
     (void)display;
 
@@ -11,7 +11,7 @@ _window_get_name (gf_display_t display, HWND window, char *buffer, size_t bufsiz
 
     buffer[0] = '\0';
 
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return;
 
     int len = GetWindowTextA (window, buffer, (int)bufsize - 1);
@@ -22,7 +22,7 @@ _window_get_name (gf_display_t display, HWND window, char *buffer, size_t bufsiz
 }
 
 BOOL
-window_is_app (HWND hwnd)
+gf_window_is_app (HWND hwnd)
 {
     if (!IsWindowVisible (hwnd))
         return FALSE;
@@ -39,7 +39,7 @@ window_is_app (HWND hwnd)
     return TRUE;
 }
 BOOL
-window_is_excluded_class (const char *class_name)
+gf_window_is_excluded_class (const char *class_name)
 {
     static const char *excluded_classes[]
         = { "Shell_TrayWnd",
@@ -90,9 +90,9 @@ window_is_excluded_class (const char *class_name)
 }
 
 BOOL
-window_is_fullscreen (HWND hwnd)
+gf_window_is_native_fullscreen (HWND hwnd)
 {
-    if (!window_validate (hwnd) || !IsWindowVisible (hwnd))
+    if (!gf_window_validate (hwnd) || !IsWindowVisible (hwnd))
         return false;
 
     if (IsZoomed (hwnd))
@@ -139,7 +139,7 @@ window_is_fullscreen (HWND hwnd)
 }
 
 BOOL
-window_is_notification_center (HWND hwnd)
+gf_window_is_notification_center (HWND hwnd)
 {
     char class_name[MAX_CLASS_NAME_LENGTH];
     if (!GetClassNameA (hwnd, class_name, sizeof (class_name)))
@@ -164,7 +164,7 @@ window_is_notification_center (HWND hwnd)
 }
 
 BOOL
-window_is_excluded_style (HWND hwnd)
+gf_window_is_excluded_style (HWND hwnd)
 {
     LONG exstyle = GetWindowLongA (hwnd, GWL_EXSTYLE);
 
@@ -181,7 +181,7 @@ window_is_excluded_style (HWND hwnd)
 }
 
 BOOL
-window_is_cloaked (HWND hwnd)
+gf_window_is_cloaked (HWND hwnd)
 {
     DWORD cloaked = 0;
     HRESULT hr = DwmGetWindowAttribute (hwnd, DWMWA_CLOAKED, &cloaked, sizeof (cloaked));
@@ -189,20 +189,20 @@ window_is_cloaked (HWND hwnd)
 }
 
 BOOL
-window_validate (HWND hwnd)
+gf_window_validate (HWND hwnd)
 {
     return hwnd != NULL && IsWindow (hwnd);
 }
 
 bool
-window_is_self (gf_display_t display, gf_handle_t window)
+gf_window_is_self (gf_display_t display, gf_handle_t window)
 {
     (void)display;
-    if (!window_validate (window))
+    if (!gf_window_validate (window))
         return false;
 
     char title[MAX_TITLE_LENGTH];
-    _window_get_name (display, window, title, sizeof (title));
+    gf_window_get_name (display, window, title, sizeof (title));
 
     // EXACT match for GridFlux GUI
     if (strcmp (title, "GridFlux") == 0)
@@ -221,30 +221,19 @@ window_is_self (gf_display_t display, gf_handle_t window)
     return false;
 }
 
-// Resolve (and cache) the GridFlux GUI's process id from its own window,
-// identified by window class/title rather than a spoofable executable name.
-// Re-resolves if the cached process has exited.
+// Resolve the GUI from its dedicated tray window, which exists while the GTK
+// window is hidden. A generic title can belong to the server's console or an
+// unrelated app and must not make their windows GUI clipping surfaces.
 static DWORD
 gui_process_id (void)
 {
-    static DWORD cached = 0;
-    if (cached)
-    {
-        HANDLE h = OpenProcess (PROCESS_QUERY_LIMITED_INFORMATION, FALSE, cached);
-        if (h)
-        {
-            CloseHandle (h);
-            return cached;
-        }
-        cached = 0;
-    }
-
-    HWND gui = FindWindowA ("GridFluxGUI", NULL);
+    HWND gui = FindWindowA ("GridFluxTrayClass", "GridFluxTray");
     if (!gui)
-        gui = FindWindowA (NULL, "GridFlux");
+        gui = FindWindowA ("GridFluxGUI", NULL);
+    DWORD pid = 0;
     if (gui)
-        GetWindowThreadProcessId (gui, &cached);
-    return cached;
+        GetWindowThreadProcessId (gui, &pid);
+    return pid;
 }
 
 // True if hwnd is owned by the GUI process. Its transient popups (colour
@@ -262,12 +251,12 @@ window_belongs_to_gui (HWND hwnd)
 }
 
 BOOL
-window_is_border_excluded (HWND hwnd)
+gf_window_is_border_excluded (HWND hwnd)
 {
-    if (!window_validate (hwnd))
+    if (!gf_window_validate (hwnd))
         return true;
 
-    if (window_is_self (NULL, hwnd))
+    if (gf_window_is_self (NULL, hwnd))
         return true;
 
     // Clip managed borders around the GUI's own popups (rules search dropdown,
@@ -277,7 +266,7 @@ window_is_border_excluded (HWND hwnd)
 
     // Treat installers like the GridFlux GUI: clip managed windows' borders
     // around them instead of drawing over them.
-    if (window_is_installer (hwnd))
+    if (gf_window_is_installer (hwnd))
         return true;
 
     char class_name[MAX_CLASS_NAME_LENGTH];

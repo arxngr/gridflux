@@ -66,6 +66,22 @@ get to work; move things around by hand whenever you need to.
 
 ## The control panel
 
+Installed builds start the control panel in the system tray without opening a
+window. Click the GridFlux icon to open it; closing the panel keeps the tray
+available. Use `gridflux-gui --minimized` to start it in the tray manually.
+On Linux, the desktop must provide a StatusNotifier tray host. GNOME users can
+enable [AppIndicator and KStatusNotifierItem Support](https://extensions.gnome.org/extension/615/appindicator-support/).
+
+Each extended monitor is arranged independently. After dragging a window to
+another monitor and releasing it, both monitors rearrange their remaining tiles.
+On Windows, a monitor's taskbar hides while its live workspace has a visible
+maximized app. Move the pointer to that taskbar's screen edge to reveal it;
+returning to a normal workspace restores it. Other monitors keep their own
+taskbar state, and GridFlux preserves Windows' existing auto-hide preference.
+Maximized apps fill their monitor's hidden taskbar area without changing normal
+workspace bounds. Stop, Exit, crash recovery, and uninstall restore managed
+taskbars and the standard work-area sizing of expanded maximized apps.
+
 The GUI (`gridflux-gui`, built on GTK4) is a single, compact window for watching
 and steering GridFlux without touching the command line.
 
@@ -149,6 +165,33 @@ cd gridflux
 cmake -B build && cmake --build build
 ```
 
+Alternatively, use Visual Studio 2026 with the **Desktop development with C++**
+workload. From PowerShell in the repository directory (Community edition):
+
+```powershell
+$vs = "C:\Program Files\Microsoft Visual Studio\18\Community"
+$cmake = "$vs\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+& $cmake -S . -B build-vs -G "Visual Studio 18 2026" -A x64 `
+  "-DCMAKE_TOOLCHAIN_FILE=$vs\VC\vcpkg\scripts\buildsystems\vcpkg.cmake" `
+  -DVCPKG_TARGET_TRIPLET=x64-windows
+& $cmake --build build-vs --config Release --parallel
+.\build-vs\Release\gridflux-launcher.exe
+```
+
+The first configure downloads and builds GTK4 and json-c using the repository's
+vcpkg manifest. Use a separate build directory when switching from MinGW.
+For Professional or Enterprise, replace `Community` in the path.
+
+Build the MSI with the existing batch builder from a Windows terminal with
+MSYS2 MinGW, CMake, and WiX on PATH:
+
+```powershell
+.\scripts\binary_builder.bat
+```
+
+The builder creates `GridFlux-<version>.msi` in the project root. It rebuilds
+the MinGW binaries and bundles their GTK/GLib runtime dependencies.
+
 ---
 
 ## Usage
@@ -198,7 +241,8 @@ gridflux-cli query windows 2        # list windows in workspace 2
 gridflux-cli move 0x1a2b3c 2        # move a window (by ID) to workspace 2
 
 # Rules
-gridflux-cli rule add firefox 1     # pin an application to a workspace
+gridflux-cli rule add firefox 1     # pin to workspace 1 on the app's current monitor
+gridflux-cli rule add firefox 3 1   # pin to workspace 3 on M1 (create it if missing)
 gridflux-cli rule remove firefox    # remove a rule
 ```
 
@@ -234,7 +278,7 @@ gridflux-cli rule remove firefox    # remove a rule
 | `border_color` | orange | Managed-window border colour (RGB integer) |
 | `enable_borders` | `true` | Draw coloured borders on managed windows |
 | `locked_workspaces` | `[]` | Workspace IDs to lock on startup |
-| `window_rules` | `[]` | Rules of the form `{ "wm_class": "...", "workspace_id": N }` |
+| `window_rules` | `[]` | Rules of the form `{ "wm_class": "...", "workspace_id": N, "monitor_id": M }`; Monitor ID is optional and starts at 0 |
 
 The daemon watches this file and applies changes immediately — no restart needed.
 The same options are available from the control panel's Settings and Rules

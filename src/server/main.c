@@ -27,9 +27,16 @@ signal_handler (int sig)
 }
 
 int
-main ()
+main (int argc, char **argv)
 {
     gf_log_init (GF_LOG_DEBUG);
+    if (argc != 1
+        && (argc != 3 || strcmp (argv[1], "--config") != 0
+            || gf_config_set_path (argv[2]) != GF_SUCCESS))
+    {
+        GF_LOG_ERROR ("Usage: gridflux [--config PATH]");
+        return 1;
+    }
     signal (SIGINT, signal_handler);
     signal (SIGTERM, signal_handler);
 
@@ -55,7 +62,7 @@ main ()
         return 1;
     }
 
-    *config = load_or_create_config (cfg_path);
+    *config = gf_config_load_or_create (cfg_path);
     GF_LOG_INFO ("Configuration loaded:");
     GF_LOG_INFO ("  max_windows_per_workspace: %u", config->max_windows_per_workspace);
     GF_LOG_INFO ("  max_workspaces: %u", config->max_workspaces);

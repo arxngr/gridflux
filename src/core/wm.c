@@ -24,8 +24,8 @@ handle_max_windows_change (gf_wm_t *m, const gf_config_t *old, const gf_config_t
     GF_LOG_INFO ("max_windows_per_workspace changed from %u to %u",
                  old->max_windows_per_workspace, new->max_windows_per_workspace);
 
-    recount_workspace_windows (m, wm_workspaces (m), wm_windows (m),
-                               new->max_windows_per_workspace);
+    wm_recount_workspace_windows (m, wm_workspaces (m), wm_windows (m),
+                                  new->max_windows_per_workspace);
     gf_window_list_mark_all_needs_update (wm_windows (m), NULL);
 
     gf_ws_list_t *ws_list = wm_workspaces (m);
@@ -34,25 +34,35 @@ handle_max_windows_change (gf_wm_t *m, const gf_config_t *old, const gf_config_t
 }
 
 static void
-wm_reset_monitor_state (gf_wm_t *m)
+reset_monitor_state (gf_wm_t *m)
 {
+    m->state.monitor_count = 0;
+    m->state.monitors_paused = false;
+    m->state.monitors_recovering = false;
     for (int i = 0; i < GF_MAX_MONITORS; i++)
     {
         m->state.last_active_window[i] = 0;
         m->state.last_active_workspace[i] = 0;
-        wm_workspaces (m)->active_workspace[i] = 0;
+        wm_workspaces (m)->active_workspace[i] = GF_FIRST_WORKSPACE_ID;
     }
+    m->state.active_monitor_id = 0;
+    m->state.active_monitor_valid = false;
 }
 
 static void
-wm_tick (gf_wm_t *m)
+tick (gf_wm_t *m)
 {
     gf_wm_load_cfg (m);
     gf_wm_watch (m);
 
+    if (m->state.monitors_paused)
+    {
+        if (m->ipc_handle >= 0)
+            gf_ipc_server_process (m->ipc_handle, m);
+        return;
+    }
+
     gf_wm_resize_event (m);
-    gf_wm_layout_rebalance (m);
-    gf_wm_layout_apply (m);
     gf_wm_event (m);
 
     /*
@@ -61,6 +71,10 @@ wm_tick (gf_wm_t *m)
      * switching back.
      */
     gf_wm_keymap_event (m);
+    // Poll edge reveal even while the foreground window belongs to the shell.
+    wm_sync_dock_visibility (m);
+    gf_wm_layout_rebalance (m);
+    gf_wm_layout_apply (m);
 
     if (m->config->enable_borders && m->platform->border_update)
         m->platform->border_update (m->platform, m->config);
@@ -166,7 +180,7 @@ gf_wm_cleanup (gf_wm_t *m)
     windows->count = 0;
     workspaces->count = 0;
 
-    wm_reset_monitor_state (m);
+    reset_monitor_state (m);
 
     if (m->state.keymap_initialized && platform->keymap_cleanup)
     {
@@ -216,10 +230,12 @@ gf_wm_load_cfg (gf_wm_t *m)
         return;
     }
 
-    if (st.st_mtime <= m->config->last_modified)
+    // CRT timestamps have one-second resolution. A second settings save in
+    // that same second must still be observed; periodically compare contents.
+    if (st.st_mtime == m->config->last_modified && m->state.loop_counter % 30 != 0)
         return;
 
-    gf_config_t new_cfg = load_or_create_config (path);
+    gf_config_t new_cfg = gf_config_load_or_create (path);
 
     if (!gf_config_changed (m->config, &new_cfg))
     {
@@ -247,7 +263,9 @@ gf_wm_load_cfg (gf_wm_t *m)
         handle_max_windows_change (m, &old_cfg, &new_cfg);
         gf_config_release (&old_cfg);
     }
-    sync_workspaces (m);
+    for (uint32_t i = 0; i < wm_windows (m)->count; i++)
+        wm_windows (m)->items[i].rule_move_failures = 0;
+    wm_sync_workspaces (m);
     gf_wm_debug_stats (m);
 }
 
@@ -261,9 +279,9 @@ gf_wm_run (gf_wm_t *m)
     {
         m->state.loop_counter++;
 
-        wm_tick (m);
+        tick (m);
 
-        if (time (NULL) - m->state.last_cleanup_time >= 1)
+        if (!m->state.monitors_paused && time (NULL) - m->state.last_cleanup_time >= 1)
         {
             gf_wm_prune (m);
             m->state.last_cleanup_time = time (NULL);
