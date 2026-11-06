@@ -165,7 +165,10 @@ filter_monitor_windows (gf_win_info_t *ws_wins, uint32_t ws_count, gf_monitor_t 
                              && platform->window_is_maximized (display, ws_wins[j].id));
         if (maximized && !ws->has_maximized_state)
             continue;
-        if (ws_wins[j].is_minimized || wm_is_excluded (m, ws_wins[j].id))
+        if (!ws_wins[j].is_valid || ws_wins[j].is_minimized
+            || (platform->window_is_minimized
+                && platform->window_is_minimized (display, ws_wins[j].id))
+            || wm_is_excluded (m, ws_wins[j].id))
             continue;
         if (ws_wins[j].monitor_id != mon->id)
             continue;
@@ -263,6 +266,29 @@ gf_wm_layout_apply (gf_wm_t *m)
         return GF_SUCCESS;
 
     wm_assign_windows_to_workspaces (m);
+
+    // Visibility can change without a tracked foreground window (for example,
+    // minimizing to the desktop). Reconcile active normal workspaces before
+    // testing custom-layout and pending flags so every remaining tile reflows.
+    for (uint32_t i = 0; i < windows->count; i++)
+    {
+        gf_win_info_t *win = &windows->items[i];
+        if (!platform->window_is_minimized || !win->is_valid || win->visibility_request
+            || win->monitor_suspended || win->monitor_id >= GF_MAX_MONITORS
+            || workspaces->active_workspace[win->monitor_id] != win->workspace_id
+            || wm_is_excluded (m, win->id))
+            continue;
+        gf_ws_info_t *ws = gf_workspace_list_find_by_id (workspaces, win->workspace_id);
+        if (!ws || ws->has_maximized_state || ws->is_excluded_ws)
+            continue;
+        bool minimized = platform->window_is_minimized (display, win->id);
+        if (minimized != win->is_minimized)
+        {
+            win->is_minimized = minimized;
+            ws->is_custom_layout = false;
+            gf_window_list_mark_all_needs_update (windows, &ws->id);
+        }
+    }
 
     gf_monitor_t monitors[GF_MAX_MONITORS];
     uint32_t monitor_count = enumerate_monitors (platform, display, monitors);

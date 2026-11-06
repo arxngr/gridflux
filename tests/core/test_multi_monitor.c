@@ -252,6 +252,28 @@ main (void)
     assert (actual[1].width == 960 && actual[2].x == 960);
     assert (actual[3].x == -1280 && actual[3].y == -200);
 
+    // Native minimization must free a tile even without pending geometry work
+    // or a foreground-window event, including after a custom resize.
+    m.state.workspaces.items[0].is_custom_layout = true;
+    fake_minimized[2] = true;
+    uint32_t minimized_writes = writes[2];
+    gf_wm_layout_apply (&m);
+    assert (actual[1].width == 1920);
+    assert (writes[2] == minimized_writes);
+    assert (m.state.windows.items[1].is_minimized);
+    assert (!m.state.workspaces.items[0].is_custom_layout);
+    assert (actual[3].width == 1280);
+
+    // Restoring the second app brings its tile back without unminimizing it
+    // as a side effect of arranging the first app.
+    fake_minimized[2] = false;
+    gf_wm_layout_apply (&m);
+    assert (actual[1].width == 960 && actual[2].width == 960);
+    assert (!m.state.windows.items[1].is_minimized);
+    memset (writes, 0, sizeof (writes));
+    gf_window_list_mark_all_needs_update (&m.state.windows, NULL);
+    gf_wm_layout_apply (&m);
+
     // A monitor transfer invalidates both the source and destination layouts.
     gf_win_info_t moved = m.state.windows.items[1];
     moved.monitor_id = 1;
